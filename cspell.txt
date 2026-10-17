@@ -2,6 +2,10 @@ EmbedPDF
 PDFium
 FPDF
 FILEACCESS
+BGRA
+HEAPU8
+endobj
+startxref
 Playwright
 Vitest
 documentload

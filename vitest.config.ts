@@ -1,7 +1,13 @@
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
+import { rangeFixturePlugin } from "./tests/range-fixture-plugin.js";
+
 export default defineConfig({
+	plugins: [rangeFixturePlugin()],
+	optimizeDeps: {
+		include: ["@embedpdf/pdfium"],
+	},
 	test: {
 		projects: [
 			{
@@ -19,7 +25,7 @@ export default defineConfig({
 					browser: {
 						enabled: true,
 						headless: true,
-						provider: playwright(),
+						provider: playwright({ launchOptions: { channel: "chrome" } }),
 						instances: [{ browser: "chromium" }],
 					},
 				},
