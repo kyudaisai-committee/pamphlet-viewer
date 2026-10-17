@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { afterAll, expect, test } from "vitest";
 
 import { PdfiumWorkerClient } from "./worker-client";
 
@@ -8,6 +8,10 @@ interface FixtureMetrics {
 	ranges: Array<{ start: number; end: number }>;
 	fileLength: number;
 }
+
+afterAll(async () => {
+	await fetch("/__pdfium-cors-close");
+});
 
 test("renders first and distant pages before downloading the full PDF", async () => {
 	const resetResponse = await fetch("/__pdfium-range-reset");
@@ -55,8 +59,70 @@ test("renders first and distant pages before downloading the full PDF", async ()
 	}
 }, 120_000);
 
-async function readMetrics(): Promise<FixtureMetrics> {
-	const response = await fetch("/__pdfium-range-metrics");
+test("renders pages from a linearized PDF using additional byte ranges", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+
+	const worker = new PdfiumWorkerClient();
+	const url = new URL("/__linearized-range-fixture.pdf", window.location.href).href;
+	try {
+		const info = await worker.open(url);
+		expect(info.pageCount).toBe(24);
+		const firstPage = await worker.renderPage(0, 1);
+		if (firstPage.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		expect(centerPixel(firstPage.pixels).b).toBeGreaterThan(150);
+
+		const firstMetrics = await readMetrics("/__linearized-range-metrics");
+		expect(firstMetrics.fullRequests).toBe(0);
+		expect(firstMetrics.requestedBytes).toBeLessThan(firstMetrics.fileLength);
+
+		const distantPageIndex = 12;
+		const distantPage = await worker.renderPage(distantPageIndex, 1);
+		if (distantPage.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		const distantPixel = centerPixel(distantPage.pixels);
+		expect(distantPixel.r).toBeGreaterThan(200);
+		expect(distantPixel.g).toBeLessThan(60);
+		expect(distantPixel.b).toBeLessThan(80);
+
+		const finalMetrics = await readMetrics("/__linearized-range-metrics");
+		const firstRanges = new Set(firstMetrics.ranges.map(rangeKey));
+		expect(finalMetrics.ranges.some((range) => !firstRanges.has(rangeKey(range)))).toBe(true);
+		expect(finalMetrics.fullRequests).toBe(0);
+		expect(finalMetrics.requestedBytes).toBeLessThan(finalMetrics.fileLength);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
+test("loads a PDF from a different origin with exposed Range response headers", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+
+	const originResponse = await fetch("/__pdfium-cors-origin");
+	expect(originResponse.ok).toBe(true);
+	const { port } = (await originResponse.json()) as { port: number };
+	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href);
+	url.hostname = "127.0.0.1";
+	url.port = String(port);
+	const worker = new PdfiumWorkerClient();
+	try {
+		const info = await worker.open(url.href);
+		expect(info.pageCount).toBe(24);
+		const firstPage = await worker.renderPage(0, 1);
+		if (firstPage.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		expect(centerPixel(firstPage.pixels).b).toBeGreaterThan(150);
+
+		const metrics = await readMetrics();
+		expect(metrics.ranges.length).toBeGreaterThan(0);
+		expect(metrics.fullRequests).toBe(0);
+		expect(metrics.requestedBytes).toBeLessThan(metrics.fileLength);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
+async function readMetrics(path = "/__pdfium-range-metrics"): Promise<FixtureMetrics> {
+	const response = await fetch(path);
 	if (!response.ok)
 		throw new Error(`Could not read range fixture metrics (HTTP ${response.status}).`);
 	return (await response.json()) as FixtureMetrics;

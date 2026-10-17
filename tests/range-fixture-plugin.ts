@@ -1,10 +1,17 @@
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Plugin } from "vite";
 
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 const METRICS_PATH = "/__pdfium-range-metrics";
 const RESET_PATH = "/__pdfium-range-reset";
+const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
+const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
+const CORS_ORIGIN_PATH = "/__pdfium-cors-origin";
+const CORS_CLOSE_PATH = "/__pdfium-cors-close";
 const LIBRARY_HTML_PATH = "/__built-library-test.html";
 const PAGE_COUNT = 24;
 const FILLER_BYTES = 32 * 1024 * 1024;
@@ -24,17 +31,24 @@ interface ByteRange {
 }
 
 export function rangeFixturePlugin(): Plugin {
-	const fixture = createPdfFixture();
-	const metrics: FixtureMetrics = {
-		requestedBytes: 0,
-		fullRequests: 0,
-		ranges: [],
-		fileLength: fixture.byteLength,
-	};
+	const regularFixture = createFixtureRecord(createPdfFixture(), METRICS_PATH);
+	const linearizedFixture = createFixtureRecord(
+		Buffer.from(readFileSync(new URL("./fixtures/pamphlet-linearized.pdf", import.meta.url))),
+		LINEARIZED_METRICS_PATH,
+	);
+	const fixtures = new Map<string, FixtureRecord>([
+		[FIXTURE_PATH, regularFixture],
+		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
+	]);
+	let corsServer: ReturnType<typeof createServer> | null = null;
 
 	return {
 		name: "range-pdf-fixture",
 		configureServer(server) {
+			server.httpServer?.once("close", function closeCorsServer(): void {
+				if (corsServer?.listening) corsServer.close();
+			});
+
 			server.middlewares.use((request, response, next) => {
 				const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 				if (pathname === LIBRARY_HTML_PATH) {
@@ -43,56 +57,143 @@ export function rangeFixturePlugin(): Plugin {
 					return;
 				}
 				if (pathname === RESET_PATH) {
-					metrics.requestedBytes = 0;
-					metrics.fullRequests = 0;
-					metrics.ranges = [];
+					for (const fixture of fixtures.values()) resetMetrics(fixture.metrics);
 					response.setHeader("Content-Type", "application/json");
 					response.end(JSON.stringify({ reset: true }));
 					return;
 				}
-				if (pathname === METRICS_PATH) {
-					response.setHeader("Content-Type", "application/json");
-					response.end(JSON.stringify(metrics));
+				if (pathname === CORS_ORIGIN_PATH) {
+					if (corsServer === null) {
+						corsServer = createCorsFixtureServer(regularFixture);
+						corsServer.listen(0, "127.0.0.1");
+					}
+					corsServer.once("listening", function sendCorsServerPort(): void {
+						const address = corsServer?.address();
+						if (address === null || address === undefined || typeof address === "string") {
+							response.statusCode = 503;
+							response.end();
+							return;
+						}
+						response.setHeader("Content-Type", "application/json");
+						response.end(JSON.stringify({ port: address.port }));
+					});
 					return;
 				}
-				if (pathname !== FIXTURE_PATH) {
+				if (pathname === CORS_CLOSE_PATH) {
+					const activeServer = corsServer;
+					corsServer = null;
+					if (activeServer?.listening) {
+						activeServer.close(function finishCorsServerClose(): void {
+							response.end();
+						});
+					} else {
+						response.end();
+					}
+					return;
+				}
+				const metricsFixture = [...fixtures.values()].find(
+					(fixture) => fixture.metricsPath === pathname,
+				);
+				if (metricsFixture !== undefined) {
+					response.setHeader("Content-Type", "application/json");
+					response.end(JSON.stringify(metricsFixture.metrics));
+					return;
+				}
+				const fixture = fixtures.get(pathname);
+				if (fixture === undefined) {
 					next();
 					return;
 				}
-
-				response.setHeader("Content-Type", "application/pdf");
-				response.setHeader("Accept-Ranges", "bytes");
-				response.setHeader("ETag", '"range-fixture-v1"');
-				response.setHeader("Cache-Control", "no-store");
-				if (request.headers.range === undefined) {
-					metrics.fullRequests += 1;
-					response.statusCode = 200;
-					response.setHeader("Content-Length", fixture.byteLength);
-					response.end(fixture);
-					return;
-				}
-
-				const range = parseByteRange(request.headers.range, fixture.byteLength);
-				if (range === null) {
-					response.statusCode = 416;
-					response.setHeader("Content-Range", `bytes */${fixture.byteLength}`);
-					response.end();
-					return;
-				}
-
-				const body = fixture.subarray(range.start, range.end + 1);
-				metrics.ranges.push(range);
-				metrics.requestedBytes += body.byteLength;
-				response.statusCode = 206;
-				response.setHeader(
-					"Content-Range",
-					`bytes ${range.start}-${range.end}/${fixture.byteLength}`,
-				);
-				response.setHeader("Content-Length", body.byteLength);
-				response.end(body);
+				sendFixtureResponse(request, response, fixture);
 			});
 		},
 	};
+}
+
+interface FixtureRecord {
+	pdf: Buffer;
+	metricsPath: string;
+	metrics: FixtureMetrics;
+}
+
+function createFixtureRecord(pdf: Buffer, metricsPath: string): FixtureRecord {
+	return {
+		pdf,
+		metricsPath,
+		metrics: { requestedBytes: 0, fullRequests: 0, ranges: [], fileLength: pdf.byteLength },
+	};
+}
+
+function resetMetrics(metrics: FixtureMetrics): void {
+	metrics.requestedBytes = 0;
+	metrics.fullRequests = 0;
+	metrics.ranges = [];
+}
+
+function setCorsHeaders(response: ServerResponse, origin: string): void {
+	response.setHeader("Access-Control-Allow-Origin", origin);
+	response.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+	response.setHeader("Access-Control-Allow-Headers", "Range, If-Range");
+	response.setHeader(
+		"Access-Control-Expose-Headers",
+		"Accept-Ranges, Content-Range, ETag, Last-Modified",
+	);
+	response.setHeader("Vary", "Origin");
+}
+
+function sendFixtureResponse(
+	request: IncomingMessage,
+	response: ServerResponse,
+	fixture: FixtureRecord,
+): void {
+	const origin = request.headers.origin;
+	if (origin !== undefined) setCorsHeaders(response, origin);
+	if (request.method === "OPTIONS") {
+		response.statusCode = 204;
+		response.end();
+		return;
+	}
+
+	const { pdf, metrics } = fixture;
+	response.setHeader("Content-Type", "application/pdf");
+	response.setHeader("Accept-Ranges", "bytes");
+	response.setHeader("ETag", '"range-fixture-v1"');
+	response.setHeader("Cache-Control", "no-store");
+	if (request.headers.range === undefined) {
+		metrics.fullRequests += 1;
+		response.statusCode = 200;
+		response.setHeader("Content-Length", pdf.byteLength);
+		response.end(pdf);
+		return;
+	}
+
+	const range = parseByteRange(request.headers.range, pdf.byteLength);
+	if (range === null) {
+		response.statusCode = 416;
+		response.setHeader("Content-Range", `bytes */${pdf.byteLength}`);
+		response.end();
+		return;
+	}
+
+	const body = pdf.subarray(range.start, range.end + 1);
+	metrics.ranges.push(range);
+	metrics.requestedBytes += body.byteLength;
+	response.statusCode = 206;
+	response.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${pdf.byteLength}`);
+	response.setHeader("Content-Length", body.byteLength);
+	response.end(body);
+}
+
+function createCorsFixtureServer(fixture: FixtureRecord): ReturnType<typeof createServer> {
+	return createServer(function serveCorsFixture(request, response): void {
+		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+		if (pathname !== FIXTURE_PATH) {
+			response.statusCode = 404;
+			response.end();
+			return;
+		}
+		sendFixtureResponse(request, response, fixture);
+	});
 }
 
 function createLibraryTestHtml(): string {
