@@ -26,6 +26,11 @@
 
 - CSS は原則として、それを使用する Svelte コンポーネント内の `<style>` に記述し、親子関係のある規則は native CSS Nesting で表現してください。
 
+### アイコン
+
+- アイコンは `@lucide/svelte` を使用してください。
+- アイコンコンポーネントは `import { CameraIcon } from "@lucide/svelte"` のように、ライブラリが提供する `Icon` サフィックス付きの名前を直接インポートし、`as` で名前を付け替えないでください。
+
 ### 局所抑制の禁止
 
 - cspell、ESLint、TypeScript などの局所抑制は、ユーザーの明示的な許可なく追加してはいけません。`cspell:disable`、`cspell:ignore`、`eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`@ts-nocheck` および同等の記述が対象です。
