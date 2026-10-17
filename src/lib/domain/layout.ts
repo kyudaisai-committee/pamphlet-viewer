@@ -59,11 +59,10 @@ export function calculateFitScale(
 		return 1;
 	}
 
-	const combinedWidth =
-		pageSizes.reduce((width, size) => width + size.width, 0) +
-		SPREAD_GAP * Math.max(0, pageSizes.length - 1);
+	const pageWidth = pageSizes.reduce((width, size) => width + size.width, 0);
+	const gapWidth = SPREAD_GAP * Math.max(0, pageSizes.length - 1);
 	const maxHeight = Math.max(...pageSizes.map((size) => size.height));
-	const widthScale = viewport.width / combinedWidth;
+	const widthScale = Math.max(0, viewport.width - gapWidth) / pageWidth;
 	const baseScale =
 		fit === "width" ? widthScale : Math.min(widthScale, viewport.height / maxHeight);
 	return baseScale * Math.max(0.1, Math.min(zoom, 8));
