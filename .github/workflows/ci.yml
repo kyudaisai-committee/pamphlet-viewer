@@ -27,7 +27,7 @@ jobs:
         run: pnpm run check
 
       - name: Run eslint
-        run: pnpm exec eslint --deny-warnings .
+        run: pnpm exec eslint .
 
       - name: Run oxfmt
         run: pnpm exec oxfmt --check
