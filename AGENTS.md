@@ -24,7 +24,7 @@
 
 ### CSS
 
-- CSS は原則として、それを使用する Astro コンポーネント内の `<style>` に記述し、親子関係のある規則は native CSS Nesting で表現してください。
+- CSS は原則として、それを使用する Svelte コンポーネント内の `<style>` に記述し、親子関係のある規則は native CSS Nesting で表現してください。
 
 ### 局所抑制の禁止
 
