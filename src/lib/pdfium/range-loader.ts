@@ -1,5 +1,5 @@
 export const RANGE_CHUNK_SIZE = 256 * 1024;
-export const RANGE_CACHE_LIMIT = 4 * 1024 * 1024;
+export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
 export const RANGE_FETCH_CONCURRENCY = 4;
 const MAX_FILE_LENGTH = 0xffff_ffff;
 
@@ -45,6 +45,11 @@ class ChunkCache {
 		return chunk;
 	}
 
+	clear(): void {
+		this.#chunks.clear();
+		this.#byteLength = 0;
+	}
+
 	set(index: number, chunk: Uint8Array): void {
 		const existing = this.#chunks.get(index);
 		if (existing !== undefined) {
@@ -87,6 +92,14 @@ export class PdfRangeLoader {
 
 	get hasMissingChunks(): boolean {
 		return this.#missingChunks.size > 0;
+	}
+
+	dispose(): void {
+		this.#cache.clear();
+		this.#missingChunks.clear();
+		this.#totalLength = null;
+		this.#etag = null;
+		this.#lastModified = null;
 	}
 
 	async initialize(): Promise<number> {
@@ -139,8 +152,8 @@ export class PdfRangeLoader {
 
 	async fetchMissingChunks(): Promise<void> {
 		const indices = [...this.#missingChunks].slice(0, RANGE_FETCH_CONCURRENCY);
-		for (const index of indices) this.#missingChunks.delete(index);
 		await Promise.all(indices.map((index) => this.#fetchChunk(index)));
+		for (const index of indices) this.#missingChunks.delete(index);
 	}
 
 	async #fetchChunk(index: number): Promise<void> {

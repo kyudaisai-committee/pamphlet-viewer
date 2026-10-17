@@ -6,6 +6,7 @@ BGRA
 HEAPU8
 endobj
 startxref
+unstub
 Playwright
 Vitest
 documentload

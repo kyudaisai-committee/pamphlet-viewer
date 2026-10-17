@@ -16,8 +16,13 @@ test("renders first and distant pages before downloading the full PDF", async ()
 	const worker = new PdfiumWorkerClient();
 	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
 	try {
-		const firstPage = await worker.renderPage(url, 0);
-		expect(firstPage.pageCount).toBe(24);
+		const info = await worker.open(url);
+		expect(info.pageCount).toBe(24);
+		const firstPageSize = await worker.getPageSize(0);
+		expect(firstPageSize).toEqual({ width: 300, height: 400 });
+		const firstPage = await worker.renderPage(0, 1);
+		expect(firstPage.type).toBe("pixels");
+		if (firstPage.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
 		expect(firstPage.width).toBe(300);
 		expect(firstPage.height).toBe(400);
 		expect(centerPixel(firstPage.pixels).r).toBeLessThan(80);
@@ -28,8 +33,11 @@ test("renders first and distant pages before downloading the full PDF", async ()
 		expect(firstMetrics.fullRequests).toBe(0);
 		expect(firstMetrics.requestedBytes).toBeLessThan(firstMetrics.fileLength);
 
-		const finalPage = await worker.renderPage(url, firstPage.pageCount - 1);
-		expect(finalPage.pageIndex).toBe(firstPage.pageCount - 1);
+		const finalPage = await worker.renderPage(info.pageCount - 1, 1);
+		expect(finalPage.type).toBe("pixels");
+		if (finalPage.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		expect(finalPage.width).toBe(300);
+		expect(finalPage.height).toBe(400);
 		expect(centerPixel(finalPage.pixels).r).toBeGreaterThan(200);
 		expect(centerPixel(finalPage.pixels).g).toBeLessThan(60);
 		expect(centerPixel(finalPage.pixels).b).toBeLessThan(80);
