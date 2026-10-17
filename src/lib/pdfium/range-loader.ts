@@ -1,6 +1,7 @@
 export const RANGE_CHUNK_SIZE = 256 * 1024;
 export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
 export const RANGE_FETCH_CONCURRENCY = 4;
+export const RANGE_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_FILE_LENGTH = 0xffff_ffff;
 
 export interface ContentRange {
@@ -159,49 +160,74 @@ export class PdfRangeLoader {
 	async #fetchChunk(index: number): Promise<void> {
 		if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
 
+		const requestController = new AbortController();
+		let timedOut = false;
+		const abortRequest = function abortForParentSignal(): void {
+			requestController.abort();
+		};
+		this.signal.addEventListener("abort", abortRequest, { once: true });
+		const timeoutId = setTimeout(function abortTimedOutRequest(): void {
+			timedOut = true;
+			requestController.abort();
+		}, RANGE_REQUEST_TIMEOUT_MS);
+
 		const start = index * RANGE_CHUNK_SIZE;
 		const requestEnd = start + RANGE_CHUNK_SIZE - 1;
 		const headers = new Headers({ Range: `bytes=${start}-${requestEnd}` });
 		const ifRange = this.#etag && !this.#etag.startsWith("W/") ? this.#etag : this.#lastModified;
 		if (ifRange !== null) headers.set("If-Range", ifRange);
 
-		const response = await fetch(this.url, { headers, signal: this.signal });
-		if (response.status !== 206) {
-			await cancelResponseBody(response);
-			throw new Error(`The server returned HTTP ${response.status} to a byte-range request.`);
-		}
+		try {
+			const response = await fetch(this.url, { headers, signal: requestController.signal });
+			if (response.status !== 206) {
+				cancelResponseBody(response);
+				throw new Error(`The server returned HTTP ${response.status} to a byte-range request.`);
+			}
 
-		const range = parseContentRange(response.headers.get("Content-Range"));
-		if (range === null || range.start !== start) {
-			await cancelResponseBody(response);
-			throw new Error("The server returned an invalid Content-Range header.");
-		}
-		if (range.total > MAX_FILE_LENGTH) {
-			await cancelResponseBody(response);
-			throw new Error("PDF files must be smaller than 4 GiB.");
-		}
-		const expectedEnd = Math.min(requestEnd, range.total - 1);
-		if (range.end !== expectedEnd) {
-			await cancelResponseBody(response);
-			throw new Error("The server returned an incomplete byte range.");
-		}
-		if (this.#totalLength !== null && range.total !== this.#totalLength) {
-			await cancelResponseBody(response);
-			throw new Error("The PDF length changed while it was being loaded.");
-		}
-		if (!this.#matchesValidator(response)) {
-			await cancelResponseBody(response);
-			throw new Error("The PDF representation changed while it was being loaded.");
-		}
+			const range = parseContentRange(response.headers.get("Content-Range"));
+			if (range === null || range.start !== start) {
+				cancelResponseBody(response);
+				throw new Error("The server returned an invalid Content-Range header.");
+			}
+			if (range.total > MAX_FILE_LENGTH) {
+				cancelResponseBody(response);
+				throw new Error("PDF files must be smaller than 4 GiB.");
+			}
+			const expectedEnd = Math.min(requestEnd, range.total - 1);
+			if (range.end !== expectedEnd) {
+				cancelResponseBody(response);
+				throw new Error("The server returned an incomplete byte range.");
+			}
+			if (this.#totalLength !== null && range.total !== this.#totalLength) {
+				cancelResponseBody(response);
+				throw new Error("The PDF length changed while it was being loaded.");
+			}
+			if (!this.#matchesValidator(response)) {
+				cancelResponseBody(response);
+				throw new Error("The PDF representation changed while it was being loaded.");
+			}
 
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength !== range.end - range.start + 1) {
-			throw new Error("The server returned a byte range with an unexpected length.");
-		}
+			const expectedLength = range.end - range.start + 1;
+			const bytes = await readBoundedResponseBody(response, expectedLength);
+			if (bytes.byteLength !== expectedLength) {
+				throw new Error("The server returned a byte range with an unexpected length.");
+			}
 
-		this.#totalLength = range.total;
-		this.#rememberValidators(response);
-		this.#cache.set(index, bytes);
+			this.#totalLength = range.total;
+			this.#rememberValidators(response);
+			this.#cache.set(index, bytes);
+		} catch (error) {
+			if (this.signal.aborted) {
+				throw new DOMException("PDF loading was cancelled.", "AbortError");
+			}
+			if (timedOut) {
+				throw new Error("The PDF byte-range request timed out.", { cause: error });
+			}
+			throw error;
+		} finally {
+			clearTimeout(timeoutId);
+			this.signal.removeEventListener("abort", abortRequest);
+		}
 	}
 
 	#matchesValidator(response: Response): boolean {
@@ -218,11 +244,45 @@ export class PdfRangeLoader {
 	}
 }
 
-async function cancelResponseBody(response: Response): Promise<void> {
+function cancelResponseBody(response: Response): void {
 	if (response.body === null) return;
-	try {
-		await response.body.cancel();
-	} catch {
-		return;
+	void response.body.cancel().catch(() => {});
+}
+
+async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+	const declaredLength = response.headers.get("Content-Length");
+	if (declaredLength !== null && Number(declaredLength) > maxBytes) {
+		cancelResponseBody(response);
+		throw new Error("The server sent more bytes than requested for a PDF byte range.");
 	}
+
+	if (response.body === null) return new Uint8Array();
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let byteLength = 0;
+	try {
+		while (true) {
+			const result = await reader.read();
+			if (result.done) break;
+			if (result.value.byteLength > maxBytes - byteLength) {
+				void reader.cancel().catch(() => {});
+				throw new Error("The server sent more bytes than requested for a PDF byte range.");
+			}
+			chunks.push(result.value);
+			byteLength += result.value.byteLength;
+		}
+	} catch (error) {
+		void reader.cancel(error).catch(() => {});
+		throw error;
+	} finally {
+		reader.releaseLock();
+	}
+
+	const bytes = new Uint8Array(byteLength);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes;
 }
