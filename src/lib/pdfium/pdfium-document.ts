@@ -1,5 +1,4 @@
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
-import wasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfRangeLoader } from "./range-loader";
@@ -20,12 +19,17 @@ export class PdfiumDocumentSession {
 
 	private constructor(
 		private readonly loader: PdfRangeLoader,
+		private readonly wasmUrl: string,
 		private readonly signal: AbortSignal,
 	) {}
 
-	static async open(url: string, signal: AbortSignal): Promise<PdfiumDocumentSession> {
+	static async open(
+		url: string,
+		wasmUrl: string,
+		signal: AbortSignal,
+	): Promise<PdfiumDocumentSession> {
 		const loader = new PdfRangeLoader(url, signal);
-		const session = new PdfiumDocumentSession(loader, signal);
+		const session = new PdfiumDocumentSession(loader, wasmUrl, signal);
 		try {
 			await session.#initialize();
 			return session;
@@ -117,7 +121,7 @@ export class PdfiumDocumentSession {
 
 	async #initialize(): Promise<void> {
 		this.#fileLength = await this.loader.initialize();
-		this.#pdfium = await getPdfium();
+		this.#pdfium = await getPdfium(this.wasmUrl);
 		this.#pageCount = await this.#runWithDocument((pdfium, document) => {
 			const pageCount = pdfium.FPDF_GetPageCount(document);
 			if (this.loader.hasMissingChunks) return missingAttempt();
@@ -131,7 +135,7 @@ export class PdfiumDocumentSession {
 	async #runWithDocument<T>(
 		operation: (pdfium: WrappedPdfiumModule, document: number) => PdfiumAttempt<T>,
 	): Promise<T> {
-		const pdfium = this.#pdfium ?? (await getPdfium());
+		const pdfium = this.#pdfium ?? (await getPdfium(this.wasmUrl));
 		this.#pdfium = pdfium;
 		for (let attemptIndex = 0; attemptIndex < MAX_ATTEMPTS; attemptIndex += 1) {
 			if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
@@ -258,16 +262,16 @@ function getPdfiumHeap(pdfium: WrappedPdfiumModule): Uint8Array {
 
 let pdfiumPromise: Promise<WrappedPdfiumModule> | null = null;
 
-function getPdfium(): Promise<WrappedPdfiumModule> {
-	if (pdfiumPromise === null) pdfiumPromise = loadPdfium();
+function getPdfium(wasmUrl: string): Promise<WrappedPdfiumModule> {
+	if (pdfiumPromise === null) pdfiumPromise = loadPdfium(wasmUrl);
 	return pdfiumPromise;
 }
 
-async function loadPdfium(): Promise<WrappedPdfiumModule> {
+async function loadPdfium(wasmUrl: string): Promise<WrappedPdfiumModule> {
 	const response = await fetch(wasmUrl);
 	if (!response.ok) throw new Error(`Could not load PDFium WebAssembly (HTTP ${response.status}).`);
 	const wasmBinary = await response.arrayBuffer();
-	const pdfium = await init({ wasmBinary });
+	const pdfium = await init({ wasmBinary, locateFile: () => wasmUrl });
 	pdfium.PDFiumExt_Init();
 	return pdfium;
 }

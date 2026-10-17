@@ -1,4 +1,7 @@
+import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
+
 import type { PageSize, PageVisual } from "../document/page-source";
+import pdfiumWorkerAssetUrl from "./pdfium.worker.ts?worker&url";
 
 export interface PdfiumDocumentInfo {
 	pageCount: number;
@@ -8,6 +11,7 @@ export interface PdfiumDocumentInfo {
 interface OpenRequest {
 	type: "open";
 	url: string;
+	wasmUrl: string;
 }
 
 interface PageSizeRequest {
@@ -49,6 +53,7 @@ interface ErrorResponse {
 }
 
 type WorkerResponse = OpenedResponse | PageSizeResponse | RenderedResponse | ErrorResponse;
+type WorkerMessage = WorkerResponse | { type: "bootstrap-ready" };
 type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 	? OpenedResponse
 	: Request extends PageSizeRequest
@@ -62,27 +67,42 @@ interface PendingRequest {
 
 export class PdfiumWorkerClient {
 	#worker: Worker;
+	#releaseBootstrapUrl: (() => void) | null;
 	#nextId = 0;
 	#pending = new Map<number, PendingRequest>();
 	#terminated = false;
 
 	constructor() {
-		this.#worker = new Worker(new URL("./pdfium.worker.ts", import.meta.url), {
-			type: "module",
-		});
-		this.#worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
+		const workerUrl = new URL(pdfiumWorkerAssetUrl, import.meta.url);
+		const workerHandle =
+			workerUrl.origin === globalThis.location.origin
+				? {
+						worker: new Worker(workerUrl, { type: "module" }),
+						releaseBootstrapUrl: null,
+					}
+				: createCrossOriginPdfiumWorker(workerUrl);
+		this.#worker = workerHandle.worker;
+		this.#releaseBootstrapUrl = workerHandle.releaseBootstrapUrl;
+		this.#worker.addEventListener("message", (event: MessageEvent<WorkerMessage>) => {
+			if (event.data.type === "bootstrap-ready") {
+				this.#releaseWorkerBootstrap();
+				return;
+			}
 			this.#onMessage(event.data);
 		});
 		this.#worker.addEventListener("error", (event: ErrorEvent) => {
+			this.#releaseWorkerBootstrap();
 			this.#rejectPending(new Error(event.message || "The PDF worker failed."));
 		});
 		this.#worker.addEventListener("messageerror", () => {
+			this.#releaseWorkerBootstrap();
 			this.#rejectPending(new Error("The PDF worker returned an unreadable response."));
 		});
 	}
 
 	async open(url: string): Promise<PdfiumDocumentInfo> {
-		const response = await this.#request<OpenRequest>({ type: "open", url });
+		const wasmUrl = new URL(pdfiumWasmAssetUrl, import.meta.url).href;
+		const response = await this.#request<OpenRequest>({ type: "open", url, wasmUrl });
 		return { pageCount: response.pageCount, fileLength: response.fileLength };
 	}
 
@@ -100,6 +120,7 @@ export class PdfiumWorkerClient {
 		if (this.#terminated) return;
 		this.#terminated = true;
 		this.#worker.terminate();
+		this.#releaseWorkerBootstrap();
 		this.#rejectPending(new DOMException("PDF worker was terminated.", "AbortError"));
 	}
 
@@ -133,5 +154,40 @@ export class PdfiumWorkerClient {
 	#rejectPending(error: Error): void {
 		for (const pending of this.#pending.values()) pending.reject(error);
 		this.#pending.clear();
+	}
+
+	#releaseWorkerBootstrap(): void {
+		this.#releaseBootstrapUrl?.();
+		this.#releaseBootstrapUrl = null;
+	}
+}
+
+interface PdfiumWorkerHandle {
+	worker: Worker;
+	releaseBootstrapUrl: (() => void) | null;
+}
+
+function createCrossOriginPdfiumWorker(workerUrl: URL): PdfiumWorkerHandle {
+	const bootstrapSource = [
+		`import ${JSON.stringify(workerUrl.href)};`,
+		`self.postMessage({ type: "bootstrap-ready" });`,
+	].join("\n");
+	const bootstrapUrl = URL.createObjectURL(
+		new Blob([bootstrapSource], { type: "text/javascript" }),
+	);
+	try {
+		const worker = new Worker(bootstrapUrl, { type: "module" });
+		let released = false;
+		return {
+			worker,
+			releaseBootstrapUrl() {
+				if (released) return;
+				released = true;
+				URL.revokeObjectURL(bootstrapUrl);
+			},
+		};
+	} catch (error) {
+		URL.revokeObjectURL(bootstrapUrl);
+		throw error;
 	}
 }

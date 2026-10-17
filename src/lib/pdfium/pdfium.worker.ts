@@ -5,6 +5,7 @@ interface OpenRequest {
 	id: number;
 	type: "open";
 	url: string;
+	wasmUrl: string;
 }
 
 interface PageSizeRequest {
@@ -70,7 +71,11 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 		if (request.type === "open") {
 			documentSession?.dispose();
 			documentSession = null;
-			const session = await PdfiumDocumentSession.open(request.url, new AbortController().signal);
+			const session = await PdfiumDocumentSession.open(
+				request.url,
+				request.wasmUrl,
+				new AbortController().signal,
+			);
 			documentSession = session;
 			const info = session.info;
 			const response: OpenedResponse = {

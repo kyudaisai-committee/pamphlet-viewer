@@ -1,9 +1,13 @@
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { extname, resolve, sep } from "node:path";
 
 import type { Plugin } from "vite";
+
+import { createLibraryTestHtml, createRemoteLibraryTestHtml } from "./library-fixture-pages.js";
+import { createPdfFixture } from "./pdf-fixture.js";
 
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 const METRICS_PATH = "/__pdfium-range-metrics";
@@ -12,11 +16,10 @@ const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
 const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
 const CORS_ORIGIN_PATH = "/__pdfium-cors-origin";
 const CORS_CLOSE_PATH = "/__pdfium-cors-close";
+const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
+const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 const LIBRARY_HTML_PATH = "/__built-library-test.html";
-const PAGE_COUNT = 24;
-const FILLER_BYTES = 32 * 1024 * 1024;
-const TRAILING_FILLER_BYTES = 1024 * 1024;
-const FAR_PAGE_COLOR = [0.91, 0.08, 0.16] as const;
+const REMOTE_LIBRARY_HTML_PATH = "/__built-library-remote-test.html";
 
 interface FixtureMetrics {
 	requestedBytes: number;
@@ -40,13 +43,16 @@ export function rangeFixturePlugin(): Plugin {
 		[FIXTURE_PATH, regularFixture],
 		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
 	]);
-	let corsServer: ReturnType<typeof createServer> | null = null;
+	const corsServers = new Map<number, ReturnType<typeof createServer>>();
+	const corsAssetRequests = new Map<number, string[]>();
 
 	return {
 		name: "range-pdf-fixture",
 		configureServer(server) {
 			server.httpServer?.once("close", function closeCorsServer(): void {
-				if (corsServer?.listening) corsServer.close();
+				for (const corsServer of corsServers.values()) {
+					if (corsServer.listening) corsServer.close();
+				}
 			});
 
 			server.middlewares.use((request, response, next) => {
@@ -56,6 +62,19 @@ export function rangeFixturePlugin(): Plugin {
 					response.end(createLibraryTestHtml());
 					return;
 				}
+				if (pathname === REMOTE_LIBRARY_HTML_PATH) {
+					const searchParams = new URL(request.url ?? "/", "http://localhost").searchParams;
+					const entryUrl = searchParams.get("entry");
+					const pdfUrl = searchParams.get("pdf");
+					if (entryUrl === null || pdfUrl === null) {
+						response.statusCode = 400;
+						response.end();
+						return;
+					}
+					response.setHeader("Content-Type", "text/html; charset=utf-8");
+					response.end(createRemoteLibraryTestHtml(entryUrl, pdfUrl));
+					return;
+				}
 				if (pathname === RESET_PATH) {
 					for (const fixture of fixtures.values()) resetMetrics(fixture.metrics);
 					response.setHeader("Content-Type", "application/json");
@@ -63,25 +82,29 @@ export function rangeFixturePlugin(): Plugin {
 					return;
 				}
 				if (pathname === CORS_ORIGIN_PATH) {
-					if (corsServer === null) {
-						corsServer = createCorsFixtureServer(regularFixture);
-						corsServer.listen(0, "127.0.0.1");
-					}
-					corsServer.once("listening", function sendCorsServerPort(): void {
-						const address = corsServer?.address();
+					const assetRequests: string[] = [];
+					const corsServer = createCorsFixtureServer(regularFixture, assetRequests);
+					corsServer.listen(0, "127.0.0.1", function sendCorsServerPort(): void {
+						const address = corsServer.address();
 						if (address === null || address === undefined || typeof address === "string") {
 							response.statusCode = 503;
 							response.end();
 							return;
 						}
+						corsServers.set(address.port, corsServer);
+						corsAssetRequests.set(address.port, assetRequests);
 						response.setHeader("Content-Type", "application/json");
 						response.end(JSON.stringify({ port: address.port }));
 					});
 					return;
 				}
 				if (pathname === CORS_CLOSE_PATH) {
-					const activeServer = corsServer;
-					corsServer = null;
+					const port = Number(
+						new URL(request.url ?? "/", "http://localhost").searchParams.get("port"),
+					);
+					const activeServer = corsServers.get(port);
+					corsServers.delete(port);
+					corsAssetRequests.delete(port);
 					if (activeServer?.listening) {
 						activeServer.close(function finishCorsServerClose(): void {
 							response.end();
@@ -89,6 +112,14 @@ export function rangeFixturePlugin(): Plugin {
 					} else {
 						response.end();
 					}
+					return;
+				}
+				if (pathname === CORS_ASSET_METRICS_PATH) {
+					const port = Number(
+						new URL(request.url ?? "/", "http://localhost").searchParams.get("port"),
+					);
+					response.setHeader("Content-Type", "application/json");
+					response.end(JSON.stringify({ requests: corsAssetRequests.get(port) ?? [] }));
 					return;
 				}
 				const metricsFixture = [...fixtures.values()].find(
@@ -184,46 +215,48 @@ function sendFixtureResponse(
 	response.end(body);
 }
 
-function createCorsFixtureServer(fixture: FixtureRecord): ReturnType<typeof createServer> {
+function createCorsFixtureServer(
+	fixture: FixtureRecord,
+	assetRequests: string[],
+): ReturnType<typeof createServer> {
 	return createServer(function serveCorsFixture(request, response): void {
 		const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-		if (pathname !== FIXTURE_PATH) {
-			response.statusCode = 404;
-			response.end();
+		if (pathname === FIXTURE_PATH) {
+			sendFixtureResponse(request, response, fixture);
 			return;
 		}
-		sendFixtureResponse(request, response, fixture);
+		assetRequests.push(pathname);
+		serveLibraryAsset(response, pathname);
 	});
 }
 
-function createLibraryTestHtml(): string {
-	return `<!doctype html>
-<html lang="ja">
-	<head>
-		<meta charset="utf-8">
-		<title>Custom Element distribution test</title>
-	</head>
-	<body>
-		<pamphlet-viewer id="viewer" src="${FIXTURE_PATH}" layout="single" style="display:block;width:840px;height:560px"></pamphlet-viewer>
-		<script>
-			document.addEventListener("pagechange", (event) => {
-				parent.postMessage({ type: "pagechange", detail: event.detail }, location.origin);
-			});
-			document.addEventListener("error", (event) => {
-				parent.postMessage({ type: "error", detail: event.detail }, location.origin);
-			});
-		</script>
-		<script type="module" src="/dist/library/pamphlet-viewer.js?load=first"></script>
-		<script type="module">
-			import { registerPamphletViewer } from "/dist/library/pamphlet-viewer.js?load=duplicate";
-			registerPamphletViewer();
-			parent.postMessage(
-				{ type: "registration", registered: typeof registerPamphletViewer === "function" },
-				location.origin,
-			);
-		</script>
-	</body>
-</html>`;
+function serveLibraryAsset(response: ServerResponse, pathname: string): void {
+	const filePath = resolve(LIBRARY_DIRECTORY, `.${pathname}`);
+	if (!filePath.startsWith(`${LIBRARY_DIRECTORY}${sep}`)) {
+		response.statusCode = 404;
+		response.end();
+		return;
+	}
+
+	response.setHeader("Access-Control-Allow-Origin", "*");
+	response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+	response.setHeader("Content-Type", getLibraryAssetContentType(extname(filePath)));
+	const asset = createReadStream(filePath);
+	asset.on("error", function reportMissingLibraryAsset(): void {
+		if (response.headersSent) {
+			response.destroy();
+			return;
+		}
+		response.statusCode = 404;
+		response.end();
+	});
+	asset.pipe(response);
+}
+
+function getLibraryAssetContentType(extension: string): string {
+	if (extension === ".js") return "text/javascript; charset=utf-8";
+	if (extension === ".wasm") return "application/wasm";
+	return "application/octet-stream";
 }
 
 function parseByteRange(value: string, fileLength: number): ByteRange | null {
@@ -236,87 +269,4 @@ function parseByteRange(value: string, fileLength: number): ByteRange | null {
 	if (start < 0 || end < start || start >= fileLength) return null;
 
 	return { start, end: Math.min(end, fileLength - 1) };
-}
-
-function createPdfFixture(): Buffer {
-	const chunks: Buffer[] = [Buffer.from("%PDF-1.7\n", "ascii")];
-	const offsets: number[] = [0];
-	let position = chunks[0].byteLength;
-
-	appendObject(chunks, offsets, 1, "<< /Type /Catalog /Pages 2 0 R >>", position);
-	position += chunks.at(-1)?.byteLength ?? 0;
-
-	const pageReferences = Array.from({ length: PAGE_COUNT }, (_, index) => {
-		const pageObject = 3 + index;
-		return `${pageObject} 0 R`;
-	});
-	const pagesObject = `<< /Type /Pages /Count ${PAGE_COUNT} /Kids [${pageReferences.join(" ")}] >>`;
-	appendObject(chunks, offsets, 2, pagesObject, position);
-	position += chunks.at(-1)?.byteLength ?? 0;
-
-	for (let index = 0; index < PAGE_COUNT; index += 1) {
-		const pageObject = 3 + index;
-		const contentObject = 3 + PAGE_COUNT + index;
-		const pageBody = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << >> /Contents ${contentObject} 0 R >>`;
-		appendObject(chunks, offsets, pageObject, pageBody, position);
-		position += chunks.at(-1)?.byteLength ?? 0;
-	}
-
-	for (let index = 0; index < PAGE_COUNT; index += 1) {
-		if (index === PAGE_COUNT / 2) {
-			appendFiller(chunks, FILLER_BYTES);
-			position += FILLER_BYTES;
-		}
-
-		const contentObject = 3 + PAGE_COUNT + index;
-		const color = getPageColor(index);
-		const stream = `q\n${color[0]} ${color[1]} ${color[2]} rg\n30 40 240 320 re\nf\nQ\n`;
-		const contentBody = `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}endstream`;
-		appendObject(chunks, offsets, contentObject, contentBody, position);
-		position += chunks.at(-1)?.byteLength ?? 0;
-	}
-	appendFiller(chunks, TRAILING_FILLER_BYTES);
-	position += TRAILING_FILLER_BYTES;
-
-	const objectCount = offsets.length;
-	const xrefOffset = position;
-	const xrefLines = ["xref", `0 ${objectCount}`, "0000000000 65535 f "];
-	for (const offset of offsets.slice(1)) {
-		xrefLines.push(`${offset.toString().padStart(10, "0")} 00000 n `);
-	}
-	const trailer = [
-		"trailer",
-		`<< /Size ${objectCount} /Root 1 0 R >>`,
-		"startxref",
-		`${xrefOffset}`,
-		"%%EOF",
-		"",
-	].join("\n");
-	chunks.push(Buffer.from(`${xrefLines.join("\n")}\n${trailer}`, "ascii"));
-
-	return Buffer.concat(chunks);
-}
-
-function appendFiller(chunks: Buffer[], byteLength: number): void {
-	const filler = Buffer.alloc(byteLength, 0x78);
-	filler[0] = 0x25;
-	filler[filler.byteLength - 1] = 0x0a;
-	chunks.push(filler);
-}
-
-function getPageColor(index: number): readonly [number, number, number] {
-	if (index === PAGE_COUNT - 1) return FAR_PAGE_COLOR;
-	return [0.12, 0.34, 0.72];
-}
-
-function appendObject(
-	chunks: Buffer[],
-	offsets: number[],
-	objectNumber: number,
-	body: string,
-	position: number,
-): void {
-	const chunk = Buffer.from([`${objectNumber} 0 obj`, body, "endobj", ""].join("\n"), "ascii");
-	offsets[objectNumber] = position;
-	chunks.push(chunk);
 }

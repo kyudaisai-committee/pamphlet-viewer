@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "vitest";
+import { expect, test } from "vitest";
 
 import { PdfiumWorkerClient } from "./worker-client";
 
@@ -8,10 +8,6 @@ interface FixtureMetrics {
 	ranges: Array<{ start: number; end: number }>;
 	fileLength: number;
 }
-
-afterAll(async () => {
-	await fetch("/__pdfium-cors-close");
-});
 
 test("renders first and distant pages before downloading the full PDF", async () => {
 	const resetResponse = await fetch("/__pdfium-range-reset");
@@ -104,8 +100,9 @@ test("loads a PDF from a different origin with exposed Range response headers", 
 	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href);
 	url.hostname = "127.0.0.1";
 	url.port = String(port);
-	const worker = new PdfiumWorkerClient();
+	let worker: PdfiumWorkerClient | null = null;
 	try {
+		worker = new PdfiumWorkerClient();
 		const info = await worker.open(url.href);
 		expect(info.pageCount).toBe(24);
 		const firstPage = await worker.renderPage(0, 1);
@@ -117,7 +114,8 @@ test("loads a PDF from a different origin with exposed Range response headers", 
 		expect(metrics.fullRequests).toBe(0);
 		expect(metrics.requestedBytes).toBeLessThan(metrics.fileLength);
 	} finally {
-		worker.terminate();
+		worker?.terminate();
+		await fetch(`/__pdfium-cors-close?port=${port}`);
 	}
 }, 120_000);
 

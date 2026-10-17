@@ -75,6 +75,80 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 	}
 });
 
+test("loads the built custom element and worker from a separate asset origin", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	if (!resetResponse.ok) throw new Error("The PDF Range metrics endpoint did not reset.");
+	const originResponse = await fetch("/__pdfium-cors-origin");
+	if (!originResponse.ok) throw new Error("The external asset server did not start.");
+	const { port } = (await originResponse.json()) as { port: number };
+	const remoteEntry = new URL("/pamphlet-viewer.js", window.location.href);
+	remoteEntry.hostname = "127.0.0.1";
+	remoteEntry.port = String(port);
+	const pdfUrl = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
+
+	const frame = document.createElement("iframe");
+	frame.src = `/__built-library-remote-test.html?entry=${encodeURIComponent(remoteEntry.href)}&pdf=${encodeURIComponent(pdfUrl)}`;
+	const result = waitForRemoteLibraryResult(frame);
+	document.body.append(frame);
+	try {
+		const outcome = await result;
+		const frameWindow = frame.contentWindow;
+		const remoteResources =
+			frameWindow?.performance
+				.getEntriesByType("resource")
+				.map((entry) => new URL(entry.name).href) ?? [];
+		if (outcome.type === "error") {
+			const metrics = await fetch("/__pdfium-range-metrics");
+			const rangeMetrics = metrics.ok ? await metrics.json() : "unavailable";
+			const assetMetrics = await fetch(`/__pdfium-cors-asset-metrics?port=${port}`);
+			const assetRequests = assetMetrics.ok ? await assetMetrics.json() : "unavailable";
+			throw new Error(
+				`The remote library failed: ${JSON.stringify(outcome.detail)}; resources: ${JSON.stringify(remoteResources)}; assets: ${JSON.stringify(assetRequests)}; ranges: ${JSON.stringify(rangeMetrics)}`,
+			);
+		}
+
+		const frameDocument = frame.contentDocument;
+		if (frameDocument === null || frameWindow === null) {
+			throw new Error("Could not access the external-asset test frame.");
+		}
+		const element = frameDocument.getElementById("viewer");
+		const canvas = element?.shadowRoot?.querySelector<HTMLCanvasElement>(".page-canvas");
+		await expect.poll(() => canvas?.width ?? 0).toBeGreaterThan(0);
+		if (canvas === null || canvas === undefined) {
+			throw new Error("The remote worker did not render a page canvas.");
+		}
+		const context = canvas.getContext("2d");
+		if (context === null) throw new Error("The remote page canvas has no 2D context.");
+		const pixel = context.getImageData(
+			Math.floor(canvas.width / 2),
+			Math.floor(canvas.height / 2),
+			1,
+			1,
+		).data;
+		expect(pixel[2]).toBeGreaterThan(100);
+
+		expect(remoteResources).toContain(remoteEntry.href);
+		const assetMetrics = await fetch(`/__pdfium-cors-asset-metrics?port=${port}`);
+		if (!assetMetrics.ok) throw new Error("The remote asset metrics endpoint did not respond.");
+		const assetRequests = (await assetMetrics.json()) as { requests: string[] };
+		expect(assetRequests.requests.some((path) => path.includes("pdfium.worker-"))).toBe(true);
+		expect(assetRequests.requests.some((path) => path.endsWith(".wasm"))).toBe(true);
+
+		const metrics = await fetch("/__pdfium-range-metrics");
+		if (!metrics.ok) throw new Error("The PDF Range metrics endpoint did not respond.");
+		const rangeMetrics = (await metrics.json()) as {
+			requestedBytes: number;
+			fullRequests: number;
+			fileLength: number;
+		};
+		expect(rangeMetrics.fullRequests).toBe(0);
+		expect(rangeMetrics.requestedBytes).toBeLessThan(rangeMetrics.fileLength);
+	} finally {
+		frame.remove();
+		await fetch(`/__pdfium-cors-close?port=${port}`);
+	}
+}, 45_000);
+
 function waitForLibraryMessage(frame: HTMLIFrameElement): Promise<LibraryTestMessage> {
 	return new Promise((resolve, reject) => {
 		const timeoutId = window.setTimeout(() => {
@@ -107,6 +181,33 @@ function waitForRegistration(frame: HTMLIFrameElement): Promise<boolean> {
 			resolve(event.data.registered);
 		}
 	});
+}
+
+interface RemoteLibraryResult {
+	type: "pagechange" | "error";
+	detail?: unknown;
+}
+
+function waitForRemoteLibraryResult(frame: HTMLIFrameElement): Promise<RemoteLibraryResult> {
+	return new Promise((resolve, reject) => {
+		const timeoutId = window.setTimeout(() => {
+			window.removeEventListener("message", receiveMessage);
+			reject(new Error("The remote library did not render or report an error."));
+		}, 15_000);
+		window.addEventListener("message", receiveMessage);
+
+		function receiveMessage(event: MessageEvent<unknown>): void {
+			if (event.source !== frame.contentWindow || !isRemoteLibraryResult(event.data)) return;
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("message", receiveMessage);
+			resolve(event.data);
+		}
+	});
+}
+
+function isRemoteLibraryResult(value: unknown): value is RemoteLibraryResult {
+	if (typeof value !== "object" || value === null || !("type" in value)) return false;
+	return value.type === "pagechange" || (value.type === "error" && "detail" in value);
 }
 
 function isLibraryTestMessage(value: unknown): value is LibraryTestMessage {
