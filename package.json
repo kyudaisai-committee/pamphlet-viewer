@@ -5,13 +5,14 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build": "vite build && pnpm build:library",
+		"build:library": "vite build --config vite.library.config.ts && tsc -p tsconfig.library.json",
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
 		"format": "oxfmt",
 		"fmt": "oxfmt",
 		"lint": "eslint . && cspell .",
-		"test": "vitest run",
+		"test": "pnpm build:library && vitest run",
 		"verify": "pnpm exec oxfmt --check && pnpm check && pnpm lint && pnpm test && pnpm build",
 		"prepare": "lefthook install"
 	},
