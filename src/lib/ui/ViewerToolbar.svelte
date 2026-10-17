@@ -256,10 +256,8 @@
 				}
 			}
 		}
-	}
 
-	@media (max-width: 620px) {
-		.toolbar {
+		@media (max-width: 620px) {
 			gap: 6px;
 			padding: 7px;
 

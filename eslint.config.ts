@@ -31,6 +31,7 @@ export default defineConfig(
 			"src/**/*.cts",
 			"tests/**/*.ts",
 			"vite.config.ts",
+			"vite.library.config.ts",
 			"vitest.config.ts",
 		],
 		languageOptions: {

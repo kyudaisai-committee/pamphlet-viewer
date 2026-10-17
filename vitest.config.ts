@@ -23,6 +23,7 @@ export default defineConfig({
 				test: {
 					name: "browser",
 					include: ["src/**/*.browser.test.ts"],
+					fileParallelism: false,
 					browser: {
 						enabled: true,
 						headless: true,

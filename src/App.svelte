@@ -87,6 +87,27 @@
 			gap: 24px;
 			margin-bottom: 26px;
 
+			div {
+				.eyebrow {
+					margin: 0 0 7px;
+					color: #53688e;
+					font-size: 11px;
+					font-weight: 700;
+					letter-spacing: 0.12em;
+				}
+
+				h1 {
+					margin: 0;
+					font-size: clamp(26px, 4vw, 36px);
+					letter-spacing: -0.04em;
+				}
+
+				.intro {
+					margin: 8px 0 0;
+					color: #647087;
+				}
+			}
+
 			a {
 				margin-top: 8px;
 				color: #3157a4;
@@ -97,25 +118,6 @@
 					text-decoration: underline;
 				}
 			}
-		}
-
-		.eyebrow {
-			margin: 0 0 7px;
-			color: #53688e;
-			font-size: 11px;
-			font-weight: 700;
-			letter-spacing: 0.12em;
-		}
-
-		h1 {
-			margin: 0;
-			font-size: clamp(26px, 4vw, 36px);
-			letter-spacing: -0.04em;
-		}
-
-		.intro {
-			margin: 8px 0 0;
-			color: #647087;
 		}
 
 		.source-form {

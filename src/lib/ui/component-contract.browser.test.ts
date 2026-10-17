@@ -149,9 +149,126 @@ test("keeps an omitted src empty and resolves raw src attributes against the doc
 	);
 });
 
-function createPageSource(): PageSource {
+test("aborts a stale source load and only renders the newest source", async () => {
+	await import("../entry");
+	const attempts: Array<{
+		source: string;
+		signal: AbortSignal;
+		resolve(source: PageSource): void;
+	}> = [];
+	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
+	element.style.width = "840px";
+	element.style.height = "560px";
+	element.layout = "single";
+	element.backend = {
+		open(source, signal) {
+			return new Promise<PageSource>((resolve) => attempts.push({ source, signal, resolve }));
+		},
+	};
+	const changes: number[] = [];
+	element.addEventListener("pagechange", (event) => changes.push(event.detail.page));
+	element.src = "./first.pdf";
+	document.body.append(element);
+	await expect.poll(() => attempts.length).toBe(1);
+
+	const firstAttempt = attempts[0];
+	if (firstAttempt === undefined) throw new Error("The first source did not start loading.");
+	element.src = "./second.pdf";
+	await expect.poll(() => attempts.length).toBe(2);
+	expect(firstAttempt.signal.aborted).toBe(true);
+
+	let staleSourceDisposed = false;
+	firstAttempt.resolve(createPageSource(1, [255, 0, 0], () => (staleSourceDisposed = true)));
+	await expect.poll(() => staleSourceDisposed).toBe(true);
+	const secondAttempt = attempts[1];
+	if (secondAttempt === undefined) throw new Error("The second source did not start loading.");
+	secondAttempt.resolve(createPageSource(1, [0, 160, 0]));
+	await expect.poll(() => changes.length).toBe(1);
+	expect(changes).toEqual([1]);
+	expect(secondAttempt.signal.aborted).toBe(false);
+	expect(canvasPixel(element)).toEqual([0, 160, 0, 255]);
+});
+
+test("keeps instances independent and reopens after disconnecting and reconnecting", async () => {
+	await import("../entry");
+	const openCalls: Array<{ source: string; signal: AbortSignal }> = [];
+	const disposed = new Map<string, number>();
+	const backend = {
+		open(source: string, signal: AbortSignal): Promise<PageSource> {
+			openCalls.push({ source, signal });
+			const isSecond = source.endsWith("second-instance.pdf");
+			const color: readonly [number, number, number] = isSecond ? [0, 160, 0] : [0, 0, 220];
+			return Promise.resolve(
+				createPageSource(isSecond ? 2 : 1, color, () => {
+					disposed.set(source, (disposed.get(source) ?? 0) + 1);
+				}),
+			);
+		},
+	};
+	const first = document.createElement("pamphlet-viewer") as PamphletViewerElement;
+	const second = document.createElement("pamphlet-viewer") as PamphletViewerElement;
+	for (const element of [first, second]) {
+		element.style.width = "840px";
+		element.style.height = "560px";
+		element.layout = "single";
+		element.backend = backend;
+	}
+	first.src = "./first-instance.pdf";
+	second.src = "./second-instance.pdf";
+	second.page = 2;
+	const firstChanged = waitForPageChange(first);
+	const secondChanged = waitForPageChange(second);
+	document.body.append(first, second);
+	await Promise.all([firstChanged, secondChanged]);
+	await expect.poll(() => openCalls.length).toBe(2);
+	const firstOpen = openCalls.find((call) => call.source.endsWith("first-instance.pdf"));
+	const secondOpen = openCalls.find((call) => call.source.endsWith("second-instance.pdf"));
+	if (firstOpen === undefined || secondOpen === undefined) {
+		throw new Error("Both viewer instances did not open their own sources.");
+	}
+	expect(firstOpen.signal.aborted).toBe(false);
+	expect(secondOpen.signal.aborted).toBe(false);
+	expect(canvasPixel(first)).toEqual([0, 0, 220, 255]);
+	expect(canvasPixel(second)).toEqual([0, 160, 0, 255]);
+
+	const firstReconnected = waitForPageChange(first);
+	first.remove();
+	await expect.poll(() => firstOpen.signal.aborted).toBe(true);
+	await expect.poll(() => disposed.get(firstOpen.source)).toBe(1);
+	document.body.append(first);
+	await firstReconnected;
+	await expect
+		.poll(() => openCalls.filter((call) => call.source === firstOpen.source))
+		.toHaveLength(2);
+	expect(secondOpen.signal.aborted).toBe(false);
+	expect(disposed.get(secondOpen.source)).toBeUndefined();
+	expect(canvasPixel(first)).toEqual([0, 0, 220, 255]);
+});
+
+function waitForPageChange(element: PamphletViewerElement): Promise<void> {
+	return new Promise((resolve) =>
+		element.addEventListener("pagechange", () => resolve(), { once: true }),
+	);
+}
+
+function canvasPixel(element: PamphletViewerElement): number[] {
+	const canvas = element.shadowRoot?.querySelector<HTMLCanvasElement>(".page-canvas");
+	const context = canvas?.getContext("2d");
+	if (canvas === null || canvas === undefined || context === null || context === undefined) {
+		throw new Error("The custom element did not render a page canvas.");
+	}
+	return [
+		...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data,
+	];
+}
+
+function createPageSource(
+	pageCount = 1,
+	color: readonly [number, number, number] = [38, 82, 148],
+	onDispose: () => void = () => {},
+): PageSource {
 	return {
-		pageCount: 1,
+		pageCount,
 		async getPageSize() {
 			return { width: 300, height: 400 };
 		},
@@ -160,19 +277,19 @@ function createPageSource(): PageSource {
 				type: "pixels",
 				width: 300,
 				height: 400,
-				pixels: pagePixels(),
+				pixels: pagePixels(color),
 			};
 		},
-		dispose() {},
+		dispose: onDispose,
 	};
 }
 
-function pagePixels(): ArrayBuffer {
+function pagePixels(color: readonly [number, number, number]): ArrayBuffer {
 	const pixels = new Uint8ClampedArray(300 * 400 * 4);
 	for (let offset = 0; offset < pixels.length; offset += 4) {
-		pixels[offset] = 38;
-		pixels[offset + 1] = 82;
-		pixels[offset + 2] = 148;
+		pixels[offset] = color[0];
+		pixels[offset + 1] = color[1];
+		pixels[offset + 2] = color[2];
 		pixels[offset + 3] = 255;
 	}
 	return pixels.buffer;

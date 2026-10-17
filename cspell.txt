@@ -3,6 +3,7 @@ PDFium
 FPDF
 FILEACCESS
 BGRA
+RGBA
 HEAPU8
 endobj
 startxref

@@ -3,6 +3,12 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/library/types/entry.d.ts",
+			"import": "./dist/library/pamphlet-viewer.js"
+		}
+	},
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build && pnpm build:library",

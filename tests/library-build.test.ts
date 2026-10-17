@@ -5,10 +5,23 @@ import { expect, test } from "vitest";
 
 const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 
+interface PackageManifest {
+	private: boolean;
+	exports: {
+		".": {
+			types: string;
+			import: string;
+		};
+	};
+}
+
 test("emits a self-hosted worker, external WASM asset, and public declarations", async () => {
 	const files = await listFiles(LIBRARY_DIRECTORY);
 	const entryPath = resolve(LIBRARY_DIRECTORY, "pamphlet-viewer.js");
 	const entry = await readFile(entryPath, "utf8");
+	const packageManifest = JSON.parse(
+		await readFile(resolve(process.cwd(), "package.json"), "utf8"),
+	) as PackageManifest;
 	const workerPath = files.find((file) => file.includes("pdfium.worker-") && file.endsWith(".js"));
 	const wasmPath = files.find((file) => file.endsWith(".wasm"));
 
@@ -28,6 +41,11 @@ test("emits a self-hosted worker, external WASM asset, and public declarations",
 	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("types/entry.d.ts");
 	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("types/public-api.d.ts");
 	expect(files.some((file) => file.includes("pdfium.worker-") && file.endsWith(".ts"))).toBe(false);
+	expect(packageManifest.private).toBe(true);
+	expect(packageManifest.exports["."]).toEqual({
+		types: "./dist/library/types/entry.d.ts",
+		import: "./dist/library/pamphlet-viewer.js",
+	});
 
 	const worker = await readFile(workerPath, "utf8");
 	expect(worker).toContain(wasmFileName);
