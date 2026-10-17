@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/evilmartians/lefthook/master/schema.json
+
+pre-commit:
+  parallel: true
+  commands:
+    format-and-lint:
+      run: |
+        pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files} &&
+        pnpm exec eslint --fix --no-error-on-unmatched-pattern --no-warn-ignored {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    format:
+      run: pnpm exec oxfmt --check --no-error-on-unmatched-pattern {push_files}
+    lint:
+      run: pnpm exec eslint --no-error-on-unmatched-pattern --no-warn-ignored {push_files}
+    check:
+      run: pnpm run check
