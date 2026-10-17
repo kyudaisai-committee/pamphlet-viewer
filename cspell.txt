@@ -1,0 +1,15 @@
+EmbedPDF
+PDFium
+FPDF
+FILEACCESS
+Playwright
+Vitest
+documentload
+pagechange
+esbuild
+lefthook
+linecap
+linejoin
+evenodd
+mdsvex
+vite

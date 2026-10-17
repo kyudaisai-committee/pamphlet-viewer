@@ -10,7 +10,9 @@
 		"check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
 		"format": "oxfmt",
 		"fmt": "oxfmt",
-		"lint": "eslint .",
+		"lint": "eslint . && cspell .",
+		"test": "vitest run",
+		"verify": "pnpm exec oxfmt --check && pnpm check && pnpm lint && pnpm test && pnpm build",
 		"prepare": "lefthook install"
 	},
 	"dependencies": {
