@@ -1,12 +1,13 @@
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 import { rangeFixturePlugin } from "./tests/range-fixture-plugin.js";
 
 export default defineConfig({
-	plugins: [rangeFixturePlugin()],
+	plugins: [svelte(), rangeFixturePlugin()],
 	optimizeDeps: {
-		include: ["@embedpdf/pdfium"],
+		include: ["@embedpdf/pdfium", "@lucide/svelte"],
 	},
 	test: {
 		projects: [
