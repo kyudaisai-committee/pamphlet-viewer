@@ -34,11 +34,11 @@
 		gap: 12px;
 		min-height: 100%;
 		padding: 24px;
-		color: #626b7b;
+		color: #c1c6cb;
 		text-align: center;
 
 		&[role="alert"] {
-			color: #8f2632;
+			color: #f3a6a6;
 		}
 
 		button {

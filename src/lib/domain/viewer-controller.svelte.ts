@@ -26,6 +26,7 @@ export interface RenderInput {
 	fit: FitMode;
 	zoom: number;
 	viewport: ViewportSize;
+	devicePixelRatio?: number;
 }
 
 interface ScheduledRender extends RenderInput {
@@ -47,6 +48,7 @@ export class ViewerController {
 	#pendingRender: ScheduledRender | null = null;
 	#rendering = false;
 	#lastRenderKey = "";
+	#lastPageChangeKey = "";
 	#failedRenderKey = "";
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
@@ -136,6 +138,7 @@ export class ViewerController {
 			input.zoom,
 			input.viewport.width,
 			input.viewport.height,
+			input.devicePixelRatio ?? 1,
 		].join(":");
 		if (this.phase === "error") {
 			if (this.failure?.code === "load-failed" || key === this.#failedRenderKey) return;
@@ -205,7 +208,9 @@ export class ViewerController {
 				request.fit,
 				request.zoom,
 			);
-			const plans = pageSizes.map((pageSize) => createPageRenderPlan(pageSize, displayScale));
+			const plans = pageSizes.map((pageSize) =>
+				createPageRenderPlan(pageSize, displayScale, undefined, request.devicePixelRatio ?? 1),
+			);
 			const visualResults = await Promise.allSettled(
 				pageIndexes.map(async (pageIndex, localIndex) => {
 					const plan = plans[localIndex];
@@ -237,10 +242,15 @@ export class ViewerController {
 			this.#releaseCurrentVisuals();
 			this.pageVisuals = nextPages;
 			this.pageRenderPlans = nextPlans;
-			this.dispatch({
-				type: "pagechange",
-				detail: { page: request.page, visiblePages: pageIndexes.map((index) => index + 1) },
-			});
+			const visiblePages = pageIndexes.map((index) => index + 1);
+			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
+			if (pageChangeKey !== this.#lastPageChangeKey) {
+				this.#lastPageChangeKey = pageChangeKey;
+				this.dispatch({
+					type: "pagechange",
+					detail: { page: request.page, visiblePages },
+				});
+			}
 		} catch {
 			if (!this.#isCurrent(request, source)) return;
 			this.#lastRenderKey = "";
@@ -251,6 +261,7 @@ export class ViewerController {
 				request.zoom,
 				request.viewport.width,
 				request.viewport.height,
+				request.devicePixelRatio ?? 1,
 			].join(":");
 			this.#setFailure({
 				code: "render-failed",
@@ -269,6 +280,7 @@ export class ViewerController {
 		this.#renderId += 1;
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
+		this.#lastPageChangeKey = "";
 		this.#failedRenderKey = "";
 		this.#renderQueue?.dispose();
 		this.#renderQueue = null;

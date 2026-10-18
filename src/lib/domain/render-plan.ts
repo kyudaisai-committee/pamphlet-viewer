@@ -16,6 +16,7 @@ export function createPageRenderPlan(
 	pageSize: PageSize,
 	displayScale: number,
 	maxPixels = MAX_PAGE_RENDER_PIXELS,
+	devicePixelRatio = 1,
 ): PageRenderPlan {
 	if (
 		!Number.isFinite(pageSize.width) ||
@@ -31,6 +32,9 @@ export function createPageRenderPlan(
 	if (!Number.isSafeInteger(maxPixels) || maxPixels < 1) {
 		throw new RangeError("The page render pixel budget must be a positive safe integer.");
 	}
+	if (!Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0) {
+		throw new RangeError("The device pixel ratio must be a finite number greater than 0.");
+	}
 
 	const displayWidth = pageSize.width * displayScale;
 	const displayHeight = pageSize.height * displayScale;
@@ -39,7 +43,7 @@ export function createPageRenderPlan(
 	}
 
 	let rasterScale = Math.min(
-		displayScale,
+		displayScale * devicePixelRatio,
 		Math.sqrt(maxPixels / (pageSize.width * pageSize.height)),
 	);
 	let rasterWidth = Math.max(1, Math.ceil(pageSize.width * rasterScale));

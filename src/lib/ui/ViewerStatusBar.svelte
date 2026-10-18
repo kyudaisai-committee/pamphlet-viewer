@@ -31,7 +31,7 @@
 		padding: 4px 12px;
 		border-top: 1px solid var(--pamphlet-viewer-border, #d8dce5);
 		background: var(--pamphlet-viewer-toolbar, #fbfcfe);
-		color: #697284;
+		color: #aeb4ba;
 		font-size: 12px;
 	}
 </style>

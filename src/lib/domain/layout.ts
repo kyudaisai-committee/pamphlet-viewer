@@ -1,7 +1,7 @@
 import type { PageSize } from "../document/page-source";
 
 export const AUTO_SPREAD_MIN_WIDTH = 760;
-export const SPREAD_GAP = 16;
+export const SPREAD_GAP = 4;
 
 export type LayoutMode = "single" | "spread" | "auto";
 export type ResolvedLayout = Exclude<LayoutMode, "auto">;

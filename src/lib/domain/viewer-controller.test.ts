@@ -77,6 +77,36 @@ describe("ViewerController", () => {
 		expect(plan.rasterWidth * plan.rasterHeight).toBeLessThanOrEqual(8 * 1024 * 1024);
 		controller.dispose();
 	});
+
+	it("renders at the device pixel ratio while preserving the CSS page size", async () => {
+		let renderedScale = 0;
+		const source: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			async renderPage(_pageIndex, scale) {
+				renderedScale = scale;
+				return pixelVisual();
+			},
+			dispose() {},
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		controller.requestRender({
+			...renderInput(1),
+			devicePixelRatio: 2,
+			viewport: { width: 300, height: 400 },
+		});
+		await vi.waitFor(() => expect(controller.pageRenderPlans[0]?.rasterScale).toBe(2));
+
+		const plan = controller.pageRenderPlans[0];
+		if (plan === undefined) throw new Error("The page render plan was not stored.");
+		expect(plan.displayWidth).toBe(300);
+		expect(plan.displayHeight).toBe(400);
+		expect(renderedScale).toBe(2);
+		controller.dispose();
+	});
 });
 
 function createBackend(pageSource: PageSource): DocumentBackend {

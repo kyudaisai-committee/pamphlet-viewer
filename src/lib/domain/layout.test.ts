@@ -41,7 +41,9 @@ describe("calculateFitScale", () => {
 			{ width: 300, height: 400 },
 		];
 		expect(calculateFitScale(pageSizes, { width: 1232, height: 800 }, "page", 1)).toBe(2);
-		expect(calculateFitScale(pageSizes, { width: 616, height: 800 }, "width", 1.5)).toBe(1.5);
+		expect(calculateFitScale(pageSizes, { width: 616, height: 800 }, "width", 1.5)).toBeCloseTo(
+			1.53,
+		);
 	});
 
 	it("subtracts the fixed spread gap before scaling pages to a narrow width", () => {
@@ -51,6 +53,6 @@ describe("calculateFitScale", () => {
 		];
 		const scale = calculateFitScale(pageSizes, { width: 500, height: 800 }, "width", 1);
 
-		expect(600 * scale + 16).toBeCloseTo(500, 10);
+		expect(600 * scale + 4).toBeCloseTo(500, 10);
 	});
 });
