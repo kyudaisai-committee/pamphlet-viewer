@@ -24,6 +24,24 @@ export default defineConfig(
 		},
 	},
 	{
+		files: [
+			"src/**/*.ts",
+			"src/**/*.tsx",
+			"src/**/*.mts",
+			"src/**/*.cts",
+			"tests/**/*.ts",
+			"vite.config.ts",
+			"vite.library.config.ts",
+			"vitest.config.ts",
+		],
+		languageOptions: {
+			parserOptions: { projectService: true },
+		},
+		rules: {
+			"@typescript-eslint/no-deprecated": "error",
+		},
+	},
+	{
 		files: ["**/*.svelte", "**/*.svelte.ts", "**/*.svelte.js"],
 		languageOptions: {
 			parserOptions: {
@@ -32,6 +50,10 @@ export default defineConfig(
 				parser: ts.parser,
 				svelteConfig,
 			},
+		},
+		rules: {
+			"@typescript-eslint/no-deprecated": "error",
+			"svelte/valid-compile": ["error", { ignoreWarnings: false }],
 		},
 	},
 	{
