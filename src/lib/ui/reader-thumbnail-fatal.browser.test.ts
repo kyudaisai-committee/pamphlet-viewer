@@ -63,6 +63,11 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 	await expect.poll(() => shadowRoot.querySelector('[role="alert"] button')).not.toBeNull();
+	const retryButtonBounds = shadowRoot
+		.querySelector<HTMLButtonElement>('[role="alert"] button')
+		?.getBoundingClientRect();
+	expect(retryButtonBounds?.width).toBeGreaterThan(0);
+	expect(retryButtonBounds?.height).toBeGreaterThan(0);
 	const failedRequestCount = failedWorker.requests.length;
 	await Promise.resolve();
 	expect(failedWorker.requests).toHaveLength(failedRequestCount);

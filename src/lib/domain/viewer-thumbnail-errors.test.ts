@@ -75,6 +75,51 @@ test("reopens a source after a fatal thumbnail failure and resumes its demand", 
 	controller.dispose();
 });
 
+test.each(["resolve", "reject"] as const)(
+	"keeps a fatal thumbnail failure after a pending body page-size request %s",
+	async (settlement) => {
+		const pendingPageSize = createDeferred<{ width: number; height: number }>();
+		let pageSizeCalls = 0;
+		const source: PageSource = {
+			pageCount: 1,
+			getPageSize() {
+				pageSizeCalls += 1;
+				return pageSizeCalls === 1
+					? pendingPageSize.promise
+					: Promise.resolve({ width: 300, height: 400 });
+			},
+			async renderPage() {
+				throw new PageSourceUnavailableError("The thumbnail source is unavailable.");
+			},
+			dispose() {},
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		controller.requestRender({
+			page: 1,
+			layout: "single",
+			fit: "page",
+			zoom: 1,
+			viewport: { width: 600, height: 800 },
+		});
+		await vi.waitFor(() => expect(pageSizeCalls).toBe(1));
+
+		controller.setThumbnailPages([0]);
+		await vi.waitFor(() => expect(controller.sourceUnavailable).toBe(true));
+		if (settlement === "resolve") {
+			pendingPageSize.resolve({ width: 300, height: 400 });
+		} else {
+			pendingPageSize.reject(new Error("The stale body size request failed."));
+		}
+		await Promise.resolve();
+
+		expect(controller.phase).toBe("error");
+		expect(controller.failure?.code).toBe("render-failed");
+		expect(controller.sourceUnavailable).toBe(true);
+		controller.dispose();
+	},
+);
+
 function createBackend(pageSource: PageSource): DocumentBackend {
 	return {
 		async open() {
@@ -96,4 +141,18 @@ function createPageSource(renderPage: PageSource["renderPage"]): PageSource {
 
 function pageVisual(): PageVisual {
 	return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
+}
+
+function createDeferred<T>(): {
+	promise: Promise<T>;
+	resolve(value: T): void;
+	reject(error: unknown): void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	let reject: (error: unknown) => void = () => undefined;
+	const promise = new Promise<T>((complete, fail) => {
+		resolve = complete;
+		reject = fail;
+	});
+	return { promise, resolve, reject };
 }

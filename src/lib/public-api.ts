@@ -3,6 +3,7 @@ import type { FitMode, LayoutMode } from "./domain/layout";
 import type { ViewerFailure } from "./domain/viewer-controller.svelte";
 
 export type { FitMode, LayoutMode, ViewerFailure, DocumentBackend, PageSource, PageVisual };
+export { PageSourceUnavailableError } from "./document/page-source";
 
 export interface PamphletViewerEventMap {
 	ready: CustomEvent<undefined>;
