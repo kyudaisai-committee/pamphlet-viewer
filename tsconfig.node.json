@@ -25,6 +25,7 @@
 		"svelte.config.js",
 		"tests/library-fixture-pages.ts",
 		"tests/library-build.test.ts",
+		"tests/http-resource-lifecycle.ts",
 		"tests/pdf-fixture.ts",
 		"tests/range-fixture-plugin.ts",
 		"vite.source-alias.ts",

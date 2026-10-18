@@ -1,11 +1,12 @@
 import { Buffer } from "node:buffer";
-import { createReadStream, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
 
 import type { Plugin } from "vite";
 
+import { disposeFixtureServer, streamFileResponse } from "./http-resource-lifecycle.js";
 import { createLibraryTestHtml, createRemoteLibraryTestHtml } from "./library-fixture-pages.js";
 import { createPdfFixture } from "./pdf-fixture.js";
 
@@ -57,9 +58,7 @@ export function rangeFixturePlugin(): Plugin {
 		name: "range-pdf-fixture",
 		configureServer(server) {
 			server.httpServer?.once("close", function closeCorsServer(): void {
-				for (const corsServer of corsServers.values()) {
-					if (corsServer.listening) corsServer.close();
-				}
+				closeCorsFixtureServers(corsServers);
 			});
 
 			server.middlewares.use((request, response, next) => {
@@ -96,6 +95,7 @@ export function rangeFixturePlugin(): Plugin {
 						if (address === null || address === undefined || typeof address === "string") {
 							response.statusCode = 503;
 							response.end();
+							void disposeFixtureServer(corsServer).catch(reportFixtureDisposalError);
 							return;
 						}
 						corsServers.set(address.port, corsServer);
@@ -112,13 +112,20 @@ export function rangeFixturePlugin(): Plugin {
 					const activeServer = corsServers.get(port);
 					corsServers.delete(port);
 					corsAssetRequests.delete(port);
-					if (activeServer?.listening) {
-						activeServer.close(function finishCorsServerClose(): void {
-							response.end();
-						});
-					} else {
+					if (activeServer === undefined) {
 						response.end();
+						return;
 					}
+					void disposeFixtureServer(activeServer).then(
+						function finishCorsServerClose(): void {
+							response.end();
+						},
+						function failCorsServerClose(error: unknown): void {
+							reportFixtureDisposalError(error);
+							response.statusCode = 500;
+							response.end();
+						},
+					);
 					return;
 				}
 				if (pathname === CORS_ASSET_METRICS_PATH) {
@@ -233,11 +240,27 @@ function createCorsFixtureServer(
 			return;
 		}
 		assetRequests.push(pathname);
-		serveLibraryAsset(response, pathname);
+		void serveLibraryAsset(response, pathname);
 	});
 }
 
-function serveLibraryAsset(response: ServerResponse, pathname: string): void {
+function closeCorsFixtureServers(servers: Map<number, ReturnType<typeof createServer>>): void {
+	const pendingDisposals = Array.from(servers.values(), function disposeServer(server) {
+		return disposeFixtureServer(server);
+	});
+	servers.clear();
+	void Promise.all(pendingDisposals).catch(reportFixtureDisposalError);
+}
+
+function reportFixtureDisposalError(error: unknown): void {
+	process.emitWarning(
+		error instanceof Error
+			? error
+			: new Error("Unable to dispose a fixture HTTP server", { cause: error }),
+	);
+}
+
+async function serveLibraryAsset(response: ServerResponse, pathname: string): Promise<void> {
 	const filePath = resolve(LIBRARY_DIRECTORY, `.${pathname}`);
 	if (!filePath.startsWith(`${LIBRARY_DIRECTORY}${sep}`)) {
 		response.statusCode = 404;
@@ -248,16 +271,7 @@ function serveLibraryAsset(response: ServerResponse, pathname: string): void {
 	response.setHeader("Access-Control-Allow-Origin", "*");
 	response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 	response.setHeader("Content-Type", getLibraryAssetContentType(extname(filePath)));
-	const asset = createReadStream(filePath);
-	asset.on("error", function reportMissingLibraryAsset(): void {
-		if (response.headersSent) {
-			response.destroy();
-			return;
-		}
-		response.statusCode = 404;
-		response.end();
-	});
-	asset.pipe(response);
+	await streamFileResponse(response, filePath);
 }
 
 function getLibraryAssetContentType(extension: string): string {
