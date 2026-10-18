@@ -27,6 +27,7 @@
 		"tests/library-build.test.ts",
 		"tests/pdf-fixture.ts",
 		"tests/range-fixture-plugin.ts",
+		"vite.source-alias.ts",
 		"vite.config.ts",
 		"vite.library.config.ts",
 		"vitest.config.ts"

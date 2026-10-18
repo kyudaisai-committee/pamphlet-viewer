@@ -1,9 +1,12 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 
+import { sourceAlias } from "./vite.source-alias.js";
+
 export default defineConfig({
 	base: "./",
 	plugins: [svelte()],
+	resolve: { alias: sourceAlias },
 	build: {
 		outDir: "dist/library",
 		emptyOutDir: true,
