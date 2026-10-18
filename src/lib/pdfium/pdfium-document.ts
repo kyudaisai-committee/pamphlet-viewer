@@ -62,8 +62,8 @@ export class PdfiumDocumentSession {
 
 	async renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertPageIndex(pageIndex);
-		if (!Number.isFinite(scale) || scale <= 0 || scale > 8) {
-			throw new RangeError("PDF page scale must be greater than 0 and no greater than 8.");
+		if (!Number.isFinite(scale) || scale <= 0) {
+			throw new RangeError("PDF page scale must be a finite number greater than 0.");
 		}
 
 		return this.#runWithDocument((pdfium, document) => {

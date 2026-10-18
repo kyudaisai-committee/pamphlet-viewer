@@ -5,7 +5,11 @@ const FILLER_BYTES = 32 * 1024 * 1024;
 const TRAILING_FILLER_BYTES = 1024 * 1024;
 const FAR_PAGE_COLOR = [0.91, 0.08, 0.16] as const;
 
-export function createPdfFixture(): Buffer {
+export interface PdfFixtureOptions {
+	tinyPageNumbers?: readonly number[];
+}
+
+export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	const chunks: Buffer[] = [Buffer.from("%PDF-1.7\n", "ascii")];
 	const offsets: number[] = [0];
 	let position = chunks[0].byteLength;
@@ -24,7 +28,9 @@ export function createPdfFixture(): Buffer {
 	for (let index = 0; index < PAGE_COUNT; index += 1) {
 		const pageObject = 3 + index;
 		const contentObject = 3 + PAGE_COUNT + index;
-		const pageBody = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << >> /Contents ${contentObject} 0 R >>`;
+		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
+		const mediaBox = tinyPage ? "0 0 24 24" : "0 0 300 400";
+		const pageBody = `<< /Type /Page /Parent 2 0 R /MediaBox [${mediaBox}] /Resources << >> /Contents ${contentObject} 0 R >>`;
 		appendObject(chunks, offsets, pageObject, pageBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}
@@ -37,7 +43,9 @@ export function createPdfFixture(): Buffer {
 
 		const contentObject = 3 + PAGE_COUNT + index;
 		const color = getPageColor(index);
-		const stream = `q\n${color[0]} ${color[1]} ${color[2]} rg\n30 40 240 320 re\nf\nQ\n`;
+		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
+		const rectangle = tinyPage ? "2 2 20 20" : "30 40 240 320";
+		const stream = `q\n${color[0]} ${color[1]} ${color[2]} rg\n${rectangle} re\nf\nQ\n`;
 		const contentBody = `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}endstream`;
 		appendObject(chunks, offsets, contentObject, contentBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;

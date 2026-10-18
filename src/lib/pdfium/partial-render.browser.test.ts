@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { calculateFitScale, visiblePageIndexes } from "../domain/layout";
 import { PdfiumWorkerClient } from "./worker-client";
 
 interface FixtureMetrics {
@@ -50,6 +51,32 @@ test("renders first and distant pages before downloading the full PDF", async ()
 		expect(additionalRanges.some((range) => range.start > 8 * 1024 * 1024)).toBe(true);
 		expect(finalMetrics.fullRequests).toBe(0);
 		expect(finalMetrics.requestedBytes).toBeLessThan(finalMetrics.fileLength);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
+test("renders tiny pages at a fit scale above eight without exceeding the pixel limit", async () => {
+	const worker = new PdfiumWorkerClient();
+	try {
+		const url = new URL("/__tiny-page-range-fixture.pdf", window.location.href).href;
+		const info = await worker.open(url);
+		expect(info.pageCount).toBe(24);
+		const pageIndexes = visiblePageIndexes(info.pageCount, 16, "spread");
+		const pageSizes = await Promise.all(pageIndexes.map((index) => worker.getPageSize(index)));
+		const scale = calculateFitScale(pageSizes, { width: 1120, height: 500 }, "page", 1);
+		expect(scale).toBeGreaterThan(8);
+
+		const visuals = await Promise.all(pageIndexes.map((index) => worker.renderPage(index, scale)));
+		expect(visuals).toHaveLength(2);
+		for (const visual of visuals) {
+			if (visual.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+			expect(visual.width * visual.height).toBeLessThanOrEqual(8 * 1024 * 1024);
+			const pixelData = new Uint8Array(visual.pixels);
+			const centerOffset =
+				(Math.floor(visual.height / 2) * visual.width + Math.floor(visual.width / 2)) * 4;
+			expect(pixelData[centerOffset + 2]).toBeGreaterThan(150);
+		}
 	} finally {
 		worker.terminate();
 	}
