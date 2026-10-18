@@ -54,6 +54,69 @@ describe("ThumbnailScheduler", () => {
 		scheduler.setSource(null);
 	});
 
+	it("starts the current source while the old page-size request is pending", async () => {
+		const oldPageSize = deferred<{ width: number; height: number }>();
+		const oldPageSizeRequested = deferred<void>();
+		const oldSource = createPageSource(1, {
+			getPageSize: () => {
+				oldPageSizeRequested.resolve();
+				return oldPageSize.promise;
+			},
+		});
+		const render = vi.fn(async () => pixelVisual());
+		const changes: ThumbnailEntry[][] = [];
+		const scheduler = new ThumbnailScheduler(render, (entries) => changes.push([...entries]));
+		scheduler.setSource(oldSource);
+		scheduler.setVisiblePages([0]);
+		await oldPageSizeRequested.promise;
+
+		scheduler.setSource(createPageSource(1));
+		scheduler.setVisiblePages([0]);
+		await vi.waitFor(() => expect(scheduler.entries).toHaveLength(1));
+		const currentEntry = scheduler.entries[0];
+		const currentChangeCount = changes.length;
+		oldPageSize.resolve({ width: 300, height: 400 });
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(render).toHaveBeenCalledOnce();
+		expect(scheduler.entries[0]).toBe(currentEntry);
+		expect(changes).toHaveLength(currentChangeCount);
+		scheduler.setSource(null);
+	});
+
+	it("starts and keeps the current source while an old render is pending", async () => {
+		const oldVisual = deferred<PageVisual>();
+		const oldRenderStarted = deferred<void>();
+		const staleClose = vi.fn();
+		const render = vi
+			.fn<(_pageIndex: number, _scale: number) => Promise<PageVisual>>()
+			.mockImplementationOnce(() => {
+				oldRenderStarted.resolve();
+				return oldVisual.promise;
+			})
+			.mockResolvedValue(pixelVisual());
+		const changes: ThumbnailEntry[][] = [];
+		const scheduler = new ThumbnailScheduler(render, (entries) => changes.push([...entries]));
+		scheduler.setSource(createPageSource(1));
+		scheduler.setVisiblePages([0]);
+		await oldRenderStarted.promise;
+
+		scheduler.setSource(createPageSource(1));
+		scheduler.setVisiblePages([0]);
+		await vi.waitFor(() => expect(scheduler.entries).toHaveLength(1));
+		const currentEntry = scheduler.entries[0];
+		const currentChangeCount = changes.length;
+		oldVisual.resolve(bitmapVisual(staleClose));
+		await vi.waitFor(() => expect(staleClose).toHaveBeenCalledOnce());
+		await Promise.resolve();
+
+		expect(render).toHaveBeenCalledTimes(2);
+		expect(scheduler.entries[0]).toBe(currentEntry);
+		expect(changes).toHaveLength(currentChangeCount);
+		scheduler.setSource(null);
+	});
+
 	it("renders the new source after replacing one with an active thumbnail", async () => {
 		let releaseOldRender: ((visual: PageVisual) => void) | undefined;
 		let renderCalls = 0;
@@ -127,17 +190,29 @@ describe("ThumbnailScheduler", () => {
 	});
 });
 
-function createPageSource(pageCount: number): PageSource {
+function createPageSource(
+	pageCount: number,
+	options: { getPageSize?: PageSource["getPageSize"] } = {},
+): PageSource {
 	return {
 		pageCount,
-		async getPageSize() {
-			return { width: 300, height: 400 };
-		},
+		getPageSize: options.getPageSize ?? (async () => ({ width: 300, height: 400 })),
 		async renderPage() {
 			return pixelVisual();
 		},
 		dispose() {},
 	};
+}
+
+function deferred<T>(): {
+	promise: Promise<T>;
+	resolve(value: T): void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
 }
 
 function pixelVisual(): PageVisual {
