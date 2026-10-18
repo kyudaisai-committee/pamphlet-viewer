@@ -7,7 +7,7 @@ import {
 	PdfiumAvailabilityFatalError,
 	type PdfiumAvailabilityApi,
 } from "./pdfium-availability-session";
-import { PdfRangeLoader } from "./range-loader";
+import { PdfRangeLoader, RANGE_CACHE_LIMIT } from "./range-loader";
 
 const MAX_OPERATION_ATTEMPTS = 128;
 
@@ -41,8 +41,9 @@ export class PdfiumDocumentSession {
 		url: string,
 		wasmUrl: string,
 		signal: AbortSignal,
+		cacheLimitBytes = RANGE_CACHE_LIMIT,
 	): Promise<PdfiumDocumentSession> {
-		const loader = new PdfRangeLoader(url, signal);
+		const loader = new PdfRangeLoader(url, signal, cacheLimitBytes);
 		const session = new PdfiumDocumentSession(loader, wasmUrl, signal);
 		try {
 			await session.#initialize();

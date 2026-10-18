@@ -7,6 +7,8 @@ const FAR_PAGE_COLOR = [0.91, 0.08, 0.16] as const;
 
 export interface PdfFixtureOptions {
 	tinyPageNumbers?: readonly number[];
+	contentGapBytes?: number;
+	midDocumentFillerBytes?: number;
 }
 
 export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
@@ -37,8 +39,17 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 
 	for (let index = 0; index < PAGE_COUNT; index += 1) {
 		if (index === PAGE_COUNT / 2) {
-			appendFiller(chunks, FILLER_BYTES);
-			position += FILLER_BYTES;
+			const fillerBytes = options.midDocumentFillerBytes ?? FILLER_BYTES;
+			if (fillerBytes > 0) {
+				appendFiller(chunks, fillerBytes);
+				position += fillerBytes;
+			}
+		}
+
+		const contentGapBytes = options.contentGapBytes ?? 0;
+		if (contentGapBytes > 0) {
+			appendFiller(chunks, contentGapBytes);
+			position += contentGapBytes;
 		}
 
 		const contentObject = 3 + PAGE_COUNT + index;

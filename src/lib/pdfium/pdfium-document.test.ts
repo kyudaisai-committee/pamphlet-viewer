@@ -8,6 +8,7 @@ const pdfiumMocks = vi.hoisted(() => ({
 vi.mock("@embedpdf/pdfium", () => ({ init: pdfiumMocks.init }));
 
 vi.mock("./range-loader", () => ({
+	RANGE_CACHE_LIMIT: 64 * 1024 * 1024,
 	PdfRangeLoader: class {
 		cacheEpoch = 0;
 		totalLength: number | null = null;
