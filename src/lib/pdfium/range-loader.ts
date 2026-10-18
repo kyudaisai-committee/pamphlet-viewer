@@ -1,79 +1,20 @@
+import { RangeChunkCache } from "./range-chunk-cache";
+import { cancelResponseBody, parseContentRange, readBoundedResponseBody } from "./range-response";
+
 export const RANGE_CHUNK_SIZE = 256 * 1024;
 export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
 export const RANGE_FETCH_CONCURRENCY = 4;
 export const RANGE_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_FILE_LENGTH = 0xffff_ffff;
 
-export interface ContentRange {
-	start: number;
-	end: number;
-	total: number;
-}
-
-export function parseContentRange(value: string | null): ContentRange | null {
-	if (value === null) return null;
-
-	const match = /^bytes (\d+)-(\d+)\/(\d+)$/i.exec(value.trim());
-	if (match === null) return null;
-
-	const start = Number(match[1]);
-	const end = Number(match[2]);
-	const total = Number(match[3]);
-	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || !Number.isSafeInteger(total)) {
-		return null;
-	}
-	if (start < 0 || end < start || total <= end) return null;
-
-	return { start, end, total };
-}
-
-class ChunkCache {
-	#chunks = new Map<number, Uint8Array>();
-	#byteLength = 0;
-
-	constructor(private readonly maxBytes: number) {}
-
-	get byteLength(): number {
-		return this.#byteLength;
-	}
-
-	get(index: number): Uint8Array | undefined {
-		const chunk = this.#chunks.get(index);
-		if (chunk === undefined) return undefined;
-
-		this.#chunks.delete(index);
-		this.#chunks.set(index, chunk);
-		return chunk;
-	}
-
-	clear(): void {
-		this.#chunks.clear();
-		this.#byteLength = 0;
-	}
-
-	set(index: number, chunk: Uint8Array): void {
-		const existing = this.#chunks.get(index);
-		if (existing !== undefined) {
-			this.#byteLength -= existing.byteLength;
-			this.#chunks.delete(index);
-		}
-		if (chunk.byteLength > this.maxBytes) return;
-
-		while (this.#byteLength + chunk.byteLength > this.maxBytes) {
-			const oldest = this.#chunks.entries().next().value as [number, Uint8Array] | undefined;
-			if (oldest === undefined) break;
-			this.#chunks.delete(oldest[0]);
-			this.#byteLength -= oldest[1].byteLength;
-		}
-
-		this.#chunks.set(index, chunk);
-		this.#byteLength += chunk.byteLength;
-	}
-}
+export { parseContentRange } from "./range-response";
 
 export class PdfRangeLoader {
-	#cache = new ChunkCache(RANGE_CACHE_LIMIT);
+	#cache: RangeChunkCache;
+	#cacheLimitBytes: number;
 	#missingChunks = new Set<number>();
+	#hintedChunks = new Set<number>();
+	#cacheEpoch = 0;
 	#totalLength: number | null = null;
 	#etag: string | null = null;
 	#lastModified: string | null = null;
@@ -81,7 +22,17 @@ export class PdfRangeLoader {
 	constructor(
 		private readonly url: string,
 		private readonly signal: AbortSignal,
-	) {}
+		cacheLimitBytes = RANGE_CACHE_LIMIT,
+	) {
+		if (!Number.isSafeInteger(cacheLimitBytes) || cacheLimitBytes < RANGE_CHUNK_SIZE) {
+			throw new RangeError(`PDF range cache must be at least ${RANGE_CHUNK_SIZE} bytes.`);
+		}
+		this.#cacheLimitBytes = cacheLimitBytes;
+		this.#cache = new RangeChunkCache(
+			cacheLimitBytes,
+			Math.max(RANGE_CHUNK_SIZE, Math.floor(cacheLimitBytes / 2)),
+		);
+	}
 
 	get totalLength(): number | null {
 		return this.#totalLength;
@@ -91,13 +42,22 @@ export class PdfRangeLoader {
 		return this.#cache.byteLength;
 	}
 
+	get cacheEpoch(): number {
+		return this.#cacheEpoch;
+	}
+
 	get hasMissingChunks(): boolean {
 		return this.#missingChunks.size > 0;
+	}
+
+	get hasHintedChunks(): boolean {
+		return this.#hintedChunks.size > 0;
 	}
 
 	dispose(): void {
 		this.#cache.clear();
 		this.#missingChunks.clear();
+		this.#hintedChunks.clear();
 		this.#totalLength = null;
 		this.#etag = null;
 		this.#lastModified = null;
@@ -105,7 +65,7 @@ export class PdfRangeLoader {
 
 	async initialize(): Promise<number> {
 		if (this.#totalLength !== null) return this.#totalLength;
-		await this.#fetchChunk(0);
+		if (await this.#fetchChunk(0)) this.#cacheEpoch += 1;
 		if (this.#totalLength === null) {
 			throw new Error("The server did not provide a valid Content-Range header.");
 		}
@@ -151,13 +111,81 @@ export class PdfRangeLoader {
 		return true;
 	}
 
-	async fetchMissingChunks(): Promise<void> {
-		const indices = [...this.#missingChunks].slice(0, RANGE_FETCH_CONCURRENCY);
-		await Promise.all(indices.map((index) => this.#fetchChunk(index)));
-		for (const index of indices) this.#missingChunks.delete(index);
+	isRangeAvailable(position: number, length: number): boolean {
+		const indexes = this.#getChunkIndexes(position, length);
+		let available = true;
+		for (const index of indexes) {
+			if (this.#cache.get(index) === undefined) {
+				this.#missingChunks.add(index);
+				available = false;
+			}
+		}
+		return available;
 	}
 
-	async #fetchChunk(index: number): Promise<void> {
+	hintRange(position: number, length: number): void {
+		const indexes = this.#getChunkIndexes(position, length);
+		for (const index of indexes) {
+			if (this.#cache.get(index) === undefined) this.#hintedChunks.add(index);
+		}
+	}
+
+	clearRangeHints(): void {
+		this.#hintedChunks.clear();
+	}
+
+	async fetchMissingChunks(includeHints = false): Promise<number> {
+		const queuedIndexes = includeHints
+			? new Set([...this.#missingChunks, ...this.#hintedChunks])
+			: this.#missingChunks;
+		const indices = [...queuedIndexes].slice(0, RANGE_FETCH_CONCURRENCY);
+		const results = await Promise.allSettled(indices.map((index) => this.#fetchChunk(index)));
+		if (results.some((result) => result.status === "fulfilled" && result.value)) {
+			this.#cacheEpoch += 1;
+		}
+		const rejection = results.find(
+			(result): result is PromiseRejectedResult => result.status === "rejected",
+		);
+		if (rejection !== undefined) throw rejection.reason;
+		let retainedCount = 0;
+		for (const index of indices) {
+			if (this.#cache.get(index) !== undefined) {
+				this.#missingChunks.delete(index);
+				this.#hintedChunks.delete(index);
+				retainedCount += 1;
+			}
+		}
+		if (retainedCount !== indices.length) {
+			throw new Error("The requested PDF byte ranges exceed the 64 MiB working cache.");
+		}
+		return retainedCount;
+	}
+
+	#getChunkIndexes(position: number, length: number): number[] {
+		const totalLength = this.#totalLength;
+		if (totalLength === null) throw new Error("Range loader is not initialized.");
+		if (
+			!Number.isSafeInteger(position) ||
+			!Number.isSafeInteger(length) ||
+			position < 0 ||
+			length < 0 ||
+			position + length > totalLength
+		) {
+			throw new RangeError("PDFium requested bytes outside the PDF document.");
+		}
+		if (length === 0) return [];
+		if (length > this.#cacheLimitBytes) {
+			throw new Error("The requested PDF byte range exceeds the 64 MiB working cache.");
+		}
+		const firstIndex = Math.floor(position / RANGE_CHUNK_SIZE);
+		const lastIndex = Math.floor((position + length - 1) / RANGE_CHUNK_SIZE);
+		return Array.from(
+			{ length: lastIndex - firstIndex + 1 },
+			(_value, offset) => firstIndex + offset,
+		);
+	}
+
+	async #fetchChunk(index: number): Promise<boolean> {
 		if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
 
 		const requestController = new AbortController();
@@ -215,7 +243,7 @@ export class PdfRangeLoader {
 
 			this.#totalLength = range.total;
 			this.#rememberValidators(response);
-			this.#cache.set(index, bytes);
+			return this.#cache.set(index, bytes);
 		} catch (error) {
 			if (this.signal.aborted) {
 				throw new DOMException("PDF loading was cancelled.", "AbortError");
@@ -242,47 +270,4 @@ export class PdfRangeLoader {
 		this.#etag ??= response.headers.get("ETag");
 		this.#lastModified ??= response.headers.get("Last-Modified");
 	}
-}
-
-function cancelResponseBody(response: Response): void {
-	if (response.body === null) return;
-	void response.body.cancel().catch(() => {});
-}
-
-async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Uint8Array> {
-	const declaredLength = response.headers.get("Content-Length");
-	if (declaredLength !== null && Number(declaredLength) > maxBytes) {
-		cancelResponseBody(response);
-		throw new Error("The server sent more bytes than requested for a PDF byte range.");
-	}
-
-	if (response.body === null) return new Uint8Array();
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let byteLength = 0;
-	try {
-		while (true) {
-			const result = await reader.read();
-			if (result.done) break;
-			if (result.value.byteLength > maxBytes - byteLength) {
-				void reader.cancel().catch(() => {});
-				throw new Error("The server sent more bytes than requested for a PDF byte range.");
-			}
-			chunks.push(result.value);
-			byteLength += result.value.byteLength;
-		}
-	} catch (error) {
-		void reader.cancel(error).catch(() => {});
-		throw error;
-	} finally {
-		reader.releaseLock();
-	}
-
-	const bytes = new Uint8Array(byteLength);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
 }

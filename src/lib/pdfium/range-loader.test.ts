@@ -61,6 +61,58 @@ describe("PdfRangeLoader", () => {
 		}
 	});
 
+	it("reclaims cache space in one batch and can re-fetch an evicted range", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 8;
+		const requestedStarts: number[] = [];
+		vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const rangeHeader = new Headers(init?.headers).get("Range");
+			if (rangeHeader === null) throw new Error("A byte range was not requested.");
+			const start = Number(/^bytes=(\d+)-/.exec(rangeHeader)?.[1]);
+			requestedStarts.push(start);
+			const end = Math.min(start + RANGE_CHUNK_SIZE - 1, fileLength - 1);
+			return new Response(new Uint8Array(end - start + 1), {
+				status: 206,
+				headers: {
+					"Content-Range": `bytes ${start}-${end}/${fileLength}`,
+					ETag: ETAG,
+				},
+			});
+		});
+
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+			RANGE_CHUNK_SIZE * 4,
+		);
+		try {
+			await loader.initialize();
+			for (let index = 1; index < 4; index += 1) {
+				loader.isRangeAvailable(index * RANGE_CHUNK_SIZE, 1);
+			}
+
+			await loader.fetchMissingChunks();
+			loader.isRangeAvailable(4 * RANGE_CHUNK_SIZE, 1);
+			await loader.fetchMissingChunks();
+
+			expect(loader.cacheEpoch).toBe(1);
+			expect(loader.cachedByteLength).toBeLessThanOrEqual(RANGE_CHUNK_SIZE * 4);
+			expect(loader.cachedByteLength).toBe(RANGE_CHUNK_SIZE * 3);
+			expect(requestedStarts).toHaveLength(5);
+			expect(loader.hasMissingChunks).toBe(false);
+			expect(() => loader.isRangeAvailable(0, RANGE_CHUNK_SIZE * 5)).toThrow(
+				"exceeds the 64 MiB working cache",
+			);
+
+			expect(loader.isRangeAvailable(0, 1)).toBe(false);
+			await loader.fetchMissingChunks();
+			expect(requestedStarts).toHaveLength(6);
+			expect(loader.hasMissingChunks).toBe(false);
+			expect(loader.cacheEpoch).toBe(1);
+		} finally {
+			loader.dispose();
+		}
+	});
+
 	it("rejects full responses instead of downloading the complete PDF", async () => {
 		const cancel = vi.fn();
 		const body = new ReadableStream<Uint8Array>({ cancel });
