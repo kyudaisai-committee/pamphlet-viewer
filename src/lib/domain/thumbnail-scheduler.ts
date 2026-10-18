@@ -46,12 +46,15 @@ export class ThumbnailScheduler {
 
 	setSource(source: PageSource | null): void {
 		if (source === this.#source) return;
+		if (!this.#drainingSources.has(this.#sourceGeneration)) {
+			this.#runningPagesBySource.delete(this.#sourceGeneration);
+		}
 		this.#sourceGeneration += 1;
 		this.#demandGeneration += 1;
 		this.#source = source;
 		this.#desired.clear();
 		this.#queue = [];
-		this.#runningPagesBySource.set(this.#sourceGeneration, new Set());
+		if (source !== null) this.#runningPagesBySource.set(this.#sourceGeneration, new Set());
 		this.onDemandChange();
 		this.#clearCache();
 		this.#notify();
