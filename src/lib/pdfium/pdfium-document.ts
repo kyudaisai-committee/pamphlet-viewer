@@ -1,10 +1,10 @@
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
+import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfRangeLoader } from "./range-loader";
 
 const FILE_ACCESS_SIZE = 12;
-const MAX_RENDER_PIXELS = 8 * 1024 * 1024;
 const MAX_ATTEMPTS = 128;
 
 export interface PdfiumDocumentInfo {
@@ -81,7 +81,7 @@ export class PdfiumDocumentSession {
 				) {
 					throw new Error("PDFium returned invalid scaled page dimensions.");
 				}
-				if (width * height > MAX_RENDER_PIXELS) {
+				if (width * height > MAX_PAGE_RENDER_PIXELS) {
 					throw new Error("The requested PDF page exceeds the 32 MiB pixel output limit.");
 				}
 

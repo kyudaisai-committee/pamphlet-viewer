@@ -1,6 +1,11 @@
 import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
 import { calculateFitScale, resolveLayout, visiblePageIndexes } from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
+import { PageRenderQueue } from "./page-render-queue";
+import { createPageRenderPlan } from "./render-plan";
+import type { PageRenderPlan } from "./render-plan";
+import { ThumbnailScheduler } from "./thumbnail-scheduler";
+import type { ThumbnailEntry } from "./thumbnail-scheduler";
 
 export type ViewerPhase = "empty" | "loading" | "ready" | "error";
 
@@ -32,6 +37,8 @@ export class ViewerController {
 	pageCount = $state(0);
 	pageSource = $state<PageSource | null>(null);
 	pageVisuals = $state<Record<number, PageVisual>>({});
+	pageRenderPlans = $state<Record<number, PageRenderPlan>>({});
+	thumbnailVisuals = $state<Record<number, PageVisual>>({});
 	failure = $state<ViewerFailure | null>(null);
 
 	#abortController: AbortController | null = null;
@@ -41,8 +48,21 @@ export class ViewerController {
 	#rendering = false;
 	#lastRenderKey = "";
 	#failedRenderKey = "";
+	#renderQueue: PageRenderQueue | null = null;
+	#thumbnailScheduler: ThumbnailScheduler;
 
-	constructor(private readonly dispatch: (event: ViewerEvent) => void) {}
+	constructor(private readonly dispatch: (event: ViewerEvent) => void) {
+		this.#thumbnailScheduler = new ThumbnailScheduler(
+			(pageIndex, scale) => {
+				const queue = this.#renderQueue;
+				return queue === null
+					? Promise.reject(new DOMException("The document is not open.", "AbortError"))
+					: queue.render(pageIndex, scale, "thumbnail");
+			},
+			(entries) => this.#updateThumbnailVisuals(entries),
+			() => this.#renderQueue?.cancelQueued("thumbnail"),
+		);
+	}
 
 	async load(url: string, backend: DocumentBackend): Promise<void> {
 		this.#cancelDocument();
@@ -67,6 +87,8 @@ export class ViewerController {
 				return;
 			}
 			this.pageSource = pageSource;
+			this.#renderQueue = new PageRenderQueue(pageSource);
+			this.#thumbnailScheduler.setSource(pageSource);
 			this.pageCount = pageSource.pageCount;
 			this.phase = "ready";
 			this.dispatch({ type: "documentload", detail: { pageCount: pageSource.pageCount } });
@@ -123,6 +145,7 @@ export class ViewerController {
 		if (this.phase !== "ready") return;
 		if (key === this.#lastRenderKey) return;
 		this.#lastRenderKey = key;
+		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
 		this.#renderId = id;
 		this.#pendingRender = { ...input, id };
@@ -135,6 +158,14 @@ export class ViewerController {
 		this.failure = null;
 		this.phase = "ready";
 		this.requestRender(input);
+	}
+
+	setThumbnailPages(pageIndexes: readonly number[], prefetchIndexes: readonly number[] = []): void {
+		this.#thumbnailScheduler.setVisiblePages(pageIndexes, prefetchIndexes);
+	}
+
+	closeThumbnails(): void {
+		this.#thumbnailScheduler.close();
 	}
 
 	dispose(): void {
@@ -161,34 +192,51 @@ export class ViewerController {
 
 	async #render(request: ScheduledRender): Promise<void> {
 		const source = this.pageSource;
-		if (source === null) return;
+		const renderQueue = this.#renderQueue;
+		if (source === null || renderQueue === null) return;
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		const pageIndexes = visiblePageIndexes(this.pageCount, request.page, layout);
 		try {
 			const pageSizes = await Promise.all(pageIndexes.map((index) => source.getPageSize(index)));
 			if (!this.#isCurrent(request, source)) return;
-			const scale = calculateFitScale(pageSizes, request.viewport, request.fit, request.zoom);
-			const visualResults = await Promise.allSettled(
-				pageIndexes.map((index) => source.renderPage(index, scale)),
+			const displayScale = calculateFitScale(
+				pageSizes,
+				request.viewport,
+				request.fit,
+				request.zoom,
 			);
-			const visuals = visualResults.flatMap((result) =>
+			const plans = pageSizes.map((pageSize) => createPageRenderPlan(pageSize, displayScale));
+			const visualResults = await Promise.allSettled(
+				pageIndexes.map(async (pageIndex, localIndex) => {
+					const plan = plans[localIndex];
+					if (plan === undefined) throw new Error("The page render plan is missing.");
+					const visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
+					return { visual, plan };
+				}),
+			);
+			const completedRenders = visualResults.flatMap((result) =>
 				result.status === "fulfilled" ? [result.value] : [],
 			);
 			const renderFailure = visualResults.find((result) => result.status === "rejected");
 			if (renderFailure?.status === "rejected") {
-				releaseVisuals(visuals);
+				releaseVisuals(completedRenders.map((result) => result.visual));
 				throw renderFailure.reason;
 			}
 			if (!this.#isCurrent(request, source)) {
-				releaseVisuals(visuals);
+				releaseVisuals(completedRenders.map((result) => result.visual));
 				return;
 			}
 			const nextPages: Record<number, PageVisual> = {};
-			for (const [visualIndex, visual] of visuals.entries()) {
-				nextPages[pageIndexes[visualIndex]] = visual;
+			const nextPlans: Record<number, PageRenderPlan> = {};
+			for (const [visualIndex, rendered] of completedRenders.entries()) {
+				const pageIndex = pageIndexes[visualIndex];
+				if (pageIndex === undefined) continue;
+				nextPages[pageIndex] = rendered.visual;
+				nextPlans[pageIndex] = rendered.plan;
 			}
 			this.#releaseCurrentVisuals();
 			this.pageVisuals = nextPages;
+			this.pageRenderPlans = nextPlans;
 			this.dispatch({
 				type: "pagechange",
 				detail: { page: request.page, visiblePages: pageIndexes.map((index) => index + 1) },
@@ -222,6 +270,9 @@ export class ViewerController {
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
 		this.#failedRenderKey = "";
+		this.#renderQueue?.dispose();
+		this.#renderQueue = null;
+		this.#thumbnailScheduler.setSource(null);
 		this.#abortController?.abort();
 		this.#abortController = null;
 		const source = this.pageSource;
@@ -229,12 +280,19 @@ export class ViewerController {
 		if (source !== null) void source.dispose();
 		this.#releaseCurrentVisuals();
 		this.pageVisuals = {};
+		this.pageRenderPlans = {};
 	}
 
 	#releaseCurrentVisuals(): void {
 		for (const visual of Object.values(this.pageVisuals)) {
 			if (visual.type === "bitmap") visual.bitmap.close();
 		}
+	}
+
+	#updateThumbnailVisuals(entries: readonly ThumbnailEntry[]): void {
+		const nextVisuals: Record<number, PageVisual> = {};
+		for (const entry of entries) nextVisuals[entry.pageIndex] = entry.visual;
+		this.thumbnailVisuals = nextVisuals;
 	}
 
 	#setFailure(failure: ViewerFailure): void {

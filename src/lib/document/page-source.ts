@@ -3,6 +3,8 @@ export interface PageSize {
 	height: number;
 }
 
+export const MAX_PAGE_RENDER_PIXELS = 8 * 1024 * 1024;
+
 export type PageVisual =
 	| { type: "pixels"; width: number; height: number; pixels: ArrayBuffer }
 	| { type: "bitmap"; width: number; height: number; bitmap: ImageBitmap };

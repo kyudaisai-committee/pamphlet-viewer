@@ -44,6 +44,39 @@ describe("ViewerController", () => {
 		controller.dispose();
 		expect(closeCalls[1]?.mock.calls).toHaveLength(1);
 	});
+
+	it("keeps logical zoom size while rendering within the page pixel budget", async () => {
+		let renderedScale = 0;
+		const source: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 1200, height: 1800 };
+			},
+			async renderPage(_pageIndex, scale) {
+				renderedScale = scale;
+				return pixelVisual();
+			},
+			dispose() {},
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		controller.requestRender({
+			page: 1,
+			layout: "single",
+			fit: "page",
+			zoom: 8,
+			viewport: { width: 1200, height: 1800 },
+		});
+		await vi.waitFor(() => expect(controller.pageRenderPlans[0]).toBeDefined());
+
+		const plan = controller.pageRenderPlans[0];
+		if (plan === undefined) throw new Error("The page render plan was not stored.");
+		expect(plan.displayScale).toBe(8);
+		expect(plan.displayWidth).toBe(9600);
+		expect(plan.rasterScale).toBe(renderedScale);
+		expect(plan.rasterWidth * plan.rasterHeight).toBeLessThanOrEqual(8 * 1024 * 1024);
+		controller.dispose();
+	});
 });
 
 function createBackend(pageSource: PageSource): DocumentBackend {
