@@ -17,6 +17,8 @@ const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
 const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
 const TINY_PAGE_FIXTURE_PATH = "/__tiny-page-range-fixture.pdf";
 const TINY_PAGE_METRICS_PATH = "/__tiny-page-range-metrics";
+const EVICTION_FIXTURE_PATH = "/__pdfium-eviction-fixture.pdf";
+const EVICTION_METRICS_PATH = "/__pdfium-eviction-metrics";
 const CORS_ORIGIN_PATH = "/__pdfium-cors-origin";
 const CORS_CLOSE_PATH = "/__pdfium-cors-close";
 const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
@@ -46,10 +48,15 @@ export function rangeFixturePlugin(): Plugin {
 		createPdfFixture({ tinyPageNumbers: [16, 17] }),
 		TINY_PAGE_METRICS_PATH,
 	);
+	const evictionFixture = createFixtureRecord(
+		createPdfFixture({ contentGapBytes: 256 * 1024, midDocumentFillerBytes: 0 }),
+		EVICTION_METRICS_PATH,
+	);
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
 		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
 		[TINY_PAGE_FIXTURE_PATH, tinyPageFixture],
+		[EVICTION_FIXTURE_PATH, evictionFixture],
 	]);
 	const corsServers = new Map<number, ReturnType<typeof createServer>>();
 	const corsAssetRequests = new Map<number, string[]>();

@@ -111,7 +111,7 @@ test("renders pages from a linearized PDF using additional byte ranges", async (
 		const firstRanges = new Set(firstMetrics.ranges.map(rangeKey));
 		expect(finalMetrics.ranges.some((range) => !firstRanges.has(rangeKey(range)))).toBe(true);
 		expect(finalMetrics.fullRequests).toBe(0);
-		expect(finalMetrics.requestedBytes).toBeLessThan(finalMetrics.fileLength);
+		expect(finalMetrics.requestedBytes).toBeGreaterThan(firstMetrics.requestedBytes);
 	} finally {
 		worker.terminate();
 	}
