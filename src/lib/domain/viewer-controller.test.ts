@@ -107,6 +107,142 @@ describe("ViewerController", () => {
 		expect(renderedScale).toBe(2);
 		controller.dispose();
 	});
+
+	it("renders a replacement document while the previous page-size request is pending", async () => {
+		const oldPageSize = createDeferred<{ width: number; height: number }>();
+		const oldGetPageSize = vi.fn(() => oldPageSize.promise);
+		const oldSource: PageSource = {
+			pageCount: 1,
+			getPageSize: oldGetPageSize,
+			async renderPage() {
+				throw new Error("The stale page-size request must prevent this render.");
+			},
+			dispose() {},
+		};
+		const newVisual = pixelVisual();
+		const newRenderPage = vi.fn(async () => newVisual);
+		const newSource: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			renderPage: newRenderPage,
+			dispose() {},
+		};
+		const events: string[] = [];
+		const controller = new ViewerController((event) => events.push(event.type));
+		await controller.load("old.pdf", createBackend(oldSource));
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(oldGetPageSize).toHaveBeenCalledOnce());
+
+		await controller.load("new.pdf", createBackend(newSource));
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(newRenderPage).toHaveBeenCalledOnce());
+		await vi.waitFor(() => expect(controller.pageVisuals[0]).toBe(newVisual));
+
+		oldPageSize.resolve({ width: 300, height: 400 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		expect(controller.pageVisuals[0]).toBe(newVisual);
+		expect(events.filter((event) => event === "pagechange")).toHaveLength(1);
+		controller.dispose();
+	});
+
+	it("releases a late bitmap from a stale render without replacing the new document", async () => {
+		const oldRender = createDeferred<PageVisual>();
+		const oldRenderPage = vi.fn(() => oldRender.promise);
+		const oldSource: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			renderPage: oldRenderPage,
+			dispose() {},
+		};
+		const closeStaleBitmap = vi.fn();
+		const staleVisual = bitmapVisual(closeStaleBitmap);
+		const newVisual = pixelVisual();
+		const newSource: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			async renderPage() {
+				return newVisual;
+			},
+			dispose() {},
+		};
+		const events: string[] = [];
+		const controller = new ViewerController((event) => events.push(event.type));
+		await controller.load("old.pdf", createBackend(oldSource));
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(oldRenderPage).toHaveBeenCalledOnce());
+
+		await controller.load("new.pdf", createBackend(newSource));
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(controller.pageVisuals[0]).toBe(newVisual));
+		oldRender.resolve(staleVisual);
+		await vi.waitFor(() => expect(closeStaleBitmap).toHaveBeenCalledOnce());
+
+		expect(controller.pageVisuals[0]).toBe(newVisual);
+		expect(events.filter((event) => event === "pagechange")).toHaveLength(1);
+		controller.dispose();
+	});
+
+	it("reports asynchronous disposal failures without failing the replacement document", async () => {
+		const cleanupError = new Error("document cleanup failed");
+		const cleanupErrors: unknown[] = [];
+		const events: string[] = [];
+		const controller = new ViewerController(
+			(event) => events.push(event.type),
+			(error) => cleanupErrors.push(error),
+		);
+		const oldSource = createPageSource(1, pixelVisual);
+		oldSource.dispose = () => Promise.reject(cleanupError);
+		await controller.load("old.pdf", createBackend(oldSource));
+		await controller.load("new.pdf", createBackend(createPageSource(1, pixelVisual)));
+		await vi.waitFor(() => expect(cleanupErrors).toEqual([cleanupError]));
+
+		expect(controller.phase).toBe("ready");
+		expect(events.filter((event) => event === "error")).toHaveLength(0);
+		controller.dispose();
+	});
+
+	it("reports disposal failure from a stale backend open result", async () => {
+		const cleanupError = new Error("stale source cleanup failed");
+		const cleanupErrors: unknown[] = [];
+		const controller = new ViewerController(
+			() => undefined,
+			(error) => cleanupErrors.push(error),
+		);
+		const staleOpen = createDeferred<PageSource>();
+		const firstLoad = controller.load("stale.pdf", {
+			async open() {
+				return staleOpen.promise;
+			},
+		});
+		await controller.load("current.pdf", createBackend(createPageSource(1, pixelVisual)));
+		const staleSource = createPageSource(1, pixelVisual);
+		staleSource.dispose = () => Promise.reject(cleanupError);
+		staleOpen.resolve(staleSource);
+		await firstLoad;
+		await vi.waitFor(() => expect(cleanupErrors).toEqual([cleanupError]));
+		expect(controller.phase).toBe("ready");
+		controller.dispose();
+	});
+
+	it("advances an internal render revision without changing pagechange semantics", async () => {
+		const pageChanges: number[] = [];
+		const controller = new ViewerController((event) => {
+			if (event.type === "pagechange") pageChanges.push(event.detail.page);
+		});
+		await controller.load("brochure.pdf", createBackend(createPageSource(1, pixelVisual)));
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		controller.requestRender({ ...renderInput(1), zoom: 1.5 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(pageChanges).toEqual([1]);
+		controller.dispose();
+	});
 });
 
 function createBackend(pageSource: PageSource): DocumentBackend {
@@ -142,6 +278,17 @@ function renderInput(page: number) {
 
 function pixelVisual(): PageVisual {
 	return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
+}
+
+function createDeferred<T>(): {
+	promise: Promise<T>;
+	resolve(value: T): void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	const promise = new Promise<T>((complete) => {
+		resolve = complete;
+	});
+	return { promise, resolve };
 }
 
 function bitmapVisual(close: () => void): PageVisual {

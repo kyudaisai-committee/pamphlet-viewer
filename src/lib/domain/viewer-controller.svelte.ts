@@ -31,11 +31,13 @@ export interface RenderInput {
 
 interface ScheduledRender extends RenderInput {
 	id: number;
+	generation: number;
 }
 
 export class ViewerController {
 	phase = $state<ViewerPhase>("empty");
 	pageCount = $state(0);
+	renderRevision = $state(0);
 	pageSource = $state<PageSource | null>(null);
 	pageVisuals = $state<Record<number, PageVisual>>({});
 	pageRenderPlans = $state<Record<number, PageRenderPlan>>({});
@@ -46,14 +48,19 @@ export class ViewerController {
 	#loadId = 0;
 	#renderId = 0;
 	#pendingRender: ScheduledRender | null = null;
-	#rendering = false;
+	#renderingGeneration: number | null = null;
 	#lastRenderKey = "";
 	#lastPageChangeKey = "";
 	#failedRenderKey = "";
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
+	#reportCleanupError: (error: unknown) => void;
 
-	constructor(private readonly dispatch: (event: ViewerEvent) => void) {
+	constructor(
+		private readonly dispatch: (event: ViewerEvent) => void,
+		reportCleanupError: (error: unknown) => void = reportSourceDisposalFailure,
+	) {
+		this.#reportCleanupError = reportCleanupError;
 		this.#thumbnailScheduler = new ThumbnailScheduler(
 			(pageIndex, scale) => {
 				const queue = this.#renderQueue;
@@ -85,7 +92,7 @@ export class ViewerController {
 		try {
 			const pageSource = await backend.open(url, abortController.signal);
 			if (abortController.signal.aborted || loadId !== this.#loadId) {
-				void pageSource.dispose();
+				disposePageSource(pageSource, this.#reportCleanupError);
 				return;
 			}
 			this.pageSource = pageSource;
@@ -151,8 +158,9 @@ export class ViewerController {
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
 		this.#renderId = id;
-		this.#pendingRender = { ...input, id };
-		if (!this.#rendering) void this.#drainRenderQueue();
+		const generation = this.#loadId;
+		this.#pendingRender = { ...input, id, generation };
+		if (this.#renderingGeneration !== generation) void this.#drainRenderQueue(generation);
 	}
 
 	retryRender(input: RenderInput): void {
@@ -178,18 +186,25 @@ export class ViewerController {
 		this.phase = "empty";
 	}
 
-	async #drainRenderQueue(): Promise<void> {
-		if (this.#rendering) return;
-		this.#rendering = true;
+	async #drainRenderQueue(generation: number): Promise<void> {
+		if (this.#renderingGeneration === generation) return;
+		this.#renderingGeneration = generation;
 		try {
-			while (this.#pendingRender !== null) {
+			while (
+				generation === this.#loadId &&
+				this.#pendingRender !== null &&
+				this.#pendingRender.generation === generation
+			) {
 				const request = this.#pendingRender;
 				this.#pendingRender = null;
 				await this.#render(request);
 			}
 		} finally {
-			this.#rendering = false;
-			if (this.#pendingRender !== null) void this.#drainRenderQueue();
+			if (this.#renderingGeneration === generation) this.#renderingGeneration = null;
+			const pendingGeneration = this.#pendingRender?.generation;
+			if (pendingGeneration !== undefined && pendingGeneration === this.#loadId) {
+				void this.#drainRenderQueue(pendingGeneration);
+			}
 		}
 	}
 
@@ -242,6 +257,7 @@ export class ViewerController {
 			this.#releaseCurrentVisuals();
 			this.pageVisuals = nextPages;
 			this.pageRenderPlans = nextPlans;
+			this.renderRevision += 1;
 			const visiblePages = pageIndexes.map((index) => index + 1);
 			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
 			if (pageChangeKey !== this.#lastPageChangeKey) {
@@ -272,7 +288,11 @@ export class ViewerController {
 	}
 
 	#isCurrent(request: ScheduledRender, source: PageSource): boolean {
-		return request.id === this.#renderId && source === this.pageSource;
+		return (
+			request.id === this.#renderId &&
+			request.generation === this.#loadId &&
+			source === this.pageSource
+		);
 	}
 
 	#cancelDocument(): void {
@@ -289,7 +309,7 @@ export class ViewerController {
 		this.#abortController = null;
 		const source = this.pageSource;
 		this.pageSource = null;
-		if (source !== null) void source.dispose();
+		if (source !== null) disposePageSource(source, this.#reportCleanupError);
 		this.#releaseCurrentVisuals();
 		this.pageVisuals = {};
 		this.pageRenderPlans = {};
@@ -326,4 +346,17 @@ function releaseVisuals(visuals: PageVisual[]): void {
 	for (const visual of visuals) {
 		if (visual.type === "bitmap") visual.bitmap.close();
 	}
+}
+
+function disposePageSource(source: PageSource, reportCleanupError: (error: unknown) => void): void {
+	try {
+		const disposal = source.dispose();
+		if (disposal !== undefined) void disposal.catch(reportCleanupError);
+	} catch (error) {
+		reportCleanupError(error);
+	}
+}
+
+function reportSourceDisposalFailure(error: unknown): void {
+	console.error("The pamphlet viewer could not dispose a document source.", error);
 }
