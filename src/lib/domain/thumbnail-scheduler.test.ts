@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PageSourceUnavailableError } from "@/lib/document/page-source";
 import type { PageSource, PageVisual } from "@/lib/document/page-source";
 
-import { ThumbnailScheduler } from "./thumbnail-scheduler";
+import { ThumbnailScheduler, type ThumbnailEntry } from "./thumbnail-scheduler";
 
 describe("ThumbnailScheduler", () => {
 	it("renders only visible pages and the requested prefetch with one job at a time", async () => {
