@@ -22,11 +22,11 @@
 	import { PdfiumBackend } from "../document/pdfium-backend";
 	import { resolveLayout, visiblePageIndexes } from "../domain/layout";
 	import type { FitMode, LayoutMode, ViewportSize } from "../domain/layout";
-import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
+	import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 	import { ViewerController } from "../domain/viewer-controller.svelte";
-	import type { ViewerEvent } from "../domain/viewer-controller.svelte";
+	import type { RenderInput, ViewerEvent } from "../domain/viewer-controller.svelte";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
-import type { PageRenderPlan } from "../domain/render-plan";
+	import type { PageRenderPlan } from "../domain/render-plan";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
 	import ViewerStatusBar from "./ViewerStatusBar.svelte";
@@ -63,6 +63,7 @@ import type { PageRenderPlan } from "../domain/render-plan";
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	let previousSource = "";
 	let pendingZoomAnchor: ZoomAnchor | null = null;
+	let pendingZoomAnchorRequestId: number | null = null;
 	let zoomAnchorVersion = 0;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
@@ -84,6 +85,7 @@ import type { PageRenderPlan } from "../domain/render-plan";
 				if (hadPreviousSource) page = 1;
 				zoom = 1;
 				pendingZoomAnchor = null;
+				pendingZoomAnchorRequestId = null;
 				zoomAnchorVersion += 1;
 				thumbnailsOpen = false;
 				thumbnailPageIndexes = [];
@@ -109,29 +111,56 @@ import type { PageRenderPlan } from "../domain/render-plan";
 	$effect(() => {
 		const pageSource = controller.pageSource;
 		const pageCount = controller.pageCount;
-		const pageNumber = page;
-		const currentLayout = parseLayout(layout);
-		const currentFit = parseFit(fit);
-		const currentViewport = viewport;
-		const currentZoom = zoom;
-		const devicePixelRatio = pageArea?.ownerDocument.defaultView?.devicePixelRatio ?? 1;
 		if (pageSource === null || pageCount < 1) return;
-		if (currentLayout === null || currentFit === null) {
+		const anchor = pendingZoomAnchor;
+		if (anchor !== null && !currentPages.includes(anchor.pageIndex)) {
+			untrack(clearZoomAnchor);
+		}
+		const input = createRenderInput();
+		if (input === null) {
 			untrack(() =>
 				controller.failInvalidOption("ページ配置またはフィット方法の値が正しくありません。"),
 			);
 			return;
 		}
-		untrack(() =>
-			controller.requestRender({
-				page: pageNumber,
-				layout: currentLayout,
-				fit: currentFit,
-				zoom: currentZoom,
-				viewport: currentViewport,
-				devicePixelRatio,
-			}),
-		);
+		const requestId = untrack(() => controller.requestRender(input));
+		if (pendingZoomAnchor !== null) pendingZoomAnchorRequestId = requestId;
+	});
+
+	$effect(() => {
+		const renderRevision = controller.renderRevision;
+		const renderedRequestId = controller.renderedRequestId;
+		const phase = controller.phase;
+		const anchor = pendingZoomAnchor;
+		const expectedRequestId = pendingZoomAnchorRequestId;
+		if (anchor === null) return;
+		if (phase === "error") {
+			clearZoomAnchor();
+			return;
+		}
+		if (
+			renderRevision === 0 ||
+			expectedRequestId === null ||
+			renderedRequestId !== expectedRequestId
+		) {
+			return;
+		}
+		const anchorVersion = zoomAnchorVersion;
+		void tick().then(() => {
+			const area = pageArea;
+			if (
+				anchorVersion !== zoomAnchorVersion ||
+				pendingZoomAnchorRequestId !== expectedRequestId ||
+				area?.isConnected !== true ||
+				controller.renderedRequestId !== expectedRequestId
+			) {
+				return;
+			}
+			if (restoreZoomAnchor(area, anchor)) {
+				pendingZoomAnchor = null;
+				pendingZoomAnchorRequestId = null;
+			}
+		});
 	});
 
 	$effect(() => {
@@ -152,6 +181,7 @@ import type { PageRenderPlan } from "../domain/render-plan";
 		host?.dispatchEvent(new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }));
 		return () => {
 			detachFullscreen();
+			clearZoomAnchor();
 			controller.dispose();
 		};
 	});
@@ -165,24 +195,7 @@ import type { PageRenderPlan } from "../domain/render-plan";
 				composed: true,
 			}),
 		);
-		if (event.type !== "pagechange") return;
-		page = event.detail.page;
-		const anchor = pendingZoomAnchor;
-		if (anchor === null) return;
-		if (!event.detail.visiblePages.includes(anchor.pageIndex + 1)) {
-			pendingZoomAnchor = null;
-			return;
-		}
-		pendingZoomAnchor = null;
-		const anchorVersion = zoomAnchorVersion;
-		void tick().then(() => {
-			requestAnimationFrame(() => {
-				const area = pageArea;
-				if (anchorVersion === zoomAnchorVersion && area?.isConnected === true) {
-					restoreZoomAnchor(area, anchor);
-				}
-			});
-		});
+		if (event.type === "pagechange") page = event.detail.page;
 	}
 
 	function getViewerHost(): HTMLElement | null {
@@ -228,23 +241,47 @@ import type { PageRenderPlan } from "../domain/render-plan";
 		page = Math.min(controller.pageCount, (visible.at(-1) ?? 0) + 2);
 	}
 
-	function onZoomChange(value: number, point: GesturePoint): void {
-		setZoomAt(value, point);
+	function onZoomChange(value: number): void {
+		setZoomAt(value, getPageAreaCenter());
 	}
 
-	function onResetZoom(point: GesturePoint): void {
-		setZoomAt(1, point);
+	function onResetZoom(): void {
+		setZoomAt(1, getPageAreaCenter());
 	}
 
 	function setZoomAt(value: number, point: GesturePoint): void {
-		if (pageArea !== undefined) pendingZoomAnchor = captureZoomAnchor(pageArea, point);
+		const nextZoom = Math.max(0.1, Math.min(8, value));
+		if (nextZoom === zoom) return;
+		pendingZoomAnchor = pageArea === undefined ? null : captureZoomAnchor(pageArea, point);
+		pendingZoomAnchorRequestId = null;
 		zoomAnchorVersion += 1;
-		zoom = Math.max(0.1, Math.min(8, value));
+		zoom = nextZoom;
 	}
 
 	function clearZoomAnchor(): void {
 		pendingZoomAnchor = null;
+		pendingZoomAnchorRequestId = null;
 		zoomAnchorVersion += 1;
+	}
+
+	function createRenderInput(): RenderInput | null {
+		const currentLayout = parseLayout(layout);
+		const currentFit = parseFit(fit);
+		if (currentLayout === null || currentFit === null) return null;
+		return {
+			page,
+			layout: currentLayout,
+			fit: currentFit,
+			zoom,
+			viewport,
+			devicePixelRatio: pageArea?.ownerDocument.defaultView?.devicePixelRatio ?? 1,
+		};
+	}
+
+	function getPageAreaCenter(): GesturePoint {
+		const bounds = pageArea?.getBoundingClientRect();
+		if (bounds === undefined) return { x: 0, y: 0 };
+		return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
 	}
 
 	function updateThumbnailPages(pageIndexes: readonly number[]): void {
@@ -274,10 +311,8 @@ import type { PageRenderPlan } from "../domain/render-plan";
 			if (resolvedSource !== null) void controller.load(resolvedSource, backend ?? defaultBackend);
 			return;
 		}
-		const currentLayout = parseLayout(layout);
-		const currentFit = parseFit(fit);
-		if (currentLayout === null || currentFit === null) return;
-		controller.retryRender({ page, layout: currentLayout, fit: currentFit, zoom, viewport });
+		const input = createRenderInput();
+		if (input !== null) controller.retryRender(input);
 	}
 </script>
 

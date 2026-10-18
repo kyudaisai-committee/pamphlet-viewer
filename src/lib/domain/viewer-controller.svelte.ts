@@ -43,6 +43,7 @@ export class ViewerController {
 	phase = $state<ViewerPhase>("empty");
 	pageCount = $state(0);
 	renderRevision = $state(0);
+	renderedRequestId = $state<number | null>(null);
 	pageSource = $state<PageSource | null>(null);
 	pageVisuals = $state<Record<number, PageVisual>>({});
 	pageRenderPlans = $state<Record<number, PageRenderPlan>>({});
@@ -147,16 +148,16 @@ export class ViewerController {
 		this.#setFailure({ code: "invalid-option", message, retryable: false });
 	}
 
-	requestRender(input: RenderInput): void {
-		if (this.pageSource === null) return;
-		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0) return;
+	requestRender(input: RenderInput): number | null {
+		if (this.pageSource === null) return null;
+		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0) return null;
 		if (!Number.isSafeInteger(input.page) || input.page < 1 || input.page > this.pageCount) {
 			this.#setFailure({
 				code: "invalid-page",
 				message: `ページ番号は1から${this.pageCount}の範囲で指定してください。`,
 				retryable: false,
 			});
-			return;
+			return null;
 		}
 
 		const key = [
@@ -169,12 +170,12 @@ export class ViewerController {
 			input.devicePixelRatio ?? 1,
 		].join(":");
 		if (this.phase === "error") {
-			if (this.failure?.code === "load-failed" || key === this.#failedRenderKey) return;
+			if (this.failure?.code === "load-failed" || key === this.#failedRenderKey) return null;
 			this.phase = "ready";
 			this.failure = null;
 		}
-		if (this.phase !== "ready") return;
-		if (key === this.#lastRenderKey) return;
+		if (this.phase !== "ready") return null;
+		if (key === this.#lastRenderKey) return this.#renderId;
 		this.#lastRenderKey = key;
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
@@ -182,6 +183,7 @@ export class ViewerController {
 		const generation = this.#loadId;
 		this.#pendingRender = { ...input, id, generation };
 		if (this.#renderingGeneration !== generation) void this.#drainRenderQueue(generation);
+		return id;
 	}
 
 	retryRender(input: RenderInput): void {
@@ -289,6 +291,7 @@ export class ViewerController {
 			this.#releaseCurrentVisuals();
 			this.pageVisuals = nextPages;
 			this.pageRenderPlans = nextPlans;
+			this.renderedRequestId = request.id;
 			this.renderRevision += 1;
 			const visiblePages = pageIndexes.map((index) => index + 1);
 			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
@@ -333,6 +336,7 @@ export class ViewerController {
 		this.#renderId += 1;
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
+		this.renderedRequestId = null;
 		if (!preservePageChangeKey) this.#lastPageChangeKey = "";
 		this.#failedRenderKey = "";
 		this.#renderQueue?.dispose();

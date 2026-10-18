@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { ChevronLeftIcon, ChevronRightIcon, PanelLeftIcon } from "@lucide/svelte";
 
-	import type { GesturePoint } from "../domain/reader-gesture";
 	import type { FitMode, LayoutMode } from "../domain/layout";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
 	import ZoomControls from "./ZoomControls.svelte";
@@ -22,8 +21,8 @@
 		onFitChange(value: FitMode): void;
 		onPrevious(): void;
 		onNext(): void;
-		onZoomChange(value: number, anchor: GesturePoint): void;
-		onResetZoom(anchor: GesturePoint): void;
+		onZoomChange(value: number): void;
+		onResetZoom(): void;
 		onToggleThumbnails(): void;
 		onToggleFullscreen(): void;
 	}
