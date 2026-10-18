@@ -1,26 +1,19 @@
 <script lang="ts">
 	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
 
-	import type { GesturePoint } from "../domain/reader-gesture";
-
 	interface Props {
 		zoom: number;
 		enabled: boolean;
-		onZoomChange(value: number, anchor: GesturePoint): void;
-		onResetZoom(anchor: GesturePoint): void;
+		onZoomChange(value: number): void;
+		onResetZoom(): void;
 	}
 
 	let { zoom, enabled, onZoomChange, onResetZoom }: Props = $props();
 
-	function getElementCenter(element: HTMLElement): GesturePoint {
-		const bounds = element.getBoundingClientRect();
-		return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
-	}
-
 	function setZoomFromInput(event: Event): void {
 		const input = event.currentTarget;
 		if (!(input instanceof HTMLInputElement)) return;
-		onZoomChange(Number(input.value), getElementCenter(input));
+		onZoomChange(Number(input.value));
 	}
 </script>
 
@@ -31,8 +24,7 @@
 		aria-label="縮小"
 		title="縮小"
 		disabled={!enabled || zoom <= 0.1}
-		onclick={(event) =>
-			onZoomChange(Math.max(0.1, zoom / 1.2), getElementCenter(event.currentTarget))}
+		onclick={() => onZoomChange(Math.max(0.1, zoom / 1.2))}
 	>
 		<ZoomOutIcon size={18} aria-hidden="true" />
 	</button>
@@ -54,8 +46,7 @@
 		aria-label="拡大"
 		title="拡大"
 		disabled={!enabled || zoom >= 8}
-		onclick={(event) =>
-			onZoomChange(Math.min(8, zoom * 1.2), getElementCenter(event.currentTarget))}
+		onclick={() => onZoomChange(Math.min(8, zoom * 1.2))}
 	>
 		<ZoomInIcon size={18} aria-hidden="true" />
 	</button>
@@ -65,7 +56,7 @@
 		aria-label="拡大率をリセット"
 		title="拡大率をリセット"
 		disabled={!enabled || zoom === 1}
-		onclick={(event) => onResetZoom(getElementCenter(event.currentTarget))}
+		onclick={onResetZoom}
 	>
 		<RotateCcwIcon size={15} aria-hidden="true" />
 		<span class="reset-label">合わせる</span>

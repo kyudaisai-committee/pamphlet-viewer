@@ -1,4 +1,5 @@
 import type { PageSource, PageVisual } from "../document/page-source";
+import { PageSourceUnavailableError } from "../document/page-source";
 
 export const MAX_THUMBNAIL_ENTRIES = 24;
 export const MAX_THUMBNAIL_PIXEL_BYTES = 32 * 1024 * 1024;
@@ -13,22 +14,26 @@ export interface ThumbnailEntry {
 
 interface ThumbnailTask {
 	pageIndex: number;
-	generation: number;
+	sourceGeneration: number;
+	demandGeneration: number;
 }
 
 export type ThumbnailRenderer = (pageIndex: number, scale: number) => Promise<PageVisual>;
 export type ThumbnailChangeListener = (entries: readonly ThumbnailEntry[]) => void;
 export type ThumbnailDemandListener = () => void;
+export type ThumbnailSourceUnavailableListener = () => void;
 
 export class ThumbnailScheduler {
 	#source: PageSource | null = null;
-	#generation = 0;
+	#sourceGeneration = 0;
+	#demandGeneration = 0;
+	#unavailableSourceGeneration: number | null = null;
 	#desired = new Set<number>();
 	#queue: ThumbnailTask[] = [];
-	#runningPages = new Set<number>();
+	#runningPagesBySource = new Map<number, Set<number>>();
+	#drainingSources = new Set<number>();
 	#cache = new Map<number, ThumbnailEntry>();
 	#cacheBytes = 0;
-	#draining = false;
 
 	constructor(
 		private readonly render: ThumbnailRenderer,
@@ -36,6 +41,7 @@ export class ThumbnailScheduler {
 		private readonly onDemandChange: ThumbnailDemandListener = () => undefined,
 		private readonly maxEntries = MAX_THUMBNAIL_ENTRIES,
 		private readonly maxPixelBytes = MAX_THUMBNAIL_PIXEL_BYTES,
+		private readonly onSourceUnavailable: ThumbnailSourceUnavailableListener = () => undefined,
 	) {}
 
 	get entries(): readonly ThumbnailEntry[] {
@@ -44,18 +50,23 @@ export class ThumbnailScheduler {
 
 	setSource(source: PageSource | null): void {
 		if (source === this.#source) return;
-		this.#generation += 1;
+		if (!this.#drainingSources.has(this.#sourceGeneration)) {
+			this.#runningPagesBySource.delete(this.#sourceGeneration);
+		}
+		this.#sourceGeneration += 1;
+		this.#demandGeneration += 1;
+		this.#unavailableSourceGeneration = null;
 		this.#source = source;
 		this.#desired.clear();
 		this.#queue = [];
-		this.#runningPages.clear();
+		if (source !== null) this.#runningPagesBySource.set(this.#sourceGeneration, new Set());
 		this.onDemandChange();
 		this.#clearCache();
 		this.#notify();
 	}
 
 	setVisiblePages(pageIndexes: readonly number[], prefetchIndexes: readonly number[] = []): void {
-		this.#generation += 1;
+		this.#demandGeneration += 1;
 		const source = this.#source;
 		const nextDesired = new Set<number>();
 		if (source !== null) {
@@ -69,9 +80,9 @@ export class ThumbnailScheduler {
 		this.onDemandChange();
 		this.#queue = this.#queue
 			.filter((task) => nextDesired.has(task.pageIndex))
-			.map((task) => ({ ...task, generation: this.#generation }));
+			.map((task) => ({ ...task, demandGeneration: this.#demandGeneration }));
 		this.#enqueueDesiredPages();
-		void this.#drain();
+		if (source !== null) void this.#drain(this.#sourceGeneration, source);
 	}
 
 	close(): void {
@@ -87,36 +98,53 @@ export class ThumbnailScheduler {
 	}
 
 	#enqueueDesiredPages(): void {
+		if (this.#unavailableSourceGeneration === this.#sourceGeneration) return;
+		const runningPages = this.#runningPagesBySource.get(this.#sourceGeneration);
 		for (const pageIndex of this.#desired) {
 			if (
 				this.#cache.has(pageIndex) ||
-				this.#runningPages.has(pageIndex) ||
+				runningPages?.has(pageIndex) === true ||
 				this.#queue.some((task) => task.pageIndex === pageIndex)
 			) {
 				this.get(pageIndex);
 				continue;
 			}
-			this.#queue.push({ pageIndex, generation: this.#generation });
+			this.#queue.push({
+				pageIndex,
+				sourceGeneration: this.#sourceGeneration,
+				demandGeneration: this.#demandGeneration,
+			});
 		}
 	}
 
-	async #drain(): Promise<void> {
-		if (this.#draining) return;
-		this.#draining = true;
+	async #drain(sourceGeneration: number, source: PageSource): Promise<void> {
+		if (
+			sourceGeneration !== this.#sourceGeneration ||
+			source !== this.#source ||
+			this.#drainingSources.has(sourceGeneration)
+		) {
+			return;
+		}
+		const runningPages = this.#runningPagesBySource.get(sourceGeneration);
+		if (runningPages === undefined) return;
+		this.#drainingSources.add(sourceGeneration);
 		try {
-			while (this.#queue.length > 0) {
+			while (
+				sourceGeneration === this.#sourceGeneration &&
+				source === this.#source &&
+				this.#queue.length > 0
+			) {
 				const task = this.#queue.shift();
-				const source = this.#source;
 				if (
 					task === undefined ||
-					source === null ||
-					task.generation !== this.#generation ||
+					task.sourceGeneration !== sourceGeneration ||
+					task.demandGeneration !== this.#demandGeneration ||
 					!this.#desired.has(task.pageIndex)
 				) {
 					continue;
 				}
 
-				this.#runningPages.add(task.pageIndex);
+				runningPages.add(task.pageIndex);
 				try {
 					const pageSize = await source.getPageSize(task.pageIndex);
 					if (!this.#isCurrent(task, source)) continue;
@@ -131,38 +159,72 @@ export class ThumbnailScheduler {
 						visual,
 						pixelBytes: visual.width * visual.height * 4,
 					});
-				} catch {
-					// A missing thumbnail is retried only when it becomes visible again.
+				} catch (error) {
+					if (
+						error instanceof PageSourceUnavailableError &&
+						this.#isSourceCurrent(sourceGeneration, source)
+					) {
+						this.#unavailableSourceGeneration = sourceGeneration;
+						this.#desired.clear();
+						this.#queue = [];
+						this.onDemandChange();
+						this.onSourceUnavailable();
+					}
+					// Ordinary thumbnail failures are retried only when they become visible again.
 				} finally {
-					this.#runningPages.delete(task.pageIndex);
-					this.#enqueueAfterInvalidation(task, source);
+					runningPages.delete(task.pageIndex);
+					if (sourceGeneration === this.#sourceGeneration && source === this.#source) {
+						this.#enqueueAfterInvalidation(task, source);
+					}
 				}
 			}
 		} finally {
-			this.#draining = false;
-			if (this.#queue.length > 0) void this.#drain();
+			this.#drainingSources.delete(sourceGeneration);
+			if (
+				sourceGeneration !== this.#sourceGeneration &&
+				runningPages.size === 0 &&
+				this.#runningPagesBySource.get(sourceGeneration) === runningPages
+			) {
+				this.#runningPagesBySource.delete(sourceGeneration);
+			}
+			if (
+				sourceGeneration === this.#sourceGeneration &&
+				source === this.#source &&
+				this.#queue.length > 0
+			) {
+				void this.#drain(sourceGeneration, source);
+			}
 		}
 	}
 
 	#isCurrent(task: ThumbnailTask, source: PageSource): boolean {
 		return (
-			task.generation === this.#generation &&
-			source === this.#source &&
+			this.#isSourceCurrent(task.sourceGeneration, source) &&
+			task.demandGeneration === this.#demandGeneration &&
 			this.#desired.has(task.pageIndex)
 		);
 	}
 
+	#isSourceCurrent(sourceGeneration: number, source: PageSource): boolean {
+		return sourceGeneration === this.#sourceGeneration && source === this.#source;
+	}
+
 	#enqueueAfterInvalidation(task: ThumbnailTask, source: PageSource): void {
 		if (
-			task.generation === this.#generation ||
-			source !== this.#source ||
+			task.demandGeneration === this.#demandGeneration ||
+			!this.#isSourceCurrent(task.sourceGeneration, source) ||
+			this.#unavailableSourceGeneration === task.sourceGeneration ||
 			!this.#desired.has(task.pageIndex) ||
 			this.#cache.has(task.pageIndex) ||
 			this.#queue.some((queuedTask) => queuedTask.pageIndex === task.pageIndex)
 		) {
 			return;
 		}
-		this.#queue.push({ pageIndex: task.pageIndex, generation: this.#generation });
+		this.#queue.push({
+			pageIndex: task.pageIndex,
+			sourceGeneration: this.#sourceGeneration,
+			demandGeneration: this.#demandGeneration,
+		});
 	}
 
 	#store(entry: ThumbnailEntry): void {

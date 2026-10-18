@@ -72,7 +72,7 @@ export function rangeFixturePlugin(): Plugin {
 				const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
 				if (pathname === LIBRARY_HTML_PATH) {
 					response.setHeader("Content-Type", "text/html; charset=utf-8");
-					response.end(createLibraryTestHtml());
+					response.end(createLibraryTestHtml(request.url ?? "/"));
 					return;
 				}
 				if (pathname === REMOTE_LIBRARY_HTML_PATH) {
