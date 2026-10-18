@@ -1,4 +1,9 @@
-import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
+import {
+	PageSourceUnavailableError,
+	type DocumentBackend,
+	type PageSource,
+	type PageVisual,
+} from "../document/page-source";
 import { calculateFitScale, resolveLayout, visiblePageIndexes } from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
 import { PageRenderQueue } from "./page-render-queue";
@@ -52,6 +57,9 @@ export class ViewerController {
 	#lastRenderKey = "";
 	#lastPageChangeKey = "";
 	#failedRenderKey = "";
+	#sourceUrl: string | null = null;
+	#backend: DocumentBackend | null = null;
+	#sourceUnavailable = false;
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
 	#reportCleanupError: (error: unknown) => void;
@@ -74,7 +82,19 @@ export class ViewerController {
 	}
 
 	async load(url: string, backend: DocumentBackend): Promise<void> {
-		this.#cancelDocument();
+		await this.#loadDocument(url, backend, null, false);
+	}
+
+	async #loadDocument(
+		url: string,
+		backend: DocumentBackend,
+		renderAfterLoad: RenderInput | null,
+		preservePageChangeKey: boolean,
+	): Promise<void> {
+		this.#cancelDocument(preservePageChangeKey);
+		this.#sourceUrl = url.length === 0 ? null : url;
+		this.#backend = url.length === 0 ? null : backend;
+		this.#sourceUnavailable = false;
 		const loadId = this.#loadId + 1;
 		this.#loadId = loadId;
 		this.failure = null;
@@ -101,6 +121,7 @@ export class ViewerController {
 			this.pageCount = pageSource.pageCount;
 			this.phase = "ready";
 			this.dispatch({ type: "documentload", detail: { pageCount: pageSource.pageCount } });
+			if (renderAfterLoad !== null) this.requestRender(renderAfterLoad);
 		} catch {
 			if (abortController.signal.aborted || loadId !== this.#loadId) return;
 			this.#setFailure({
@@ -164,6 +185,14 @@ export class ViewerController {
 	}
 
 	retryRender(input: RenderInput): void {
+		if (this.#sourceUnavailable) {
+			const url = this.#sourceUrl;
+			const backend = this.#backend;
+			if (url !== null && backend !== null) {
+				void this.#loadDocument(url, backend, input, true);
+			}
+			return;
+		}
 		this.#failedRenderKey = "";
 		this.#lastRenderKey = "";
 		this.failure = null;
@@ -181,6 +210,9 @@ export class ViewerController {
 
 	dispose(): void {
 		this.#cancelDocument();
+		this.#sourceUrl = null;
+		this.#backend = null;
+		this.#sourceUnavailable = false;
 		this.pageVisuals = {};
 		this.pageCount = 0;
 		this.phase = "empty";
@@ -267,8 +299,9 @@ export class ViewerController {
 					detail: { page: request.page, visiblePages },
 				});
 			}
-		} catch {
+		} catch (error) {
 			if (!this.#isCurrent(request, source)) return;
+			this.#sourceUnavailable = error instanceof PageSourceUnavailableError;
 			this.#lastRenderKey = "";
 			this.#failedRenderKey = [
 				request.page,
@@ -295,12 +328,12 @@ export class ViewerController {
 		);
 	}
 
-	#cancelDocument(): void {
+	#cancelDocument(preservePageChangeKey = false): void {
 		this.#loadId += 1;
 		this.#renderId += 1;
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
-		this.#lastPageChangeKey = "";
+		if (!preservePageChangeKey) this.#lastPageChangeKey = "";
 		this.#failedRenderKey = "";
 		this.#renderQueue?.dispose();
 		this.#renderQueue = null;

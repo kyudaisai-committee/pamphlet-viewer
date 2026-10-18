@@ -1,5 +1,11 @@
-import { PdfiumWorkerClient } from "../pdfium/worker-client";
-import type { DocumentBackend, PageSize, PageSource, PageVisual } from "./page-source";
+import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
+import {
+	PageSourceUnavailableError,
+	type DocumentBackend,
+	type PageSize,
+	type PageSource,
+	type PageVisual,
+} from "./page-source";
 
 export class PdfiumBackend implements DocumentBackend {
 	async open(source: string, signal: AbortSignal): Promise<PageSource> {
@@ -33,12 +39,12 @@ class PdfiumPageSource implements PageSource {
 
 	getPageSize(pageIndex: number): Promise<PageSize> {
 		this.#assertActive();
-		return this.client.getPageSize(pageIndex);
+		return this.client.getPageSize(pageIndex).catch(mapSourceFailure);
 	}
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
-		return this.client.renderPage(pageIndex, scale);
+		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);
 	}
 
 	dispose(): void {
@@ -53,4 +59,11 @@ class PdfiumPageSource implements PageSource {
 			throw new DOMException("PDF document is no longer available.", "AbortError");
 		}
 	}
+}
+
+function mapSourceFailure(error: unknown): never {
+	if (error instanceof PdfiumWorkerUnavailableError) {
+		throw new PageSourceUnavailableError(error.message, { cause: error });
+	}
+	throw error;
 }

@@ -8,6 +8,13 @@ export interface PdfiumDocumentInfo {
 	fileLength: number;
 }
 
+export class PdfiumWorkerUnavailableError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "PdfiumWorkerUnavailableError";
+	}
+}
+
 interface OpenRequest {
 	type: "open";
 	url: string;
@@ -71,7 +78,8 @@ export class PdfiumWorkerClient {
 	#releaseBootstrapUrl: (() => void) | null;
 	#nextId = 0;
 	#pending = new Map<number, PendingRequest>();
-	#terminated = false;
+	#state: "active" | "terminated" | "unavailable" = "active";
+	#terminalError: Error | null = null;
 
 	constructor() {
 		const workerUrl = new URL(pdfiumWorkerAssetUrl, import.meta.url);
@@ -92,12 +100,14 @@ export class PdfiumWorkerClient {
 			this.#onMessage(event.data);
 		});
 		this.#worker.addEventListener("error", (event: ErrorEvent) => {
-			this.#releaseWorkerBootstrap();
-			this.#rejectPending(new Error(event.message || "The PDF worker failed."));
+			this.#markUnavailable(
+				new PdfiumWorkerUnavailableError(event.message || "The PDF worker failed."),
+			);
 		});
 		this.#worker.addEventListener("messageerror", () => {
-			this.#releaseWorkerBootstrap();
-			this.#rejectPending(new Error("The PDF worker returned an unreadable response."));
+			this.#markUnavailable(
+				new PdfiumWorkerUnavailableError("The PDF worker returned an unreadable response."),
+			);
 		});
 	}
 
@@ -118,15 +128,15 @@ export class PdfiumWorkerClient {
 	}
 
 	terminate(): void {
-		if (this.#terminated) return;
-		this.#terminated = true;
-		this.#worker.terminate();
-		this.#releaseWorkerBootstrap();
+		if (this.#state !== "active") return;
+		this.#state = "terminated";
+		this.#stopWorker();
 		this.#rejectPending(new DOMException("PDF worker was terminated.", "AbortError"));
 	}
 
 	#request<Request extends WorkerRequest>(request: Request): Promise<ResponseFor<Request>> {
-		if (this.#terminated)
+		if (this.#state === "unavailable") return Promise.reject(this.#terminalError);
+		if (this.#state === "terminated")
 			return Promise.reject(new DOMException("PDF worker was terminated.", "AbortError"));
 		const id = this.#nextId;
 		this.#nextId += 1;
@@ -147,10 +157,7 @@ export class PdfiumWorkerClient {
 
 	#onMessage(response: WorkerResponse): void {
 		if (response.type === "error" && response.fatal === true) {
-			this.#terminated = true;
-			this.#worker.terminate();
-			this.#releaseWorkerBootstrap();
-			this.#rejectPending(new Error(response.message));
+			this.#markUnavailable(new PdfiumWorkerUnavailableError(response.message));
 			return;
 		}
 
@@ -163,6 +170,19 @@ export class PdfiumWorkerClient {
 	#rejectPending(error: Error): void {
 		for (const pending of this.#pending.values()) pending.reject(error);
 		this.#pending.clear();
+	}
+
+	#markUnavailable(error: PdfiumWorkerUnavailableError): void {
+		if (this.#state !== "active") return;
+		this.#state = "unavailable";
+		this.#terminalError = error;
+		this.#stopWorker();
+		this.#rejectPending(error);
+	}
+
+	#stopWorker(): void {
+		this.#worker.terminate();
+		this.#releaseWorkerBootstrap();
 	}
 
 	#releaseWorkerBootstrap(): void {

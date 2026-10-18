@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
+import {
+	PageSourceUnavailableError,
+	type DocumentBackend,
+	type PageSource,
+	type PageVisual,
+} from "../document/page-source";
 import { ViewerController } from "./viewer-controller.svelte";
 
 describe("ViewerController", () => {
@@ -241,6 +246,85 @@ describe("ViewerController", () => {
 		controller.requestRender({ ...renderInput(1), zoom: 1.5 });
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
 		expect(pageChanges).toEqual([1]);
+		controller.dispose();
+	});
+
+	it("reopens an unavailable source and preserves the render input on retry", async () => {
+		const disposeUnavailableSource = vi.fn();
+		const unavailableSource = createPageSource(2, () => {
+			throw new PageSourceUnavailableError("The PDF worker cannot be reused.");
+		});
+		unavailableSource.dispose = disposeUnavailableSource;
+		const recoveredRender = vi.fn(async () => pixelVisual());
+		const recoveredSource: PageSource = {
+			pageCount: 2,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			renderPage: recoveredRender,
+			dispose() {},
+		};
+		let openCount = 0;
+		const backend: DocumentBackend = {
+			async open() {
+				openCount += 1;
+				return openCount === 1 ? unavailableSource : recoveredSource;
+			},
+		};
+		const controller = new ViewerController(() => undefined);
+		const input = {
+			page: 2,
+			layout: "single" as const,
+			fit: "page" as const,
+			zoom: 1.5,
+			viewport: { width: 600, height: 800 },
+			devicePixelRatio: 2,
+		};
+
+		await controller.load("brochure.pdf", backend);
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(controller.failure?.code).toBe("render-failed"));
+		controller.retryRender(input);
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+
+		expect(openCount).toBe(2);
+		expect(disposeUnavailableSource).toHaveBeenCalledOnce();
+		expect(recoveredRender).toHaveBeenCalledOnce();
+		expect(recoveredRender).toHaveBeenCalledWith(1, 6);
+		expect(controller.pageRenderPlans[1]?.displayScale).toBe(3);
+		controller.dispose();
+	});
+
+	it("reuses the current source when retrying a transient render failure", async () => {
+		let renderCount = 0;
+		let openCount = 0;
+		const source: PageSource = {
+			pageCount: 1,
+			async getPageSize() {
+				return { width: 300, height: 400 };
+			},
+			async renderPage() {
+				renderCount += 1;
+				if (renderCount === 1) throw new Error("Temporary render failure.");
+				return pixelVisual();
+			},
+			dispose() {},
+		};
+		const backend: DocumentBackend = {
+			async open() {
+				openCount += 1;
+				return source;
+			},
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", backend);
+		controller.requestRender(renderInput(1));
+		await vi.waitFor(() => expect(controller.failure?.code).toBe("render-failed"));
+		controller.retryRender(renderInput(1));
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+
+		expect(openCount).toBe(1);
+		expect(renderCount).toBe(2);
 		controller.dispose();
 	});
 });

@@ -19,3 +19,10 @@ export interface PageSource {
 export interface DocumentBackend {
 	open(source: string, signal: AbortSignal): Promise<PageSource>;
 }
+
+export class PageSourceUnavailableError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "PageSourceUnavailableError";
+	}
+}
