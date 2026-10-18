@@ -92,12 +92,15 @@ export class PdfRangeLoader {
 		const firstIndex = Math.floor(position / RANGE_CHUNK_SIZE);
 		const lastIndex = Math.floor((position + length - 1) / RANGE_CHUNK_SIZE);
 		const chunks = new Map<number, Uint8Array>();
+		let rangeAvailable = true;
 		for (let index = firstIndex; index <= lastIndex; index += 1) {
 			const chunk = this.#cache.get(index);
-			if (chunk === undefined) this.#missingChunks.add(index);
-			else chunks.set(index, chunk);
+			if (chunk === undefined) {
+				this.#missingChunks.add(index);
+				rangeAvailable = false;
+			} else chunks.set(index, chunk);
 		}
-		if (this.#missingChunks.size > 0) return false;
+		if (!rangeAvailable) return false;
 
 		for (const [index, chunk] of chunks) {
 			const chunkStart = index * RANGE_CHUNK_SIZE;

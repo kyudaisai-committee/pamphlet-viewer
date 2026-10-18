@@ -61,6 +61,31 @@ describe("PdfRangeLoader", () => {
 		}
 	});
 
+	it("allows a cached read while another range is pending", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 2;
+		vi.stubGlobal(
+			"fetch",
+			async () =>
+				new Response(new Uint8Array(RANGE_CHUNK_SIZE), {
+					status: 206,
+					headers: { "Content-Range": `bytes 0-${RANGE_CHUNK_SIZE - 1}/${fileLength}` },
+				}),
+		);
+
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			expect(loader.isRangeAvailable(RANGE_CHUNK_SIZE, 1)).toBe(false);
+			expect(loader.hasMissingChunks).toBe(true);
+			expect(loader.readInto(0, new Uint8Array(1), 0, 1)).toBe(true);
+		} finally {
+			loader.dispose();
+		}
+	});
+
 	it("reclaims cache space in one batch and can re-fetch an evicted range", async () => {
 		const fileLength = RANGE_CHUNK_SIZE * 8;
 		const requestedStarts: number[] = [];

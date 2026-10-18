@@ -50,6 +50,7 @@ interface ErrorResponse {
 	id: number;
 	type: "error";
 	message: string;
+	fatal?: boolean;
 }
 
 type WorkerResponse = OpenedResponse | PageSizeResponse | RenderedResponse | ErrorResponse;
@@ -145,6 +146,14 @@ export class PdfiumWorkerClient {
 	}
 
 	#onMessage(response: WorkerResponse): void {
+		if (response.type === "error" && response.fatal === true) {
+			this.#terminated = true;
+			this.#worker.terminate();
+			this.#releaseWorkerBootstrap();
+			this.#rejectPending(new Error(response.message));
+			return;
+		}
+
 		const pending = this.#pending.get(response.id);
 		if (pending === undefined) return;
 		this.#pending.delete(response.id);

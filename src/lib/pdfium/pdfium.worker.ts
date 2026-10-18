@@ -1,5 +1,5 @@
 import type { PageSize, PageVisual } from "../document/page-source";
-import { PdfiumDocumentSession } from "./pdfium-document";
+import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
 
 interface OpenRequest {
 	id: number;
@@ -46,6 +46,7 @@ interface ErrorResponse {
 	id: number;
 	type: "error";
 	message: string;
+	fatal?: boolean;
 }
 
 type WorkerResponse = OpenedResponse | PageSizeResponse | RenderedResponse | ErrorResponse;
@@ -53,6 +54,7 @@ type WorkerResponse = OpenedResponse | PageSizeResponse | RenderedResponse | Err
 interface WorkerScope {
 	addEventListener(type: "message", listener: (event: MessageEvent<WorkerRequest>) => void): void;
 	postMessage(message: WorkerResponse, transfer?: Transferable[]): void;
+	close(): void;
 }
 
 const workerScope = self as unknown as WorkerScope;
@@ -69,8 +71,14 @@ workerScope.addEventListener("message", function queueRequest(event) {
 async function processRequest(request: WorkerRequest): Promise<void> {
 	try {
 		if (request.type === "open") {
-			documentSession?.dispose();
+			const previousSession = documentSession;
+			previousSession?.dispose();
 			documentSession = null;
+			if (previousSession?.isPoisoned) {
+				throw new PdfiumFatalError(
+					new Error("The previous PDFium document could not be released."),
+				);
+			}
 			const session = await PdfiumDocumentSession.open(
 				request.url,
 				request.wasmUrl,
@@ -102,11 +110,18 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 		const transfer = visual.type === "pixels" ? [visual.pixels] : [];
 		workerScope.postMessage(response, transfer);
 	} catch (error) {
+		const fatal = error instanceof PdfiumFatalError || documentSession?.isPoisoned === true;
+		if (fatal) {
+			documentSession?.dispose();
+			documentSession = null;
+		}
 		const response: ErrorResponse = {
 			id: request.id,
 			type: "error",
 			message: error instanceof Error ? error.message : "PDF processing failed.",
+			fatal,
 		};
 		workerScope.postMessage(response);
+		if (fatal) workerScope.close();
 	}
 }
