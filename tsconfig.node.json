@@ -21,14 +21,5 @@
 		"erasableSyntaxOnly": true,
 		"noFallthroughCasesInSwitch": true
 	},
-	"include": [
-		"svelte.config.js",
-		"tests/library-fixture-pages.ts",
-		"tests/library-build.test.ts",
-		"tests/pdf-fixture.ts",
-		"tests/range-fixture-plugin.ts",
-		"vite.config.ts",
-		"vite.library.config.ts",
-		"vitest.config.ts"
-	]
+	"include": ["*.config.js", "*.config.ts", "tests/**/*.ts", "vite.*.ts"]
 }

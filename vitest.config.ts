@@ -3,9 +3,11 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 
 import { rangeFixturePlugin } from "./tests/range-fixture-plugin.js";
+import { sourceAlias } from "./vite.source-alias.js";
 
 export default defineConfig({
 	plugins: [svelte(), rangeFixturePlugin()],
+	resolve: { alias: sourceAlias },
 	optimizeDeps: {
 		include: ["@embedpdf/pdfium", "@lucide/svelte"],
 	},

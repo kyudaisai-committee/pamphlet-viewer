@@ -18,36 +18,29 @@
 	<title>Pamphlet Viewer</title>
 	<meta
 		name="description"
-		content="HTTP Range対応のPDFを読み込むWeb Component形式のパンフレットビューアー"
+		content="HTTP Range対応のPDFを読むWeb Component形式のパンフレットビューアー"
 	/>
 </svelte:head>
 
 <main>
-	<header class="page-header">
-		<div>
-			<p class="eyebrow">WEB COMPONENT DEMO</p>
-			<h1>Pamphlet Viewer</h1>
-			<p class="intro">PDFのURLを入力して、ページ表示を確認できます。</p>
-		</div>
-		<a href="https://github.com/embedpdf/embed-pdf-viewer" target="_blank" rel="noreferrer">
-			EmbedPDF
-		</a>
+	<header class="demo-header">
+		<h1>Pamphlet Viewer</h1>
+		<form class="source-form" onsubmit={loadSource}>
+			<label class="visually-hidden" for="pdf-url">PDF URL</label>
+			<div class="source-input-row">
+				<input
+					id="pdf-url"
+					bind:value={input}
+					placeholder="https://example.com/brochure.pdf"
+					inputmode="url"
+					autocomplete="url"
+					aria-describedby="source-hint"
+				/>
+				<button type="submit">表示</button>
+			</div>
+			<span id="source-hint">Range対応PDF</span>
+		</form>
 	</header>
-
-	<form class="source-form" onsubmit={loadSource}>
-		<label for="pdf-url">PDF URL</label>
-		<div class="source-input-row">
-			<input
-				id="pdf-url"
-				bind:value={input}
-				placeholder="https://example.com/brochure.pdf"
-				inputmode="url"
-				autocomplete="url"
-			/>
-			<button type="submit">表示</button>
-		</div>
-		<p>Range requests に対応した PDF の URL を指定してください。</p>
-	</form>
 
 	<pamphlet-viewer
 		src={source}
@@ -56,11 +49,6 @@
 		fit="page"
 		class="viewer"
 	></pamphlet-viewer>
-
-	<footer>
-		<span>Web Component の動作確認用デモ</span>
-		<code>&lt;pamphlet-viewer src="…"&gt;</code>
-	</footer>
 </main>
 
 <style>
@@ -69,145 +57,125 @@
 	}
 
 	:global(body) {
+		min-width: 320px;
+		min-height: 100vh;
 		margin: 0;
-		background: #f4f6fa;
-		color: #172033;
-		font: 15px/1.5 system-ui, sans-serif;
+		background: #111416;
+		color: #e4e7e9;
+		font: 14px/1.5 system-ui, sans-serif;
 	}
 
 	main {
-		width: min(1120px, 100% - 32px);
-		margin: 0 auto;
-		padding: 36px 0 24px;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		width: min(1440px, 100%);
+		min-height: 100dvh;
+		margin-inline: auto;
+		padding: 8px;
+		container-name: demo-page;
+		container-type: inline-size;
 
-		.page-header {
-			display: flex;
-			align-items: flex-start;
+		.demo-header {
+			display: grid;
+			grid-template-columns: auto minmax(240px, 560px);
+			align-items: center;
 			justify-content: space-between;
-			gap: 24px;
-			margin-bottom: 26px;
+			gap: 16px;
+			min-height: 44px;
 
-			div {
-				.eyebrow {
-					margin: 0 0 7px;
-					color: #53688e;
-					font-size: 11px;
-					font-weight: 700;
-					letter-spacing: 0.12em;
-				}
-
-				h1 {
-					margin: 0;
-					font-size: clamp(26px, 4vw, 36px);
-					letter-spacing: -0.04em;
-				}
-
-				.intro {
-					margin: 8px 0 0;
-					color: #647087;
-				}
-			}
-
-			a {
-				margin-top: 8px;
-				color: #3157a4;
+			h1 {
+				margin: 0;
+				font-size: 16px;
 				font-weight: 600;
-				text-decoration: none;
-
-				&:hover {
-					text-decoration: underline;
-				}
-			}
-		}
-
-		.source-form {
-			margin-bottom: 14px;
-			padding: 16px;
-			border: 1px solid #dce1ea;
-			border-radius: 12px;
-			background: #fff;
-
-			label {
-				display: block;
-				margin-bottom: 7px;
-				font-size: 13px;
-				font-weight: 650;
 			}
 
-			.source-input-row {
-				display: flex;
-				gap: 8px;
+			.source-form {
+				display: grid;
+				grid-template-columns: minmax(0, 1fr);
+				gap: 3px;
+				min-width: 0;
 
-				input {
-					flex: 1 1 auto;
-					min-width: 0;
-					min-height: 42px;
-					padding: 9px 11px;
-					border: 1px solid #cbd3e0;
-					border-radius: 8px;
-					background: #fff;
-					color: inherit;
-					font: inherit;
-				}
-
-				button {
-					min-width: 72px;
-					min-height: 42px;
-					padding: 8px 16px;
+				.visually-hidden {
+					position: absolute;
+					width: 1px;
+					height: 1px;
+					padding: 0;
+					margin: -1px;
+					overflow: hidden;
+					clip: rect(0, 0, 0, 0);
+					white-space: nowrap;
 					border: 0;
-					border-radius: 8px;
-					background: #3157a4;
-					color: #fff;
-					font: inherit;
-					font-weight: 650;
-					cursor: pointer;
+				}
 
-					&:hover {
-						background: #244889;
+				.source-input-row {
+					display: flex;
+					gap: 6px;
+
+					input {
+						box-sizing: border-box;
+						flex: 1 1 auto;
+						min-width: 0;
+						min-height: 38px;
+						padding: 7px 10px;
+						border: 1px solid #3b4148;
+						border-radius: 4px;
+						background: #191c20;
+						color: inherit;
+						font: inherit;
+
+						&:focus-visible {
+							outline: 2px solid #a8c5bc;
+							outline-offset: 1px;
+						}
+					}
+
+					button {
+						min-width: 60px;
+						min-height: 38px;
+						padding: 6px 12px;
+						border: 1px solid #454b52;
+						border-radius: 4px;
+						background: #30363c;
+						color: inherit;
+						font: inherit;
+						cursor: pointer;
+
+						&:hover {
+							background: #3a4245;
+						}
+
+						&:focus-visible {
+							outline: 2px solid #a8c5bc;
+							outline-offset: 1px;
+						}
 					}
 				}
-			}
 
-			p {
-				margin: 8px 0 0;
-				color: #68758b;
-				font-size: 12px;
+				#source-hint {
+					color: #9ba2aa;
+					font-size: 11px;
+				}
 			}
 		}
 
 		.viewer {
-			height: min(70vh, 760px);
-			min-height: 380px;
+			flex: 1 1 auto;
+			height: calc(100dvh - 84px);
+			min-height: 22rem;
 		}
 
-		footer {
-			display: flex;
-			justify-content: space-between;
-			gap: 12px;
-			padding: 12px 2px;
-			color: #68758b;
-			font-size: 12px;
-
-			code {
-				color: #3d4e6a;
-			}
-		}
-
-		@media (max-width: 600px) {
-			width: min(100% - 20px, 1120px);
-			padding-top: 20px;
-
-			.page-header {
-				margin-bottom: 18px;
+		@container demo-page (max-width: 680px) {
+			.demo-header {
+				grid-template-columns: minmax(0, 1fr);
+				gap: 6px;
+				padding-block: 2px;
 			}
 
 			.viewer {
-				height: 68vh;
-				min-height: 360px;
-			}
-
-			footer {
-				flex-direction: column;
+				height: 68dvh;
+				min-height: 22rem;
 			}
 		}
 	}

@@ -178,13 +178,31 @@ test("aborts a stale source load and only renders the newest source", async () =
 	expect(firstAttempt.signal.aborted).toBe(true);
 
 	let staleSourceDisposed = false;
-	firstAttempt.resolve(createPageSource(1, [255, 0, 0], () => (staleSourceDisposed = true)));
+	let staleSourceRenderCount = 0;
+	firstAttempt.resolve(
+		createPageSource(
+			1,
+			[255, 0, 0],
+			() => (staleSourceDisposed = true),
+			() => staleSourceRenderCount++,
+		),
+	);
 	await expect.poll(() => staleSourceDisposed).toBe(true);
 	const secondAttempt = attempts[1];
 	if (secondAttempt === undefined) throw new Error("The second source did not start loading.");
-	secondAttempt.resolve(createPageSource(1, [0, 160, 0]));
+	let currentSourceRenderCount = 0;
+	secondAttempt.resolve(
+		createPageSource(
+			1,
+			[0, 160, 0],
+			() => {},
+			() => currentSourceRenderCount++,
+		),
+	);
 	await expect.poll(() => changes.length).toBe(1);
 	expect(changes).toEqual([1]);
+	expect(staleSourceRenderCount).toBe(0);
+	expect(currentSourceRenderCount).toBeGreaterThan(0);
 	expect(secondAttempt.signal.aborted).toBe(false);
 	expect(canvasPixel(element)).toEqual([0, 160, 0, 255]);
 });
@@ -266,6 +284,7 @@ function createPageSource(
 	pageCount = 1,
 	color: readonly [number, number, number] = [38, 82, 148],
 	onDispose: () => void = () => {},
+	onRender: () => void = () => {},
 ): PageSource {
 	return {
 		pageCount,
@@ -273,6 +292,7 @@ function createPageSource(
 			return { width: 300, height: 400 };
 		},
 		async renderPage(): Promise<PageVisual> {
+			onRender();
 			return {
 				type: "pixels",
 				width: 300,

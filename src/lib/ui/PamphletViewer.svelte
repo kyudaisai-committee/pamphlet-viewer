@@ -16,19 +16,23 @@
 </script>
 
 <script lang="ts">
-	import { onMount, untrack } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 
 	import type { DocumentBackend, PageVisual } from "../document/page-source";
 	import { PdfiumBackend } from "../document/pdfium-backend";
 	import { resolveLayout, visiblePageIndexes } from "../domain/layout";
-	import type { FitMode, LayoutMode } from "../domain/layout";
+	import type { FitMode, LayoutMode, ViewportSize } from "../domain/layout";
+import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 	import { ViewerController } from "../domain/viewer-controller.svelte";
 	import type { ViewerEvent } from "../domain/viewer-controller.svelte";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
-	import PageCanvas from "./PageCanvas.svelte";
-	import ViewerToolbar from "./ViewerToolbar.svelte";
+import type { PageRenderPlan } from "../domain/render-plan";
+	import ThumbnailPanel from "./ThumbnailPanel.svelte";
+	import ViewerStage from "./ViewerStage.svelte";
 	import ViewerStatusBar from "./ViewerStatusBar.svelte";
-	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";
+	import ViewerToolbar from "./ViewerToolbar.svelte";
+	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
+	import { captureZoomAnchor, restoreZoomAnchor } from "./reader-zoom-anchor";
 
 	interface Props {
 		src?: string;
@@ -38,7 +42,7 @@
 		backend?: DocumentBackend;
 	}
 
-	type DisplayedPage = { pageIndex: number; visual: PageVisual };
+	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
 
 	let {
 		src = $bindable(""),
@@ -50,25 +54,41 @@
 
 	const defaultBackend = new PdfiumBackend();
 	const controller = new ViewerController(dispatchControllerEvent);
+	const fullscreenController = new ReaderFullscreenController();
+	let shellElement = $state<HTMLElement>();
 	let pageArea = $state<HTMLElement>();
-	let viewport = $state({ width: 0, height: 0 });
+	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
 	let zoom = $state(1);
+	let thumbnailsOpen = $state(false);
+	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	let previousSource = "";
+	let pendingZoomAnchor: ZoomAnchor | null = null;
+	let zoomAnchorVersion = 0;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
-	let displayedPages = $derived.by((): DisplayedPage[] => {
-		const pageIndexes = visiblePageIndexes(controller.pageCount, page, resolvedLayout);
-		return pageIndexes.flatMap((pageIndex) => {
+	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
+	let displayedPages = $derived.by((): DisplayedPage[] =>
+		currentPages.flatMap((pageIndex) => {
 			const visual = controller.pageVisuals[pageIndex];
-			return visual === undefined ? [] : [{ pageIndex, visual }];
-		});
-	});
+			const plan = controller.pageRenderPlans[pageIndex];
+			return visual === undefined || plan === undefined ? [] : [{ pageIndex, visual, plan }];
+		}),
+	);
 
 	$effect(() => {
 		const source = src;
 		const activeBackend = backend ?? defaultBackend;
 		if (source !== previousSource) {
-			if (previousSource.length > 0) page = 1;
+			const hadPreviousSource = previousSource.length > 0;
 			previousSource = source;
+			untrack(() => {
+				if (hadPreviousSource) page = 1;
+				zoom = 1;
+				pendingZoomAnchor = null;
+				zoomAnchorVersion += 1;
+				thumbnailsOpen = false;
+				thumbnailPageIndexes = [];
+				controller.closeThumbnails();
+			});
 		}
 		if (source.trim().length === 0) {
 			untrack(() => void controller.load("", activeBackend));
@@ -94,6 +114,7 @@
 		const currentFit = parseFit(fit);
 		const currentViewport = viewport;
 		const currentZoom = zoom;
+		const devicePixelRatio = pageArea?.ownerDocument.defaultView?.devicePixelRatio ?? 1;
 		if (pageSource === null || pageCount < 1) return;
 		if (currentLayout === null || currentFit === null) {
 			untrack(() =>
@@ -108,39 +129,60 @@
 				fit: currentFit,
 				zoom: currentZoom,
 				viewport: currentViewport,
+				devicePixelRatio,
 			}),
 		);
 	});
 
+	$effect(() => {
+		const isOpen = thumbnailsOpen;
+		const pageIndexes = thumbnailPageIndexes;
+		if (isOpen) untrack(() => controller.setThumbnailPages(pageIndexes));
+		else untrack(() => controller.closeThumbnails());
+	});
+
 	onMount(() => {
-		if (pageArea === undefined) return;
-		const resizeObserver = new ResizeObserver(updateViewport);
-		resizeObserver.observe(pageArea);
-		updateViewport();
-		getViewerHost()?.dispatchEvent(
-			new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }),
-		);
+		if (pageArea === undefined || shellElement === undefined) return;
+		const host = getViewerHost();
+		const fullscreenButton = shellElement.querySelector<HTMLElement>("[data-control='fullscreen']");
+		const detachFullscreen =
+			host !== null && fullscreenButton !== null
+				? fullscreenController.attach(host, shellElement, fullscreenButton)
+				: () => undefined;
+		host?.dispatchEvent(new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }));
 		return () => {
-			resizeObserver.disconnect();
+			detachFullscreen();
 			controller.dispose();
 		};
 	});
 
 	function dispatchControllerEvent(event: ViewerEvent): void {
-		getViewerHost()?.dispatchEvent(
+		const host = getViewerHost();
+		host?.dispatchEvent(
 			new CustomEvent(event.type, {
 				detail: { ...event.detail },
 				bubbles: true,
 				composed: true,
 			}),
 		);
-		if (event.type === "pagechange") page = event.detail.page;
-	}
-
-	function updateViewport(): void {
-		if (pageArea === undefined) return;
-		const bounds = pageArea.getBoundingClientRect();
-		viewport = { width: Math.max(0, bounds.width - 48), height: Math.max(0, bounds.height - 48) };
+		if (event.type !== "pagechange") return;
+		page = event.detail.page;
+		const anchor = pendingZoomAnchor;
+		if (anchor === null) return;
+		if (!event.detail.visiblePages.includes(anchor.pageIndex + 1)) {
+			pendingZoomAnchor = null;
+			return;
+		}
+		pendingZoomAnchor = null;
+		const anchorVersion = zoomAnchorVersion;
+		void tick().then(() => {
+			requestAnimationFrame(() => {
+				const area = pageArea;
+				if (anchorVersion === zoomAnchorVersion && area?.isConnected === true) {
+					restoreZoomAnchor(area, anchor);
+				}
+			});
+		});
 	}
 
 	function getViewerHost(): HTMLElement | null {
@@ -150,12 +192,16 @@
 	}
 
 	function onPageChange(value: string): void {
+		clearZoomAnchor();
 		page = Number(value);
 	}
 
 	function onLayoutChange(value: string): void {
 		const parsedLayout = parseLayout(value);
-		if (parsedLayout !== null) layout = parsedLayout;
+		if (parsedLayout !== null) {
+			clearZoomAnchor();
+			layout = parsedLayout;
+		}
 	}
 
 	function onFitChange(value: FitMode): void {
@@ -163,6 +209,7 @@
 	}
 
 	function previousPage(): void {
+		clearZoomAnchor();
 		if (resolvedLayout === "single") {
 			page = Math.max(1, page - 1);
 			return;
@@ -172,12 +219,50 @@
 	}
 
 	function nextPage(): void {
+		clearZoomAnchor();
 		if (resolvedLayout === "single") {
 			page = Math.min(controller.pageCount, page + 1);
 			return;
 		}
 		const visible = visiblePageIndexes(controller.pageCount, page, resolvedLayout);
 		page = Math.min(controller.pageCount, (visible.at(-1) ?? 0) + 2);
+	}
+
+	function onZoomChange(value: number, point: GesturePoint): void {
+		setZoomAt(value, point);
+	}
+
+	function onResetZoom(point: GesturePoint): void {
+		setZoomAt(1, point);
+	}
+
+	function setZoomAt(value: number, point: GesturePoint): void {
+		if (pageArea !== undefined) pendingZoomAnchor = captureZoomAnchor(pageArea, point);
+		zoomAnchorVersion += 1;
+		zoom = Math.max(0.1, Math.min(8, value));
+	}
+
+	function clearZoomAnchor(): void {
+		pendingZoomAnchor = null;
+		zoomAnchorVersion += 1;
+	}
+
+	function updateThumbnailPages(pageIndexes: readonly number[]): void {
+		thumbnailPageIndexes = pageIndexes;
+	}
+
+	function selectThumbnail(selectedPage: number): void {
+		clearZoomAnchor();
+		page = selectedPage;
+		if ((getViewerHost()?.getBoundingClientRect().width ?? 0) <= 620) thumbnailsOpen = false;
+	}
+
+	function onViewportChange(nextViewport: ViewportSize): void {
+		viewport = nextViewport;
+	}
+
+	function onZoomGesture(value: number, center: GesturePoint): void {
+		setZoomAt(value, center);
 	}
 
 	function retry(): void {
@@ -194,10 +279,9 @@
 		if (currentLayout === null || currentFit === null) return;
 		controller.retryRender({ page, layout: currentLayout, fit: currentFit, zoom, viewport });
 	}
-
 </script>
 
-<div class="viewer-shell">
+<div class="viewer-shell" bind:this={shellElement}>
 	<ViewerToolbar
 		page={page}
 		pageCount={controller.pageCount}
@@ -207,47 +291,81 @@
 		enabled={controller.pageCount > 0}
 		canPrevious={page > 1}
 		canNext={page < controller.pageCount}
+		thumbnailsOpen={thumbnailsOpen}
+		fullscreen={fullscreenController.active}
 		onPageChange={onPageChange}
 		onLayoutChange={onLayoutChange}
 		onFitChange={onFitChange}
 		onPrevious={previousPage}
 		onNext={nextPage}
-		onZoomChange={(value) => (zoom = value)}
+		onZoomChange={onZoomChange}
+		onResetZoom={onResetZoom}
+		onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
+		onToggleFullscreen={() => void fullscreenController.toggle()}
 	/>
-	<section
-		class="page-area"
-		aria-label="パンフレット表示領域"
-		bind:this={pageArea}
-	>
-		{#if displayedPages.length > 0 && controller.phase !== "error"}
-			<div class="viewer-pages" class:spread={displayedPages.length === 2}>
-				{#each displayedPages as displayedPage (displayedPage.pageIndex)}
-					<div class="page-frame">
-						<PageCanvas
-							visual={displayedPage.visual}
-							label={`${displayedPage.pageIndex + 1}ページ`}
-						/>
-					</div>
-				{/each}
+	<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
+		{#if thumbnailsOpen}
+			<div class="thumbnail-slot">
+				<ThumbnailPanel
+					pageCount={controller.pageCount}
+					currentPages={currentPages}
+					visuals={controller.thumbnailVisuals}
+					onVisiblePagesChange={updateThumbnailPages}
+					onSelectPage={selectThumbnail}
+					onClose={() => (thumbnailsOpen = false)}
+				/>
 			</div>
-		{:else}
-			<ViewerStatusMessage
+		{/if}
+		<div class="stage-slot">
+			<ViewerStage
+				pages={displayedPages}
 				phase={controller.phase}
 				failure={controller.failure}
+				{zoom}
+				bind:pageArea
+				onViewportChange={onViewportChange}
+				onZoomGesture={onZoomGesture}
+				onPrevious={previousPage}
+				onNext={nextPage}
 				onRetry={retry}
 			/>
-		{/if}
-	</section>
+		</div>
+	</div>
 	<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
 </div>
 
 <style>
 	:host {
 		display: block;
+		width: 100%;
+		min-width: 0;
 		min-height: 22rem;
-		color: var(--pamphlet-viewer-text, #202532);
+		color: #e4e7e9;
 		font: 14px/1.5 system-ui, sans-serif;
-		color-scheme: light;
+		color-scheme: dark;
+		--pamphlet-viewer-text: #e4e7e9;
+		--pamphlet-viewer-border: #3b4148;
+		--pamphlet-viewer-stage: #191c20;
+		--pamphlet-viewer-panel: #24282e;
+		--pamphlet-viewer-toolbar: #24282e;
+		--pamphlet-viewer-accent: #a8c5bc;
+
+		&:fullscreen {
+			width: 100vw !important;
+			height: 100dvh !important;
+			min-height: 0 !important;
+			background: #191c20;
+		}
+	}
+
+	:host([data-fullscreen-fallback]) {
+		position: fixed;
+		z-index: 2147483000;
+		inset: 0;
+		width: 100vw !important;
+		height: 100dvh !important;
+		min-height: 0 !important;
+		background: #191c20;
 	}
 
 	.viewer-shell {
@@ -257,40 +375,61 @@
 		width: 100%;
 		height: 100%;
 		min-height: inherit;
+		container-name: pamphlet-reader;
+		container-type: inline-size;
 		overflow: hidden;
-		border: 1px solid var(--pamphlet-viewer-border, #d8dce5);
-		border-radius: 12px;
-		background: var(--pamphlet-viewer-surface, #fff);
+		border: 1px solid var(--pamphlet-viewer-border);
+		background: #191c20;
 
-		.page-area {
+		&:popover-open {
+			position: fixed;
+			inset: 0;
+			width: 100vw;
+			height: 100dvh;
+			max-width: none;
+			max-height: none;
+			margin: 0;
+			border: 0;
+			background: #191c20;
+		}
+
+		.reader-body {
+			box-sizing: border-box;
+			display: grid;
+			grid-template-columns: minmax(0, 1fr);
 			flex: 1 1 auto;
+			min-width: 0;
 			min-height: 0;
-			overflow: auto;
-			background: var(--pamphlet-viewer-canvas, #e9ecf2);
 
-			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #3157a4);
-				outline-offset: -3px;
+			&.thumbnails-open {
+				grid-template-columns: 208px minmax(0, 1fr);
 			}
 
-			.viewer-pages {
-				box-sizing: border-box;
+			.thumbnail-slot {
 				display: flex;
-				align-items: center;
-				justify-content: center;
-				gap: 16px;
-				width: max-content;
-				min-width: 100%;
-				min-height: 100%;
-				margin-inline: auto;
-				padding: 24px;
+				flex-direction: column;
+				min-width: 0;
+				min-height: 0;
+			}
 
-				.page-frame {
-					flex: 0 0 auto;
-					border: 1px solid var(--pamphlet-viewer-border, #d8dce5);
+			.stage-slot {
+				display: flex;
+				flex-direction: column;
+				min-width: 0;
+				min-height: 0;
+			}
+		}
+	}
+
+	@container pamphlet-reader (max-width: 620px) {
+		.viewer-shell {
+			.reader-body.thumbnails-open {
+				grid-template-columns: minmax(0, 1fr);
+
+				.stage-slot {
+					display: none;
 				}
 			}
 		}
-
 	}
 </style>

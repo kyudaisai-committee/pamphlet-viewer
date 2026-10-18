@@ -4,9 +4,10 @@
 	interface Props {
 		visual: PageVisual;
 		label: string;
+		decorative?: boolean;
 	}
 
-	let { visual, label }: Props = $props();
+	let { visual, label, decorative = false }: Props = $props();
 	let canvasElement = $state<HTMLCanvasElement>();
 
 	$effect(() => {
@@ -31,19 +32,29 @@
 	});
 </script>
 
-<div class="page-visual" role="img" aria-label={label}>
+<div
+	class="page-visual"
+	role={decorative ? undefined : "img"}
+	aria-label={decorative ? undefined : label}
+	aria-hidden={decorative ? "true" : undefined}
+>
 	<canvas class="page-canvas" aria-hidden="true" bind:this={canvasElement}></canvas>
 </div>
 
 <style>
 	.page-visual {
 		display: block;
+		width: 100%;
+		height: 100%;
 		background: #fff;
 		line-height: 0;
 
 		canvas {
 			display: block;
+			width: 100%;
+			height: 100%;
 			background: #fff;
+			object-fit: contain;
 		}
 	}
 </style>
