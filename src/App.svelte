@@ -1,5 +1,5 @@
 <script lang="ts">
-	import "@/lib/entry";
+	import "./lib/entry";
 
 	function readSourceFromQuery(): string {
 		return new URLSearchParams(window.location.search).get("src") ?? "";

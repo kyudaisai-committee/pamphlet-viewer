@@ -41,12 +41,11 @@ test("emits a self-hosted worker, external WASM asset, and public declarations",
 	expect(entry).not.toContain("data:application/wasm");
 	expect(entry).not.toContain("https://cdn.jsdelivr.net");
 	expect(entry).not.toContain("https://unpkg.com");
-	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("types/entry.d.ts");
-	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("types/public-api.d.ts");
+	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("pamphlet-viewer.d.ts");
 	expect(files.some((file) => file.includes("pdfium.worker-") && file.endsWith(".ts"))).toBe(false);
 	expect(packageManifest.private).toBe(true);
 	expect(packageManifest.exports["."]).toEqual({
-		types: "./dist/library/types/entry.d.ts",
+		types: "./dist/library/pamphlet-viewer.d.ts",
 		import: "./dist/library/pamphlet-viewer.js",
 	});
 

@@ -5,14 +5,14 @@
 	"type": "module",
 	"exports": {
 		".": {
-			"types": "./dist/library/types/entry.d.ts",
+			"types": "./dist/library/pamphlet-viewer.d.ts",
 			"import": "./dist/library/pamphlet-viewer.js"
 		}
 	},
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build && pnpm build:library",
-		"build:library": "vite build --config vite.library.config.ts && tsc -p tsconfig.library.json",
+		"build:library": "vite build --config vite.library.config.ts",
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
 		"format": "oxfmt",

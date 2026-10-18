@@ -12,7 +12,7 @@ pnpm verify
 
 `pnpm build:library`は`dist/library/`に配布用ES module、型定義、PDFium WorkerとWASMを出力します。WorkerとWASMは別ファイルなので、`dist/library/`の構成を保って同じ配信先へ配置してください。ビルド時に外部CDNからWorkerやWASMを取得しません。`pnpm build`はデモとライブラリの両方をビルドします。
 
-package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/types/entry.d.ts`を指します。リポジトリのpackageはprivateのままで、npm公開は行いません。
+package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`を指します。リポジトリのpackageはprivateのままで、npm公開は行いません。
 
 ## HTMLへの埋め込み
 
