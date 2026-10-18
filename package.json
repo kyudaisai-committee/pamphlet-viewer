@@ -24,27 +24,27 @@
 	},
 	"dependencies": {
 		"@embedpdf/pdfium": "2.15.1",
-		"@lucide/svelte": "^1.58.0"
+		"@lucide/svelte": "^1.59.0"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
-		"@sveltejs/vite-plugin-svelte": "^7.3.0",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^24.13.3",
+		"@types/node": "^24.19.2",
 		"@vitest/browser-playwright": "^5.0.5",
 		"cspell": "^10.4.0",
 		"eslint": "^10.13.0",
-		"eslint-plugin-svelte": "^3.19.0",
-		"globals": "^17.6.0",
+		"eslint-plugin-svelte": "^3.23.1",
+		"globals": "^17.13.0",
 		"jiti": "^2.7.0",
 		"lefthook": "^2.2.2",
 		"oxfmt": "^0.73.0",
 		"rolldown-plugin-dts": "^0.28.8",
-		"svelte": "^5.57.0",
-		"svelte-check": "^4.7.6",
-		"typescript": "~6.0.2",
-		"typescript-eslint": "^8.60.1",
-		"vite": "^8.3.0",
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.7.7",
+		"typescript": "~6.0.3",
+		"typescript-eslint": "^8.71.2",
+		"vite": "^8.3.4",
 		"vitest": "^5.0.5"
 	},
 	"devEngines": {
