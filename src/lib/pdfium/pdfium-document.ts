@@ -29,6 +29,7 @@ export class PdfiumDocumentSession {
 	#availability: PdfiumAvailabilitySession | null = null;
 	#fileLength: number | null = null;
 	#disposed = false;
+	#poisoned = false;
 
 	private constructor(
 		private readonly loader: PdfRangeLoader,
@@ -47,11 +48,11 @@ export class PdfiumDocumentSession {
 			await session.#initialize();
 			return session;
 		} catch (error) {
+			session.dispose();
 			const fatal =
 				session.isPoisoned ||
 				error instanceof PdfiumAvailabilityFatalError ||
 				error instanceof WebAssembly.RuntimeError;
-			session.dispose();
 			if (fatal) throw new PdfiumFatalError(error);
 			throw error;
 		}
@@ -66,7 +67,7 @@ export class PdfiumDocumentSession {
 	}
 
 	get isPoisoned(): boolean {
-		return this.#availability?.isPoisoned ?? false;
+		return this.#poisoned || this.#availability?.isPoisoned === true;
 	}
 
 	async getPageSize(pageIndex: number): Promise<PageSize> {
@@ -90,7 +91,10 @@ export class PdfiumDocumentSession {
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
-		this.#availability?.dispose();
+		const availability = this.#availability;
+		this.#poisoned = this.#poisoned || availability?.isPoisoned === true;
+		availability?.dispose();
+		this.#poisoned = this.#poisoned || availability?.isPoisoned === true;
 		this.#availability = null;
 		this.loader.dispose();
 		this.#fileLength = null;
