@@ -1,4 +1,5 @@
 import type { PageSource, PageVisual } from "../document/page-source";
+import { PageSourceUnavailableError } from "../document/page-source";
 
 export const MAX_THUMBNAIL_ENTRIES = 24;
 export const MAX_THUMBNAIL_PIXEL_BYTES = 32 * 1024 * 1024;
@@ -20,11 +21,13 @@ interface ThumbnailTask {
 export type ThumbnailRenderer = (pageIndex: number, scale: number) => Promise<PageVisual>;
 export type ThumbnailChangeListener = (entries: readonly ThumbnailEntry[]) => void;
 export type ThumbnailDemandListener = () => void;
+export type ThumbnailSourceUnavailableListener = () => void;
 
 export class ThumbnailScheduler {
 	#source: PageSource | null = null;
 	#sourceGeneration = 0;
 	#demandGeneration = 0;
+	#unavailableSourceGeneration: number | null = null;
 	#desired = new Set<number>();
 	#queue: ThumbnailTask[] = [];
 	#runningPagesBySource = new Map<number, Set<number>>();
@@ -38,6 +41,7 @@ export class ThumbnailScheduler {
 		private readonly onDemandChange: ThumbnailDemandListener = () => undefined,
 		private readonly maxEntries = MAX_THUMBNAIL_ENTRIES,
 		private readonly maxPixelBytes = MAX_THUMBNAIL_PIXEL_BYTES,
+		private readonly onSourceUnavailable: ThumbnailSourceUnavailableListener = () => undefined,
 	) {}
 
 	get entries(): readonly ThumbnailEntry[] {
@@ -51,6 +55,7 @@ export class ThumbnailScheduler {
 		}
 		this.#sourceGeneration += 1;
 		this.#demandGeneration += 1;
+		this.#unavailableSourceGeneration = null;
 		this.#source = source;
 		this.#desired.clear();
 		this.#queue = [];
@@ -93,6 +98,7 @@ export class ThumbnailScheduler {
 	}
 
 	#enqueueDesiredPages(): void {
+		if (this.#unavailableSourceGeneration === this.#sourceGeneration) return;
 		const runningPages = this.#runningPagesBySource.get(this.#sourceGeneration);
 		for (const pageIndex of this.#desired) {
 			if (
@@ -153,8 +159,18 @@ export class ThumbnailScheduler {
 						visual,
 						pixelBytes: visual.width * visual.height * 4,
 					});
-				} catch {
-					// A missing thumbnail is retried only when it becomes visible again.
+				} catch (error) {
+					if (
+						error instanceof PageSourceUnavailableError &&
+						this.#isSourceCurrent(sourceGeneration, source)
+					) {
+						this.#unavailableSourceGeneration = sourceGeneration;
+						this.#desired.clear();
+						this.#queue = [];
+						this.onDemandChange();
+						this.onSourceUnavailable();
+					}
+					// Ordinary thumbnail failures are retried only when they become visible again.
 				} finally {
 					runningPages.delete(task.pageIndex);
 					if (sourceGeneration === this.#sourceGeneration && source === this.#source) {
@@ -183,18 +199,21 @@ export class ThumbnailScheduler {
 
 	#isCurrent(task: ThumbnailTask, source: PageSource): boolean {
 		return (
-			task.sourceGeneration === this.#sourceGeneration &&
+			this.#isSourceCurrent(task.sourceGeneration, source) &&
 			task.demandGeneration === this.#demandGeneration &&
-			source === this.#source &&
 			this.#desired.has(task.pageIndex)
 		);
+	}
+
+	#isSourceCurrent(sourceGeneration: number, source: PageSource): boolean {
+		return sourceGeneration === this.#sourceGeneration && source === this.#source;
 	}
 
 	#enqueueAfterInvalidation(task: ThumbnailTask, source: PageSource): void {
 		if (
 			task.demandGeneration === this.#demandGeneration ||
-			task.sourceGeneration !== this.#sourceGeneration ||
-			source !== this.#source ||
+			!this.#isSourceCurrent(task.sourceGeneration, source) ||
+			this.#unavailableSourceGeneration === task.sourceGeneration ||
 			!this.#desired.has(task.pageIndex) ||
 			this.#cache.has(task.pageIndex) ||
 			this.#queue.some((queuedTask) => queuedTask.pageIndex === task.pageIndex)

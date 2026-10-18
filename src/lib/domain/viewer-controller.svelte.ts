@@ -9,7 +9,11 @@ import type { FitMode, LayoutMode, ViewportSize } from "./layout";
 import { PageRenderQueue } from "./page-render-queue";
 import { createPageRenderPlan } from "./render-plan";
 import type { PageRenderPlan } from "./render-plan";
-import { ThumbnailScheduler } from "./thumbnail-scheduler";
+import {
+	MAX_THUMBNAIL_ENTRIES,
+	MAX_THUMBNAIL_PIXEL_BYTES,
+	ThumbnailScheduler,
+} from "./thumbnail-scheduler";
 import type { ThumbnailEntry } from "./thumbnail-scheduler";
 
 export type ViewerPhase = "empty" | "loading" | "ready" | "error";
@@ -79,7 +83,14 @@ export class ViewerController {
 			},
 			(entries) => this.#updateThumbnailVisuals(entries),
 			() => this.#renderQueue?.cancelQueued("thumbnail"),
+			MAX_THUMBNAIL_ENTRIES,
+			MAX_THUMBNAIL_PIXEL_BYTES,
+			() => this.#handleSourceUnavailable(),
 		);
+	}
+
+	get sourceUnavailable(): boolean {
+		return this.#sourceUnavailable;
 	}
 
 	async load(url: string, backend: DocumentBackend): Promise<void> {
@@ -149,7 +160,7 @@ export class ViewerController {
 	}
 
 	requestRender(input: RenderInput): number | null {
-		if (this.pageSource === null) return null;
+		if (this.pageSource === null || this.#sourceUnavailable) return null;
 		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0) return null;
 		if (!Number.isSafeInteger(input.page) || input.page < 1 || input.page > this.pageCount) {
 			this.#setFailure({
@@ -304,22 +315,26 @@ export class ViewerController {
 			}
 		} catch (error) {
 			if (!this.#isCurrent(request, source)) return;
-			this.#sourceUnavailable = error instanceof PageSourceUnavailableError;
-			this.#lastRenderKey = "";
-			this.#failedRenderKey = [
-				request.page,
-				request.layout,
-				request.fit,
-				request.zoom,
-				request.viewport.width,
-				request.viewport.height,
-				request.devicePixelRatio ?? 1,
-			].join(":");
-			this.#setFailure({
-				code: "render-failed",
-				message: "ページを表示できませんでした。もう一度お試しください。",
-				retryable: true,
-			});
+			if (error instanceof PageSourceUnavailableError) {
+				this.#handleSourceUnavailable();
+			} else {
+				this.#sourceUnavailable = false;
+				this.#lastRenderKey = "";
+				this.#failedRenderKey = [
+					request.page,
+					request.layout,
+					request.fit,
+					request.zoom,
+					request.viewport.width,
+					request.viewport.height,
+					request.devicePixelRatio ?? 1,
+				].join(":");
+				this.#setFailure({
+					code: "render-failed",
+					message: "ページを表示できませんでした。もう一度お試しください。",
+					retryable: true,
+				});
+			}
 		}
 	}
 
@@ -362,6 +377,20 @@ export class ViewerController {
 		const nextVisuals: Record<number, PageVisual> = {};
 		for (const entry of entries) nextVisuals[entry.pageIndex] = entry.visual;
 		this.thumbnailVisuals = nextVisuals;
+	}
+
+	#handleSourceUnavailable(): void {
+		this.#sourceUnavailable = true;
+		this.#renderId += 1;
+		this.#pendingRender = null;
+		this.#lastRenderKey = "";
+		this.#failedRenderKey = "";
+		this.#renderQueue?.cancelQueued("visible");
+		this.#setFailure({
+			code: "render-failed",
+			message: "ページを表示できませんでした。もう一度お試しください。",
+			retryable: true,
+		});
 	}
 
 	#setFailure(failure: ViewerFailure): void {

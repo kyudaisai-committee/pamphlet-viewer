@@ -251,9 +251,10 @@ describe("ViewerController", () => {
 
 	it("reopens an unavailable source and preserves the render input on retry", async () => {
 		const disposeUnavailableSource = vi.fn();
-		const unavailableSource = createPageSource(2, () => {
+		const unavailableRender = vi.fn(() => {
 			throw new PageSourceUnavailableError("The PDF worker cannot be reused.");
 		});
+		const unavailableSource = createPageSource(2, unavailableRender);
 		unavailableSource.dispose = disposeUnavailableSource;
 		const recoveredRender = vi.fn(async () => pixelVisual());
 		const recoveredSource: PageSource = {
@@ -284,6 +285,10 @@ describe("ViewerController", () => {
 		await controller.load("brochure.pdf", backend);
 		controller.requestRender(input);
 		await vi.waitFor(() => expect(controller.failure?.code).toBe("render-failed"));
+		controller.requestRender({ ...input, zoom: 2 });
+		expect(controller.phase).toBe("error");
+		expect(controller.sourceUnavailable).toBe(true);
+		expect(unavailableRender).toHaveBeenCalledOnce();
 		controller.retryRender(input);
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
 

@@ -187,6 +187,11 @@
 	});
 
 	function dispatchControllerEvent(event: ViewerEvent): void {
+		if (event.type === "error" && controller.sourceUnavailable) {
+			thumbnailsOpen = false;
+			thumbnailPageIndexes = [];
+			controller.closeThumbnails();
+		}
 		const host = getViewerHost();
 		host?.dispatchEvent(
 			new CustomEvent(event.type, {
