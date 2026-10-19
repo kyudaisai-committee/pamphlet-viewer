@@ -5,6 +5,15 @@ import type { ViewerFailure } from "./domain/viewer-controller.svelte";
 export type { FitMode, LayoutMode, ViewerFailure, DocumentBackend, PageSource, PageVisual };
 export { PageSourceUnavailableError } from "./document/page-source";
 
+export interface PamphletChapter {
+	title: string;
+	page: number;
+}
+
+export interface PamphletViewerConfig {
+	chapters?: readonly PamphletChapter[];
+}
+
 export interface PamphletViewerEventMap {
 	ready: CustomEvent<undefined>;
 	documentload: CustomEvent<{ pageCount: number }>;
@@ -18,6 +27,7 @@ export interface PamphletViewerElement extends HTMLElement {
 	layout: LayoutMode;
 	fit: FitMode;
 	backend?: DocumentBackend;
+	config?: PamphletViewerConfig;
 	addEventListener<K extends keyof PamphletViewerEventMap>(
 		type: K,
 		listener: (this: PamphletViewerElement, event: PamphletViewerEventMap[K]) => void,
