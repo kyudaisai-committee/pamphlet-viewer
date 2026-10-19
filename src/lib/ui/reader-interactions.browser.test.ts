@@ -5,8 +5,11 @@ import type { DocumentBackend, PageSource, PageVisual } from "../document/page-s
 import type { PamphletViewerElement } from "../public-api";
 import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 
+const BOOKMARKS_STORAGE_KEY = "pamphlet-viewer.bookmarks.v1";
+
 afterEach(async () => {
 	document.body.replaceChildren();
+	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
 	await browserPage.viewport(1280, 900);
 });
 
@@ -81,6 +84,162 @@ test("navigates to validated configured chapters", async () => {
 	await expect.poll(() => chapterSelect.value).toBe("7");
 	element.page = 9;
 	await expect.poll(() => chapterSelect.value).toBe("7");
+});
+
+test("persists bookmarks per document and restores the saved page list", async () => {
+	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
+	await import("../entry");
+	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
+	element.layout = "single";
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	const bookmarkButton = shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
+	if (shadowRoot === null || bookmarkButton === null || bookmarkButton === undefined) {
+		throw new Error("The bookmark controls were not rendered.");
+	}
+	expect(bookmarkButton.disabled).toBe(false);
+	bookmarkButton.click();
+	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
+	expect(
+		shadowRoot.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')?.options[1]
+			?.value,
+	).toBe("1");
+
+	element.page = 3;
+	await expect.poll(() => element.page).toBe(3);
+	bookmarkButton.click();
+	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
+
+	const bookmarkSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'[aria-label="ブックマーク一覧"]',
+	);
+	if (bookmarkSelect === null) throw new Error("The saved page list was not rendered.");
+	bookmarkSelect.value = "1";
+	bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	await expect.poll(() => element.page).toBe(1);
+
+	const secondDocumentPage = waitForPageChange(element);
+	element.src = "./different-reader.pdf";
+	await secondDocumentPage;
+	expect(shadowRoot.querySelector('[aria-label="ブックマーク一覧"]')).toBeNull();
+
+	const restoredPage = waitForPageChange(element);
+	element.src = "./reader-test.pdf";
+	await restoredPage;
+	const restoredOptions = shadowRoot.querySelector<HTMLSelectElement>(
+		'[aria-label="ブックマーク一覧"]',
+	)?.options;
+	expect(Array.from(restoredOptions ?? [], (option) => option.value)).toEqual(["", "1", "3"]);
+
+	element.page = 3;
+	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
+	bookmarkButton.click();
+	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("false");
+	expect(
+		Array.from(
+			shadowRoot.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')?.options ?? [],
+			(option) => option.value,
+		),
+	).toEqual(["", "1"]);
+});
+
+test("synchronizes bookmarks between viewer instances and storage events", async () => {
+	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
+	await import("../entry");
+	const backend = createBackend(5);
+	const first = createViewer({ width: 840, height: 620 }, backend);
+	const second = createViewer({ width: 840, height: 620 }, backend);
+	first.layout = "single";
+	second.layout = "single";
+	const firstPage = waitForPageChange(first);
+	const secondPage = waitForPageChange(second);
+	document.body.append(first, second);
+	await Promise.all([firstPage, secondPage]);
+
+	const firstButton = first.shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
+	const secondButton = second.shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
+	if (
+		firstButton === null ||
+		firstButton === undefined ||
+		secondButton === null ||
+		secondButton === undefined
+	) {
+		throw new Error("The bookmark controls were not rendered for both viewers.");
+	}
+	firstButton.click();
+	await expect.poll(() => secondButton.getAttribute("aria-pressed")).toBe("true");
+
+	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
+	const newValue = JSON.stringify({ [documentKey]: [2, 4] });
+	localStorage.setItem(BOOKMARKS_STORAGE_KEY, newValue);
+	window.dispatchEvent(new StorageEvent("storage", { key: BOOKMARKS_STORAGE_KEY, newValue }));
+	await expect
+		.poll(() =>
+			Array.from(
+				second.shadowRoot?.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')
+					?.options ?? [],
+				(option) => option.value,
+			),
+		)
+		.toEqual(["", "2", "4"]);
+});
+
+test("keeps chapter and saved-page navigation usable on a narrow host", async () => {
+	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
+	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3, 8] }));
+	await import("../entry");
+	const element = createViewer({ width: 390, height: 620 }, createBackend(12));
+	element.layout = "single";
+	element.config = {
+		chapters: [
+			{ title: "前半", page: 1 },
+			{ title: "後半", page: 7 },
+		],
+	};
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
+	const compactNavigation = shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
+	if (
+		toolbar === null ||
+		toolbar === undefined ||
+		compactNavigation === null ||
+		compactNavigation === undefined
+	) {
+		throw new Error("The narrow reader navigation controls were not rendered.");
+	}
+	await expect.poll(() => toolbar.getBoundingClientRect().height).toBeLessThanOrEqual(120);
+	compactNavigation.querySelector<HTMLElement>("summary")?.click();
+	const chapterSelect = compactNavigation.querySelector<HTMLSelectElement>(
+		'select[aria-label="章へ移動"]',
+	);
+	const bookmarkSelect = compactNavigation.querySelector<HTMLSelectElement>(
+		'select[aria-label="ブックマーク一覧"]',
+	);
+	if (chapterSelect === null || bookmarkSelect === null) {
+		throw new Error("The compact chapter and bookmark lists were not rendered.");
+	}
+	expect(chapterSelect.getBoundingClientRect().right).toBeLessThanOrEqual(
+		toolbar.getBoundingClientRect().right,
+	);
+	expect(bookmarkSelect.getBoundingClientRect().right).toBeLessThanOrEqual(
+		toolbar.getBoundingClientRect().right,
+	);
+	chapterSelect.value = "7";
+	chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	await expect.poll(() => element.page).toBe(7);
+	expect(compactNavigation.open).toBe(false);
+	compactNavigation.querySelector<HTMLElement>("summary")?.click();
+	bookmarkSelect.value = "8";
+	bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	await expect.poll(() => element.page).toBe(8);
+	expect(compactNavigation.open).toBe(false);
 });
 
 test("uses the host width for mobile thumbnail mode and closes after selection", async () => {

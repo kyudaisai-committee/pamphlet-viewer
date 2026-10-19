@@ -26,6 +26,7 @@
 	import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 	import { ViewerController } from "../domain/viewer-controller.svelte";
 	import type { RenderInput, ViewerEvent } from "../domain/viewer-controller.svelte";
+import { ViewerBookmarks } from "../domain/viewer-bookmarks.svelte";
 import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
 	import type { PageRenderPlan } from "../domain/render-plan";
@@ -66,6 +67,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	let zoom = $state(1);
 	let thumbnailsOpen = $state(false);
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
+	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
 	let pendingZoomAnchor: ZoomAnchor | null = null;
 	let pendingZoomAnchorRequestId: number | null = null;
@@ -74,6 +76,15 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
 	let chapters = $derived(resolveChapters(config, controller.pageCount));
 	let currentChapter = $derived(findCurrentChapter(chapters, page));
+	let resolvedSource = $derived(
+		src.trim().length === 0
+			? null
+			: resolveDocumentSource(src, pageArea?.ownerDocument.baseURI ?? document.baseURI),
+	);
+	let bookmarksEnabled = $derived(
+		controller.phase === "ready" && controller.pageCount > 0 && resolvedSource !== null,
+	);
+	let currentPageBookmarked = $derived(bookmarkController.pages.includes(page));
 	let displayedPages = $derived.by((): DisplayedPage[] =>
 		currentPages.flatMap((pageIndex) => {
 			const visual = controller.pageVisuals[pageIndex];
@@ -113,6 +124,13 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			return;
 		}
 		untrack(() => void controller.load(resolvedSource, activeBackend));
+	});
+
+	$effect(() => {
+		const documentKey = resolvedSource;
+		const pageCount = controller.pageCount;
+		const enabled = bookmarksEnabled;
+		return bookmarkController.connect(documentKey, pageCount, enabled);
 	});
 
 	$effect(() => {
@@ -228,6 +246,22 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		page = chapterPage;
 	}
 
+	function toggleCurrentBookmark(): void {
+		bookmarkController.toggleCurrentPage(
+			resolvedSource,
+			page,
+			controller.pageCount,
+			bookmarksEnabled,
+		);
+	}
+
+	function selectBookmark(value: string): void {
+		const bookmarkedPage = bookmarkController.findPage(value, bookmarksEnabled);
+		if (bookmarkedPage === undefined) return;
+		clearZoomAnchor();
+		page = bookmarkedPage;
+	}
+
 	function onLayoutChange(value: string): void {
 		const parsedLayout = parseLayout(value);
 		if (parsedLayout !== null) {
@@ -341,6 +375,9 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		pageCount={controller.pageCount}
 		{chapters}
 		currentChapterPage={currentChapter?.page}
+		bookmarkPages={bookmarkController.pages}
+		bookmarked={currentPageBookmarked}
+		bookmarkEnabled={bookmarksEnabled}
 		layout={parseLayout(layout) ?? "auto"}
 		fit={parseFit(fit) ?? "page"}
 		zoom={zoom}
@@ -351,6 +388,8 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		fullscreen={fullscreenController.active}
 		onPageChange={onPageChange}
 		onChapterChange={onChapterChange}
+		onToggleBookmark={toggleCurrentBookmark}
+		onSelectBookmark={selectBookmark}
 		onLayoutChange={onLayoutChange}
 		onFitChange={onFitChange}
 		onPrevious={previousPage}
