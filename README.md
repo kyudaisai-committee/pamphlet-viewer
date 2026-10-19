@@ -2,27 +2,9 @@
 
 `@embedpdf/pdfium`（EmbedPDF）を使ってPDFを表示する、Svelte 5製のWeb Componentです。ES moduleとして配布し、Svelte以外のHTMLページにも埋め込めます。PDFはHTTP Rangeで必要な範囲を取得します。
 
-## 開発とビルド
+## 配布物の取得
 
-```sh
-pnpm dev
-pnpm build:library
-pnpm verify
-```
-
-`pnpm build:library`は`dist/library/`に配布用ES module、型定義、PDFium WorkerとWASMを出力します。WorkerとWASMは別ファイルなので、`dist/library/`の構成を保って同じ配信先へ配置してください。ビルド時に外部CDNからWorkerやWASMを取得しません。`pnpm build`はデモとライブラリの両方をビルドします。
-
-package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`を指します。リポジトリのpackageはprivateのままで、npm公開は行いません。
-
-## GitHub Releases
-
-リリース対象の変更を含むPull Requestでは、`pnpm changeset`を実行して変更内容と`patch`・`minor`・`major`のいずれかを選び、生成された`.changeset/`のファイルをコミットしてください。`main`へのマージ後にGitHub Actionsがバージョン更新Pull Requestを作成します。そのPull Requestをマージすると、既存CIを再利用して検査とビルドを行い、ビルド済みのライブラリからGitHub Releaseを作成します。タグは`v<version>`、リリースノートはGitHubが生成します。
-
-初回のminor変更はalphaとして出し、バージョンを`0.1.0-alpha.0`にします。`0.0.0`の間はReleaseを作成しません。alpha版を継続する間はChangesetsのpre modeを維持し、安定版へ移行するときは`pnpm exec changeset pre exit`で終了してから、生成されたバージョン更新Pull Requestをマージしてください。
-
-バージョン更新Pull Requestの作成には、リポジトリ設定の **Settings → Actions → General → Workflow permissions** で **Allow GitHub Actions to create and approve pull requests** を有効にしてください。
-
-GitHub Releaseの`pamphlet-viewer-<version>.tgz`をダウンロードして展開すると、`dist/library/`の中身がアーカイブのルートにあります。JavaScript、型定義、Worker、WASM、chunks、assetsを相対構造のまま同じ配信先へ配置してください。パッケージはprivateのままなので、npmからはインストールできません。
+[GitHub Releases](https://github.com/kyudaisai-committee/pamphlet-viewer/releases)から`pamphlet-viewer-<version>.tgz`をダウンロードして展開してください。アーカイブのルートにJavaScript、型定義、Worker、WASM、chunks、assetsが含まれます。相対パスの構成を保ったまま、すべてを同じ配信先へ配置してください。
 
 ## HTMLへの埋め込み
 
@@ -109,3 +91,13 @@ HTMLページ、ES module、Worker、WASMを別originから配信する場合、
 - 1ページの描画出力は最大8,388,608 pixel（約32MiB）です。ズーム倍率は最大800%です。
 
 これらの制限を超える文書はエラーになることがあります。大きなPDFへの対応は無制限ではなく、代表的な文書と配信環境でページ数、メモリ、初回表示時間を測定して判断してください。
+
+## 開発とビルド
+
+```sh
+pnpm dev
+pnpm build:library
+pnpm verify
+```
+
+`pnpm build:library`は`dist/library/`に配布用ES module、型定義、PDFium WorkerとWASMを出力します。WorkerとWASMは別ファイルなので、`dist/library/`の構成を保って同じ配信先へ配置してください。ビルド時に外部CDNからWorkerやWASMを取得しません。package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`を指します。`pnpm build`はデモとライブラリの両方をビルドします。
