@@ -47,6 +47,42 @@ test("keeps the thumbnail list virtual and selects a distant page", async () => 
 		.not.toBeNull();
 });
 
+test("navigates to validated configured chapters", async () => {
+	await import("../entry");
+	const element = createViewer({ width: 840, height: 620 }, createBackend(12));
+	element.config = {
+		chapters: [
+			{ title: "後半", page: 7 },
+			{ title: "前半", page: 2 },
+			{ title: "無効", page: 20 },
+		],
+	};
+	element.layout = "single";
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	const chapterSelect = shadowRoot?.querySelector<HTMLSelectElement>(
+		'select[aria-label="章へ移動"]',
+	);
+	if (chapterSelect === null || chapterSelect === undefined) {
+		throw new Error("The configured chapter list was not rendered.");
+	}
+	expect(Array.from(chapterSelect.options, (option) => option.textContent)).toEqual([
+		"章を選択",
+		"前半",
+		"後半",
+	]);
+
+	chapterSelect.value = "7";
+	chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	await expect.poll(() => element.page).toBe(7);
+	await expect.poll(() => chapterSelect.value).toBe("7");
+	element.page = 9;
+	await expect.poll(() => chapterSelect.value).toBe("7");
+});
+
 test("uses the host width for mobile thumbnail mode and closes after selection", async () => {
 	await import("../entry");
 	const element = createViewer({ width: 390, height: 620 }, createBackend(24));

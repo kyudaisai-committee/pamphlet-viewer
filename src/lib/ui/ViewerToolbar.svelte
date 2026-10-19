@@ -2,12 +2,15 @@
 	import { ChevronLeftIcon, ChevronRightIcon, PanelLeftIcon } from "@lucide/svelte";
 
 	import type { FitMode, LayoutMode } from "../domain/layout";
+import type { PamphletChapter } from "@/lib/public-api";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
 	import ZoomControls from "./ZoomControls.svelte";
 
 	interface Props {
 		page: number;
 		pageCount: number;
+		chapters: readonly PamphletChapter[];
+		currentChapterPage?: number;
 		layout: LayoutMode;
 		fit: FitMode;
 		zoom: number;
@@ -17,6 +20,7 @@
 		thumbnailsOpen: boolean;
 		fullscreen: boolean;
 		onPageChange(value: string): void;
+		onChapterChange(value: string): void;
 		onLayoutChange(value: string): void;
 		onFitChange(value: FitMode): void;
 		onPrevious(): void;
@@ -30,6 +34,8 @@
 	let {
 		page,
 		pageCount,
+		chapters,
+		currentChapterPage,
 		layout,
 		fit,
 		zoom,
@@ -39,6 +45,7 @@
 		thumbnailsOpen,
 		fullscreen,
 		onPageChange,
+		onChapterChange,
 		onLayoutChange,
 		onFitChange,
 		onPrevious,
@@ -115,6 +122,22 @@
 				<ChevronRightIcon size={18} aria-hidden="true" />
 			</button>
 		</div>
+		{#if chapters.length > 0}
+			<label class="chapter-control">
+				<span>章</span>
+				<select
+					aria-label="章へ移動"
+					value={currentChapterPage ?? ""}
+					disabled={!enabled}
+					onchange={(event) => onChapterChange(event.currentTarget.value)}
+				>
+					<option value="">章を選択</option>
+					{#each chapters as chapter (chapter.page)}
+						<option value={chapter.page}>{chapter.title}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 
 		<ZoomControls {zoom} {enabled} {onZoomChange} {onResetZoom} />
 		<ViewerViewControls
@@ -204,6 +227,27 @@
 					text-align: center;
 				}
 			}
+
+			.chapter-control {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				min-width: 0;
+				white-space: nowrap;
+
+				select {
+					box-sizing: border-box;
+					max-width: min(260px, 30vw);
+					min-height: 32px;
+					padding: 4px 24px 4px 8px;
+					border: 1px solid var(--pamphlet-viewer-border, #454b52);
+					border-radius: 3px;
+					background: #191c20;
+					color: inherit;
+					font: inherit;
+					text-overflow: ellipsis;
+				}
+			}
 		}
 	}
 
@@ -232,6 +276,17 @@
 							width: 38px;
 							min-height: 44px;
 						}
+					}
+				}
+
+				.chapter-control {
+					grid-column: 2;
+					justify-self: end;
+					max-width: 100%;
+
+					select {
+						max-width: min(180px, 46vw);
+						min-height: 44px;
 					}
 				}
 			}

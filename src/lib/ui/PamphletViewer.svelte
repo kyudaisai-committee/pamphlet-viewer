@@ -6,6 +6,7 @@
 			layout: { type: "String", reflect: true },
 			fit: { type: "String", reflect: true },
 			backend: { attribute: "data-backend", type: "Object" },
+			config: { type: "Object" },
 		},
 		extend: extendViewerElement,
 	}}
@@ -25,8 +26,10 @@
 	import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 	import { ViewerController } from "../domain/viewer-controller.svelte";
 	import type { RenderInput, ViewerEvent } from "../domain/viewer-controller.svelte";
+import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
 	import type { PageRenderPlan } from "../domain/render-plan";
+import type { PamphletViewerConfig } from "@/lib/public-api";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
 	import ViewerStatusBar from "./ViewerStatusBar.svelte";
@@ -40,6 +43,7 @@
 		layout?: LayoutMode;
 		fit?: FitMode;
 		backend?: DocumentBackend;
+		config?: PamphletViewerConfig;
 	}
 
 	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
@@ -50,6 +54,7 @@
 		layout = $bindable<LayoutMode>("auto"),
 		fit = $bindable<FitMode>("page"),
 		backend,
+		config,
 	}: Props = $props();
 
 	const defaultBackend = new PdfiumBackend();
@@ -67,6 +72,8 @@
 	let zoomAnchorVersion = 0;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
+	let chapters = $derived(resolveChapters(config, controller.pageCount));
+	let currentChapter = $derived(findCurrentChapter(chapters, page));
 	let displayedPages = $derived.by((): DisplayedPage[] =>
 		currentPages.flatMap((pageIndex) => {
 			const visual = controller.pageVisuals[pageIndex];
@@ -214,6 +221,13 @@
 		page = Number(value);
 	}
 
+	function onChapterChange(value: string): void {
+		const chapterPage = chapters.find((chapter) => String(chapter.page) === value)?.page;
+		if (chapterPage === undefined) return;
+		clearZoomAnchor();
+		page = chapterPage;
+	}
+
 	function onLayoutChange(value: string): void {
 		const parsedLayout = parseLayout(value);
 		if (parsedLayout !== null) {
@@ -325,6 +339,8 @@
 	<ViewerToolbar
 		page={page}
 		pageCount={controller.pageCount}
+		{chapters}
+		currentChapterPage={currentChapter?.page}
 		layout={parseLayout(layout) ?? "auto"}
 		fit={parseFit(fit) ?? "page"}
 		zoom={zoom}
@@ -334,6 +350,7 @@
 		thumbnailsOpen={thumbnailsOpen}
 		fullscreen={fullscreenController.active}
 		onPageChange={onPageChange}
+		onChapterChange={onChapterChange}
 		onLayoutChange={onLayoutChange}
 		onFitChange={onFitChange}
 		onPrevious={previousPage}

@@ -7,6 +7,7 @@ export function extendViewerElement(Base: typeof HTMLElement): typeof HTMLElemen
 			upgradeProperty(this, "layout");
 			upgradeProperty(this, "fit");
 			upgradeProperty(this, "backend");
+			upgradeProperty(this, "config");
 		}
 
 		get src(): string {
