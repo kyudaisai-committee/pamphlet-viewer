@@ -33,6 +33,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 import type { PamphletViewerConfig } from "@/lib/public-api";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
+	import ViewerSettingsToolbar from "./ViewerSettingsToolbar.svelte";
 	import ViewerStatusBar from "./ViewerStatusBar.svelte";
 	import ViewerToolbar from "./ViewerToolbar.svelte";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
@@ -48,6 +49,10 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	}
 
 	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
+	type ReaderRegion = "settings" | "body" | "status" | "navigation";
+
+	const MOBILE_READER_REGION_ORDER = ["settings", "body", "status", "navigation"] as const;
+	const DESKTOP_READER_REGION_ORDER = ["navigation", "settings", "body", "status"] as const;
 
 	let {
 		src = $bindable(""),
@@ -197,6 +202,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 
 	onMount(() => {
 		if (pageArea === undefined || shellElement === undefined) return;
+		const detachResponsiveOrder = observeResponsiveReaderOrder(shellElement);
 		const host = getViewerHost();
 		const fullscreenButton = shellElement.querySelector<HTMLElement>("[data-control='fullscreen']");
 		const detachFullscreen =
@@ -205,6 +211,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 				: () => undefined;
 		host?.dispatchEvent(new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }));
 		return () => {
+			detachResponsiveOrder();
 			detachFullscreen();
 			clearZoomAnchor();
 			controller.dispose();
@@ -226,6 +233,75 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			}),
 		);
 		if (event.type === "pagechange") page = event.detail.page;
+	}
+
+	function observeResponsiveReaderOrder(shell: HTMLElement): () => void {
+		let compact: boolean | null = null;
+
+		function updateOrder(): void {
+			const nextCompact = shell.clientWidth <= 700;
+			if (compact === nextCompact) return;
+			const order = nextCompact
+				? MOBILE_READER_REGION_ORDER
+				: DESKTOP_READER_REGION_ORDER;
+			const regions: Record<ReaderRegion, HTMLElement | undefined> = {
+				settings: undefined,
+				body: undefined,
+				status: undefined,
+				navigation: undefined,
+			};
+			for (const child of shell.children) {
+				if (!(child instanceof HTMLElement)) continue;
+				const region = child.dataset.readerRegion;
+				if (
+					region === "settings" ||
+					region === "body" ||
+					region === "status" ||
+					region === "navigation"
+				) {
+					regions[region] = child;
+				}
+			}
+			if (Object.values(regions).some((region) => region === undefined)) return;
+
+			const root = shell.getRootNode();
+			const focused =
+				root instanceof ShadowRoot ? root.activeElement : shell.ownerDocument.activeElement;
+			const restoreFocus = focused instanceof HTMLElement && shell.contains(focused);
+			for (const [index, regionName] of order.entries()) {
+				const region = regions[regionName];
+				const reference = shell.children[index] ?? null;
+				if (region === undefined || region === reference) continue;
+				moveReaderRegionBefore(shell, region, reference);
+			}
+			compact = nextCompact;
+			const activeAfterMove =
+				root instanceof ShadowRoot ? root.activeElement : shell.ownerDocument.activeElement;
+			if (restoreFocus && activeAfterMove !== focused) {
+				focused.focus({ preventScroll: true });
+			}
+		}
+
+		const resizeObserver = new ResizeObserver(updateOrder);
+		resizeObserver.observe(shell);
+		updateOrder();
+		return () => resizeObserver.disconnect();
+	}
+
+	function moveReaderRegionBefore(
+		shell: HTMLElement,
+		region: HTMLElement,
+		reference: Element | null,
+	): void {
+		if (typeof shell.moveBefore === "function") {
+			try {
+				shell.moveBefore(region, reference);
+				return;
+			} catch {
+				// Browsers without same-parent moveBefore support use the focus-restoring fallback.
+			}
+		}
+		shell.insertBefore(region, reference);
 	}
 
 	function getViewerHost(): HTMLElement | null {
@@ -370,64 +446,75 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 </script>
 
 <div class="viewer-shell" bind:this={shellElement}>
-	<ViewerToolbar
-		page={page}
-		pageCount={controller.pageCount}
-		{chapters}
-		currentChapterPage={currentChapter?.page}
-		bookmarkPages={bookmarkController.pages}
-		bookmarked={currentPageBookmarked}
-		bookmarkEnabled={bookmarksEnabled}
+	<div class="settings-region" data-reader-region="settings">
+		<ViewerSettingsToolbar
 		layout={parseLayout(layout) ?? "auto"}
 		fit={parseFit(fit) ?? "page"}
 		zoom={zoom}
 		enabled={controller.pageCount > 0}
-		canPrevious={page > 1}
-		canNext={page < controller.pageCount}
-		thumbnailsOpen={thumbnailsOpen}
 		fullscreen={fullscreenController.active}
-		onPageChange={onPageChange}
-		onChapterChange={onChapterChange}
-		onToggleBookmark={toggleCurrentBookmark}
-		onSelectBookmark={selectBookmark}
 		onLayoutChange={onLayoutChange}
 		onFitChange={onFitChange}
-		onPrevious={previousPage}
-		onNext={nextPage}
 		onZoomChange={onZoomChange}
 		onResetZoom={onResetZoom}
-		onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
 		onToggleFullscreen={() => void fullscreenController.toggle()}
 	/>
-	<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
-		{#if thumbnailsOpen}
-			<div class="thumbnail-slot">
-				<ThumbnailPanel
-					pageCount={controller.pageCount}
-					currentPages={currentPages}
-					visuals={controller.thumbnailVisuals}
-					onVisiblePagesChange={updateThumbnailPages}
-					onSelectPage={selectThumbnail}
-					onClose={() => (thumbnailsOpen = false)}
+	</div>
+	<div class="content-region" data-reader-region="body">
+		<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
+			{#if thumbnailsOpen}
+				<div class="thumbnail-slot">
+					<ThumbnailPanel
+						pageCount={controller.pageCount}
+						currentPages={currentPages}
+						visuals={controller.thumbnailVisuals}
+						onVisiblePagesChange={updateThumbnailPages}
+						onSelectPage={selectThumbnail}
+						onClose={() => (thumbnailsOpen = false)}
+					/>
+				</div>
+			{/if}
+			<div class="stage-slot">
+				<ViewerStage
+					pages={displayedPages}
+					phase={controller.phase}
+					failure={controller.failure}
+					{zoom}
+					bind:pageArea
+					onViewportChange={onViewportChange}
+					onZoomGesture={onZoomGesture}
+					onPrevious={previousPage}
+					onNext={nextPage}
+					onRetry={retry}
 				/>
 			</div>
-		{/if}
-		<div class="stage-slot">
-			<ViewerStage
-				pages={displayedPages}
-				phase={controller.phase}
-				failure={controller.failure}
-				{zoom}
-				bind:pageArea
-				onViewportChange={onViewportChange}
-				onZoomGesture={onZoomGesture}
-				onPrevious={previousPage}
-				onNext={nextPage}
-				onRetry={retry}
-			/>
 		</div>
 	</div>
-	<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
+	<div class="status-region" data-reader-region="status">
+		<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
+	</div>
+	<div class="navigation-region" data-reader-region="navigation">
+		<ViewerToolbar
+			page={page}
+			pageCount={controller.pageCount}
+			{chapters}
+			currentChapterPage={currentChapter?.page}
+			bookmarkPages={bookmarkController.pages}
+			bookmarked={currentPageBookmarked}
+			bookmarkEnabled={bookmarksEnabled}
+			enabled={controller.pageCount > 0}
+			canPrevious={page > 1}
+			canNext={page < controller.pageCount}
+			thumbnailsOpen={thumbnailsOpen}
+			onPageChange={onPageChange}
+			onChapterChange={onChapterChange}
+			onToggleBookmark={toggleCurrentBookmark}
+			onSelectBookmark={selectBookmark}
+			onPrevious={previousPage}
+			onNext={nextPage}
+			onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
+		/>
+	</div>
 </div>
 
 <style>
@@ -466,8 +553,9 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 
 	.viewer-shell {
 		box-sizing: border-box;
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 		width: 100%;
 		height: 100%;
 		min-height: inherit;
@@ -476,6 +564,34 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		overflow: hidden;
 		border: 1px solid var(--pamphlet-viewer-border);
 		background: #191c20;
+
+		.settings-region,
+		.navigation-region {
+			min-width: 0;
+		}
+
+		.navigation-region {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.settings-region {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.content-region {
+			grid-column: 1 / -1;
+			grid-row: 3;
+			display: flex;
+			min-width: 0;
+			min-height: 0;
+		}
+
+		.status-region {
+			grid-column: 1 / -1;
+			grid-row: 4;
+		}
 
 		&:popover-open {
 			position: fixed;
@@ -517,35 +633,34 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		}
 	}
 
+	@container pamphlet-reader (min-width: 701px) and (max-width: 837px) {
+		.viewer-shell .settings-region {
+			grid-column: 1 / -1;
+			grid-row: 2;
+		}
+	}
+
 	@container pamphlet-reader (max-width: 700px) {
-		:global(.toolbar-container) {
-			display: contents;
+		.viewer-shell .settings-region {
+			grid-column: 1 / -1;
+			grid-row: 1;
 		}
 
-		:global(.settings-toolbar),
-		:global(.status-bar),
-		:global(.toolbar) {
-			flex-shrink: 0;
+		.viewer-shell .content-region {
+			grid-row: 3;
 		}
 
-		.reader-body {
+		.viewer-shell .status-region {
+			grid-row: 4;
+		}
+
+		.viewer-shell .navigation-region {
+			grid-column: 1 / -1;
+			grid-row: 5;
+		}
+
+		.viewer-shell .reader-body {
 			flex: 1 1 0;
-		}
-
-		:global(.settings-toolbar) {
-			order: 1;
-		}
-
-		.reader-body {
-			order: 2;
-		}
-
-		:global(.status-bar) {
-			order: 3;
-		}
-
-		:global(.toolbar) {
-			order: 4;
 		}
 
 		.viewer-shell .reader-body.thumbnails-open {

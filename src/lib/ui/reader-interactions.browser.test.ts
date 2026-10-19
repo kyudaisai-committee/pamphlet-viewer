@@ -463,9 +463,17 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The reader shadow root was not rendered.");
 	const shell = shadowRoot.querySelector<HTMLElement>(".viewer-shell");
+	const navigationRegion = shadowRoot.querySelector<HTMLElement>(".navigation-region");
+	const settingsRegion = shadowRoot.querySelector<HTMLElement>(".settings-region");
 	const toolbar = shadowRoot.querySelector<HTMLElement>(".toolbar");
 	const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
-	if (shell === null || toolbar === null || settingsToolbar === null) {
+	if (
+		shell === null ||
+		navigationRegion === null ||
+		settingsRegion === null ||
+		toolbar === null ||
+		settingsToolbar === null
+	) {
 		throw new Error("The desktop reader toolbars were not rendered.");
 	}
 	const shellRect = shell.getBoundingClientRect();
@@ -545,12 +553,14 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 			expect(rect.left).toBeGreaterThanOrEqual(toolbarRect.left);
 			expect(rect.right).toBeLessThanOrEqual(toolbarRect.right);
 		}
-		const toolbarsDoNotOverlap =
-			toolbarRect.right <= settingsRect.left ||
-			settingsRect.right <= toolbarRect.left ||
-			toolbarRect.bottom <= settingsRect.top ||
-			settingsRect.bottom <= toolbarRect.top;
-		expect(toolbarsDoNotOverlap).toBe(true);
+		const navigationRect = navigationRegion.getBoundingClientRect();
+		const settingsRegionRect = settingsRegion.getBoundingClientRect();
+		const toolbarRegionsDoNotOverlap =
+			navigationRect.right <= settingsRegionRect.left ||
+			settingsRegionRect.right <= navigationRect.left ||
+			navigationRect.bottom <= settingsRegionRect.top ||
+			settingsRegionRect.bottom <= navigationRect.top;
+		expect(toolbarRegionsDoNotOverlap).toBe(true);
 	}
 });
 

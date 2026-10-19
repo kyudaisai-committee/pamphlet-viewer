@@ -1,9 +1,6 @@
 <script lang="ts">
-	import type { FitMode, LayoutMode } from "../domain/layout";
 	import type { PamphletChapter } from "@/lib/public-api";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";
-	import ViewerViewControls from "./ViewerViewControls.svelte";
-	import ZoomControls from "./ZoomControls.svelte";
 
 	interface Props {
 		page: number;
@@ -13,26 +10,17 @@
 		bookmarkPages: readonly number[];
 		bookmarked: boolean;
 		bookmarkEnabled: boolean;
-		layout: LayoutMode;
-		fit: FitMode;
-		zoom: number;
 		enabled: boolean;
 		canPrevious: boolean;
 		canNext: boolean;
 		thumbnailsOpen: boolean;
-		fullscreen: boolean;
 		onPageChange(value: string): void;
 		onChapterChange(value: string): void;
 		onToggleBookmark(): void;
 		onSelectBookmark(value: string): void;
-		onLayoutChange(value: string): void;
-		onFitChange(value: FitMode): void;
 		onPrevious(): void;
 		onNext(): void;
-		onZoomChange(value: number): void;
-		onResetZoom(): void;
 		onToggleThumbnails(): void;
-		onToggleFullscreen(): void;
 	}
 
 	let {
@@ -43,26 +31,17 @@
 		bookmarkPages,
 		bookmarked,
 		bookmarkEnabled,
-		layout,
-		fit,
-		zoom,
 		enabled,
 		canPrevious,
 		canNext,
 		thumbnailsOpen,
-		fullscreen,
 		onPageChange,
 		onChapterChange,
 		onToggleBookmark,
 		onSelectBookmark,
-		onLayoutChange,
-		onFitChange,
 		onPrevious,
 		onNext,
-		onZoomChange,
-		onResetZoom,
 		onToggleThumbnails,
-		onToggleFullscreen,
 	}: Props = $props();
 
 	function onToolbarKeydown(event: KeyboardEvent): void {
@@ -106,18 +85,6 @@
 			{onToggleThumbnails}
 		/>
 	</div>
-	<div class="settings-toolbar" role="group" aria-label="ズームと表示設定">
-		<ZoomControls {zoom} {enabled} {onZoomChange} {onResetZoom} />
-		<ViewerViewControls
-			{fit}
-			{layout}
-			{enabled}
-			{fullscreen}
-			{onFitChange}
-			{onLayoutChange}
-			{onToggleFullscreen}
-		/>
-	</div>
 </div>
 
 <style>
@@ -127,7 +94,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 18px;
+		gap: 0;
 		width: 100%;
 		min-width: 0;
 		min-height: 52px;
@@ -140,54 +107,26 @@
 			align-items: center;
 			min-width: max-content;
 		}
-
-		.settings-toolbar {
-			display: flex;
-			align-items: center;
-			justify-content: flex-end;
-			gap: 18px;
-			min-width: max-content;
-		}
 	}
 
 	@container reader-toolbar (max-width: 700px) {
 		.toolbar-container {
-			display: contents;
+			min-height: 0;
+			padding: 0;
+			border: 0;
+			background: transparent;
 
 			.toolbar {
 				box-sizing: border-box;
-				position: relative;
 				display: flex;
 				align-items: center;
+				position: relative;
 				width: 100%;
 				min-height: 56px;
 				min-width: 0;
 				padding: 6px;
 				border-top: 1px solid var(--pamphlet-viewer-border, #3b4148);
 				background: var(--pamphlet-viewer-toolbar, #24282e);
-			}
-
-			.settings-toolbar {
-				box-sizing: border-box;
-				display: flex;
-				flex-wrap: wrap;
-				align-items: center;
-				justify-content: space-between;
-				gap: 8px;
-				width: 100%;
-				min-height: 56px;
-				min-width: 0;
-				padding: 6px;
-				border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
-				background: var(--pamphlet-viewer-toolbar, #24282e);
-			}
-		}
-	}
-
-	@container reader-toolbar (max-width: 340px) {
-		.toolbar-container {
-			.settings-toolbar {
-				row-gap: 4px;
 			}
 		}
 	}
