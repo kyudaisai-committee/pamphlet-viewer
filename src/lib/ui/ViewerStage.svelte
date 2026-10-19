@@ -184,7 +184,7 @@
 		cursor: default;
 
 		&:focus-visible {
-			outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
+			outline: var(--pamphlet-viewer-focus-ring);
 			outline-offset: -3px;
 		}
 

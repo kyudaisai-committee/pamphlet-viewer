@@ -49,26 +49,28 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 18px;
+		gap: var(--pamphlet-viewer-toolbar-gap);
 		width: max-content;
 		min-width: max-content;
-		min-height: 52px;
-		padding: 6px 12px;
-		border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
+		min-height: var(--pamphlet-viewer-toolbar-height);
+		padding: var(--pamphlet-viewer-toolbar-padding-block)
+			var(--pamphlet-viewer-toolbar-padding-inline);
+		border-bottom: var(--pamphlet-viewer-border-width) solid
+			var(--pamphlet-viewer-border, #3b4148);
 		background: var(--pamphlet-viewer-toolbar, #24282e);
 
 		@container reader-toolbar (max-width: 700px) {
 			width: 100%;
 			min-width: 0;
-			min-height: 56px;
+			min-height: var(--pamphlet-viewer-compact-toolbar-height);
 			flex-wrap: wrap;
 			justify-content: space-between;
-			gap: 8px;
-			padding: 6px;
+			gap: var(--pamphlet-viewer-compact-toolbar-gap);
+			padding: var(--pamphlet-viewer-compact-toolbar-padding);
 		}
 
 		@container reader-toolbar (max-width: 340px) {
-			row-gap: 4px;
+			row-gap: var(--pamphlet-viewer-compact-control-gap);
 		}
 	}
 </style>

@@ -166,30 +166,31 @@
 	.page-controls {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--pamphlet-viewer-control-gap);
 
 		button {
 			box-sizing: border-box;
-			min-height: 32px;
-			padding: 5px 7px;
-			border: 1px solid transparent;
-			border-radius: 4px;
+			min-height: var(--pamphlet-viewer-control-height);
+			padding: var(--pamphlet-viewer-control-padding-block)
+				var(--pamphlet-viewer-control-padding-inline);
+			border: var(--pamphlet-viewer-border-width) solid transparent;
+			border-radius: var(--pamphlet-viewer-control-radius);
 			background: transparent;
 			color: inherit;
 			font: inherit;
 			cursor: pointer;
 
 			&:hover:not(:disabled) {
-				background: #343a41;
+				background: var(--pamphlet-viewer-control-hover);
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-				outline-offset: 1px;
+				outline: var(--pamphlet-viewer-focus-ring);
+				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 			}
 
 			&:disabled {
-				color: #727981;
+				color: var(--pamphlet-viewer-disabled-text);
 				cursor: not-allowed;
 			}
 		}
@@ -197,8 +198,8 @@
 		.icon-button {
 			display: inline-grid;
 			place-items: center;
-			width: 34px;
-			padding: 5px;
+			width: var(--pamphlet-viewer-icon-button-width);
+			padding: var(--pamphlet-viewer-control-padding-block);
 		}
 
 		.page-number {
@@ -210,11 +211,12 @@
 			input {
 				box-sizing: border-box;
 				width: 46px;
-				min-height: 32px;
+				min-height: var(--pamphlet-viewer-control-height);
 				padding: 4px;
-				border: 1px solid var(--pamphlet-viewer-border, #454b52);
-				border-radius: 3px;
-				background: #191c20;
+				border: var(--pamphlet-viewer-border-width) solid
+					var(--pamphlet-viewer-control-border);
+				border-radius: var(--pamphlet-viewer-field-radius);
+				background: var(--pamphlet-viewer-control-background);
 				color: inherit;
 				font: inherit;
 				text-align: center;
@@ -226,17 +228,18 @@
 	.bookmark-list-control {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--pamphlet-viewer-control-gap);
 		min-width: 0;
 		white-space: nowrap;
 
 		select {
 			box-sizing: border-box;
-			min-height: 32px;
+			min-height: var(--pamphlet-viewer-control-height);
 			padding: 4px 24px 4px 8px;
-			border: 1px solid var(--pamphlet-viewer-border, #454b52);
-			border-radius: 3px;
-			background: #191c20;
+			border: var(--pamphlet-viewer-border-width) solid
+				var(--pamphlet-viewer-control-border);
+			border-radius: var(--pamphlet-viewer-field-radius);
+			background: var(--pamphlet-viewer-control-background);
 			color: inherit;
 			font: inherit;
 		}
@@ -253,20 +256,20 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.page-controls {
-			gap: 4px;
+			gap: var(--pamphlet-viewer-compact-control-gap);
 
 			button,
 			.icon-button {
-				min-height: 44px;
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 
 			.icon-button {
-				width: 44px;
+				width: var(--pamphlet-viewer-touch-target-size);
 			}
 
 			.page-number input {
 				width: 38px;
-				min-height: 44px;
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 
 			> .bookmark-toggle {

@@ -451,7 +451,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		width: 100%;
 		min-width: 0;
 		min-height: 22rem;
-		color: #e4e7e9;
+		color: var(--pamphlet-viewer-text);
 		font: 14px/1.5 system-ui, sans-serif;
 		color-scheme: dark;
 		--pamphlet-viewer-text: #e4e7e9;
@@ -460,12 +460,41 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		--pamphlet-viewer-panel: #24282e;
 		--pamphlet-viewer-toolbar: #24282e;
 		--pamphlet-viewer-accent: #a8c5bc;
+		--pamphlet-viewer-border-width: 1px;
+		--pamphlet-viewer-control-height: 32px;
+		--pamphlet-viewer-touch-target-size: 44px;
+		--pamphlet-viewer-icon-button-width: 34px;
+		--pamphlet-viewer-status-action-height: 34px;
+		--pamphlet-viewer-control-radius: 4px;
+		--pamphlet-viewer-field-radius: 3px;
+		--pamphlet-viewer-panel-radius: 4px;
+		--pamphlet-viewer-control-padding-block: 5px;
+		--pamphlet-viewer-control-padding-inline: 7px;
+		--pamphlet-viewer-control-gap: 6px;
+		--pamphlet-viewer-compact-control-gap: 4px;
+		--pamphlet-viewer-compact-toolbar-gap: 8px;
+		--pamphlet-viewer-compact-menu-gap: 8px;
+		--pamphlet-viewer-popup-offset: 6px;
+		--pamphlet-viewer-toolbar-height: 52px;
+		--pamphlet-viewer-toolbar-gap: 18px;
+		--pamphlet-viewer-toolbar-padding-block: 6px;
+		--pamphlet-viewer-toolbar-padding-inline: 12px;
+		--pamphlet-viewer-compact-toolbar-height: 56px;
+		--pamphlet-viewer-compact-toolbar-padding: 6px;
+		--pamphlet-viewer-control-background: #191c20;
+		--pamphlet-viewer-control-border: var(--pamphlet-viewer-border, #454b52);
+		--pamphlet-viewer-control-hover: #343a41;
+		--pamphlet-viewer-disabled-text: #727981;
+		--pamphlet-viewer-thumbnail-current: #30373b;
+		--pamphlet-viewer-thumbnail-hover: #2c3137;
+		--pamphlet-viewer-focus-ring: 2px solid var(--pamphlet-viewer-accent);
+		--pamphlet-viewer-focus-ring-offset: 1px;
 
 		&:fullscreen {
 			width: 100vw !important;
 			height: 100dvh !important;
 			min-height: 0 !important;
-			background: #191c20;
+			background: var(--pamphlet-viewer-stage);
 		}
 	}
 
@@ -476,7 +505,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		width: 100vw !important;
 		height: 100dvh !important;
 		min-height: 0 !important;
-		background: #191c20;
+		background: var(--pamphlet-viewer-stage);
 	}
 
 	.viewer-shell {
@@ -490,8 +519,8 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		container-name: pamphlet-reader reader-toolbar;
 		container-type: inline-size;
 		overflow: hidden;
-		border: 1px solid var(--pamphlet-viewer-border);
-		background: #191c20;
+		border: var(--pamphlet-viewer-border-width) solid var(--pamphlet-viewer-border);
+		background: var(--pamphlet-viewer-stage);
 
 		.settings-region,
 		.navigation-region {
@@ -530,7 +559,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			max-height: none;
 			margin: 0;
 			border: 0;
-			background: #191c20;
+			background: var(--pamphlet-viewer-stage);
 		}
 
 		.reader-body {

@@ -102,10 +102,10 @@
 			box-sizing: border-box;
 			display: grid;
 			place-items: center;
-			width: 44px;
-			height: 44px;
-			border: 1px solid transparent;
-			border-radius: 4px;
+			width: var(--pamphlet-viewer-touch-target-size);
+			height: var(--pamphlet-viewer-touch-target-size);
+			border: var(--pamphlet-viewer-border-width) solid transparent;
+			border-radius: var(--pamphlet-viewer-control-radius);
 			cursor: pointer;
 			list-style: none;
 
@@ -114,8 +114,8 @@
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-				outline-offset: 1px;
+				outline: var(--pamphlet-viewer-focus-ring);
+				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 			}
 		}
 	}
@@ -123,15 +123,16 @@
 	.compact-navigation-panel {
 		position: absolute;
 		z-index: 5;
-		inset-block-start: calc(100% + 6px);
+		inset-block-start: calc(100% + var(--pamphlet-viewer-popup-offset));
 		inset-inline-end: 0;
 		display: grid;
-		gap: 8px;
+		gap: var(--pamphlet-viewer-compact-menu-gap);
 		box-sizing: border-box;
 		width: min(280px, calc(100cqi - 12px));
 		padding: 10px;
-		border: 1px solid var(--pamphlet-viewer-border, #3b4148);
-		border-radius: 4px;
+		border: var(--pamphlet-viewer-border-width) solid
+			var(--pamphlet-viewer-border, #3b4148);
+		border-radius: var(--pamphlet-viewer-panel-radius);
 		background: var(--pamphlet-viewer-panel, #24282e);
 		box-shadow: 0 6px 18px #0008;
 
@@ -140,14 +141,14 @@
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			gap: 8px;
+			gap: var(--pamphlet-viewer-compact-menu-gap);
 			max-width: none;
 
 			select {
 				flex: 1 1 auto;
 				width: 1px;
 				max-width: none;
-				min-height: 44px;
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 		}
 
@@ -155,18 +156,19 @@
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			gap: 8px;
+			gap: var(--pamphlet-viewer-compact-menu-gap);
 			width: 100%;
-			min-height: 44px;
-			border: 1px solid var(--pamphlet-viewer-border, #454b52);
-			border-radius: 4px;
+			min-height: var(--pamphlet-viewer-touch-target-size);
+			border: var(--pamphlet-viewer-border-width) solid
+				var(--pamphlet-viewer-border, #454b52);
+			border-radius: var(--pamphlet-viewer-control-radius);
 			background: transparent;
 			color: inherit;
 			font: inherit;
 			cursor: pointer;
 
 			&:disabled {
-				color: #727981;
+				color: var(--pamphlet-viewer-disabled-text);
 				cursor: not-allowed;
 			}
 		}
@@ -179,7 +181,7 @@
 
 			.compact-navigation-panel {
 				inset-block-start: auto;
-				inset-block-end: calc(100% + 6px);
+				inset-block-end: calc(100% + var(--pamphlet-viewer-popup-offset));
 			}
 		}
 	}

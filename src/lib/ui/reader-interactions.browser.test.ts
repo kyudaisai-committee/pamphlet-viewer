@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { page as browserPage } from "vitest/browser";
+import { page as browserPage, userEvent } from "vitest/browser";
 
 import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
 import type { PamphletViewerElement } from "../public-api";
@@ -119,6 +119,141 @@ test("selects fit and page layout together on desktop", async () => {
 	await viewModeSelect.selectOptions("single-page");
 	await expect.poll(() => element.layout).toBe("single");
 	await expect.poll(() => element.fit).toBe("page");
+});
+
+test("applies shared design tokens to desktop controls", async () => {
+	await import("../entry");
+	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
+	element.layout = "single";
+	element.config = { chapters: [{ title: "前半", page: 1 }] };
+	element.style.setProperty("--pamphlet-viewer-border-width", "3px");
+	element.style.setProperty("--pamphlet-viewer-control-height", "38px");
+	element.style.setProperty("--pamphlet-viewer-control-radius", "9px");
+	element.style.setProperty("--pamphlet-viewer-field-radius", "8px");
+	element.style.setProperty("--pamphlet-viewer-control-background", "rgb(17, 24, 39)");
+	element.style.setProperty("--pamphlet-viewer-control-border", "rgb(18, 52, 86)");
+	element.style.setProperty("--pamphlet-viewer-control-hover", "rgb(86, 120, 144)");
+	element.style.setProperty("--pamphlet-viewer-disabled-text", "rgb(1, 2, 3)");
+	element.style.setProperty("--pamphlet-viewer-focus-ring", "3px solid rgb(200, 20, 20)");
+	element.style.setProperty("--pamphlet-viewer-control-gap", "10px");
+	element.style.setProperty("--pamphlet-viewer-toolbar-gap", "23px");
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+	const zoomButton = shadowRoot.querySelector<HTMLButtonElement>(
+		'.zoom-controls button[aria-label="拡大"]',
+	);
+	const pageInput = shadowRoot.querySelector<HTMLInputElement>('[aria-label="ページ番号"]');
+	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.toolbar > .chapter-control select[aria-label="章へ移動"]',
+	);
+	const viewSelect = shadowRoot.querySelector<HTMLSelectElement>('[aria-label="表示方法"]');
+	const previousButton = shadowRoot.querySelector<HTMLButtonElement>(
+		'button[aria-label="前のページ"]',
+	);
+	const thumbnailToggle = shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle");
+	const navigationToolbar = shadowRoot.querySelector<HTMLElement>(".navigation-region .toolbar");
+	const pageControls = shadowRoot.querySelector<HTMLElement>(".page-controls");
+	const viewControls = shadowRoot.querySelector<HTMLElement>(".view-controls");
+	const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
+	if (
+		zoomButton === null ||
+		pageInput === null ||
+		chapterSelect === null ||
+		viewSelect === null ||
+		previousButton === null ||
+		thumbnailToggle === null ||
+		navigationToolbar === null ||
+		pageControls === null ||
+		viewControls === null ||
+		settingsToolbar === null
+	) {
+		throw new Error("The desktop controls for design token verification are missing.");
+	}
+	await expect.element(browserPage.elementLocator(chapterSelect)).toBeVisible();
+
+	for (const [name, control] of [
+		["zoom", zoomButton],
+		["page number", pageInput],
+		["chapter", chapterSelect],
+		["view mode", viewSelect],
+	] as const) {
+		expect(getComputedStyle(control).minHeight, name).toBe("38px");
+		expect(getComputedStyle(control).borderWidth).toBe("3px");
+	}
+	expect(getComputedStyle(zoomButton).borderRadius).toBe("9px");
+	expect(getComputedStyle(pageInput).borderRadius).toBe("8px");
+	expect(getComputedStyle(chapterSelect).backgroundColor).toBe("rgb(17, 24, 39)");
+	expect(getComputedStyle(viewSelect).borderColor).toBe("rgb(18, 52, 86)");
+	expect(getComputedStyle(previousButton).color).toBe("rgb(1, 2, 3)");
+	expect(getComputedStyle(pageControls).gap).toBe("10px");
+	expect(getComputedStyle(viewControls).gap).toBe("10px");
+	expect(getComputedStyle(settingsToolbar).gap).toBe("23px");
+
+	await userEvent.tab();
+	expect(shadowRoot.activeElement).toBe(navigationToolbar);
+	await userEvent.tab();
+	expect(shadowRoot.activeElement).toBe(thumbnailToggle);
+	expect(getComputedStyle(thumbnailToggle).outlineWidth).toBe("3px");
+	expect(getComputedStyle(thumbnailToggle).outlineColor).toBe("rgb(200, 20, 20)");
+	await browserPage.elementLocator(thumbnailToggle).hover();
+	expect(getComputedStyle(thumbnailToggle).backgroundColor).toBe("rgb(86, 120, 144)");
+});
+
+test("shares touch target and compact toolbar tokens across mobile bars", async () => {
+	await import("../entry");
+	const element = createViewer({ width: 390, height: 620 }, createBackend(5));
+	element.layout = "single";
+	element.config = { chapters: [{ title: "前半", page: 1 }] };
+	element.style.setProperty("--pamphlet-viewer-touch-target-size", "48px");
+	element.style.setProperty("--pamphlet-viewer-compact-toolbar-height", "60px");
+	element.style.setProperty("--pamphlet-viewer-compact-toolbar-padding", "8px");
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+	const zoomButton = shadowRoot.querySelector<HTMLButtonElement>(
+		'.zoom-controls button[aria-label="拡大"]',
+	);
+	const summary = shadowRoot.querySelector<HTMLElement>(".compact-navigation > summary");
+	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.compact-navigation-panel select[aria-label="章へ移動"]',
+	);
+	const bookmarkToggle = shadowRoot.querySelector<HTMLButtonElement>(
+		".compact-navigation-panel .bookmark-toggle",
+	);
+	const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
+	const navigationToolbar = shadowRoot.querySelector<HTMLElement>(".navigation-region .toolbar");
+	if (
+		zoomButton === null ||
+		summary === null ||
+		chapterSelect === null ||
+		bookmarkToggle === null ||
+		settingsToolbar === null ||
+		navigationToolbar === null
+	) {
+		throw new Error("The mobile controls for design token verification are missing.");
+	}
+
+	for (const control of [zoomButton, chapterSelect, bookmarkToggle]) {
+		expect(getComputedStyle(control).minHeight).toBe("48px");
+	}
+	expect(getComputedStyle(summary).width).toBe("48px");
+	expect(getComputedStyle(summary).height).toBe("48px");
+	for (const toolbar of [settingsToolbar, navigationToolbar]) {
+		expect(getComputedStyle(toolbar).minHeight).toBe("60px");
+		expect(getComputedStyle(toolbar).paddingTop).toBe("8px");
+		expect(getComputedStyle(toolbar).paddingLeft).toBe("8px");
+	}
+
+	await browserPage.elementLocator(summary).click();
+	await expect.element(browserPage.elementLocator(chapterSelect)).toBeVisible();
+	await expect.element(browserPage.elementLocator(bookmarkToggle)).toBeVisible();
 });
 
 test("persists bookmarks per document and restores the saved page list", async () => {
