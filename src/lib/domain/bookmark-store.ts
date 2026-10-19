@@ -6,7 +6,7 @@ interface BookmarkStorage {
 const STORAGE_KEY = "pamphlet-viewer.bookmarks.v1";
 
 export class BookmarkStore {
-	#fallback = new Map<string, number[]>();
+	#fallback = new Map<string, number[] | null>();
 	#subscribers = new Map<string, Set<() => void>>();
 	#listening = false;
 	#storage: BookmarkStorage | null;
@@ -44,7 +44,7 @@ export class BookmarkStore {
 
 		const records = this.#readRecords();
 		records.set(documentKey, pages);
-		this.#saveRecords(records);
+		this.#saveRecords(records, documentKey);
 		this.#notify(documentKey);
 		return pages;
 	}
@@ -70,31 +70,35 @@ export class BookmarkStore {
 	}
 
 	#readRecords(): Map<string, number[]> {
-		if (this.#storage === null) return new Map(this.#fallback);
-
-		let serialized: string | null;
-		try {
-			serialized = this.#storage.getItem(STORAGE_KEY);
-		} catch {
-			return new Map(this.#fallback);
+		let records = new Map<string, number[]>();
+		if (this.#storage !== null) {
+			try {
+				const serialized = this.#storage.getItem(STORAGE_KEY);
+				if (serialized !== null) records = parseRecords(serialized) ?? records;
+			} catch {
+				// Retain pending in-memory changes when storage cannot be read.
+			}
 		}
 
-		const records = serialized === null ? new Map<string, number[]>() : parseRecords(serialized);
-		if (records === null) return new Map(this.#fallback);
 		for (const [key, pages] of this.#fallback) {
-			records.set(key, pages);
+			if (pages === null) records.delete(key);
+			else records.set(key, pages.slice());
 		}
 		return records;
 	}
 
-	#saveRecords(records: Map<string, number[]>): void {
-		const serialized = JSON.stringify(Object.fromEntries(records));
+	#saveRecords(records: Map<string, number[]>, documentKey: string): void {
+		const mergedRecords = this.#readRecords();
+		const pages = records.get(documentKey);
+		if (pages === undefined) mergedRecords.delete(documentKey);
+		else mergedRecords.set(documentKey, pages);
+		const serialized = JSON.stringify(Object.fromEntries(mergedRecords));
 		try {
 			if (this.#storage === null) throw new Error("Local storage is unavailable.");
 			this.#storage.setItem(STORAGE_KEY, serialized);
 			this.#fallback.clear();
 		} catch {
-			this.#fallback = records;
+			this.#fallback.set(documentKey, pages?.slice() ?? null);
 		}
 	}
 

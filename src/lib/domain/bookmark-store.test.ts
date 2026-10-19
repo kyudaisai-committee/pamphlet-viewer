@@ -75,6 +75,95 @@ test("prefers failed writes for an existing document, including after a storage 
 	}
 });
 
+test("merges the latest other-document bookmarks when a failed write recovers", () => {
+	const storage = createStorage();
+	const firstDocument = "https://example.test/first.pdf";
+	const secondDocument = "https://example.test/second.pdf";
+	storage.values.set(
+		STORAGE_KEY,
+		JSON.stringify({ [firstDocument]: [1, 3], [secondDocument]: [2] }),
+	);
+	const store = new BookmarkStore(storage);
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const eventTarget = new EventTarget();
+	let firstPagesAfterStorageChange: number[] = [];
+	let secondPagesAfterStorageChange: number[] = [];
+
+	Object.defineProperty(globalThis, "window", { configurable: true, value: eventTarget });
+	try {
+		const unsubscribeFirst = store.subscribe(firstDocument, () => {
+			firstPagesAfterStorageChange = store.getBookmarks(firstDocument, 5);
+		});
+		const unsubscribeSecond = store.subscribe(secondDocument, () => {
+			secondPagesAfterStorageChange = store.getBookmarks(secondDocument, 5);
+		});
+		storage.setWriteFailure(true);
+
+		expect(store.togglePage(firstDocument, 3, 5)).toEqual([1]);
+		storage.values.set(
+			STORAGE_KEY,
+			JSON.stringify({ [firstDocument]: [1, 3], [secondDocument]: [2, 4] }),
+		);
+		const updateEvent = new Event("storage") as StorageEvent;
+		Object.defineProperty(updateEvent, "key", { value: STORAGE_KEY });
+		eventTarget.dispatchEvent(updateEvent);
+		expect(firstPagesAfterStorageChange).toEqual([1]);
+		expect(secondPagesAfterStorageChange).toEqual([2, 4]);
+
+		storage.setWriteFailure(false);
+		expect(store.togglePage(firstDocument, 2, 5)).toEqual([1, 2]);
+		expect(JSON.parse(storage.values.get(STORAGE_KEY) ?? "null")).toEqual({
+			[firstDocument]: [1, 2],
+			[secondDocument]: [2, 4],
+		});
+		unsubscribeFirst();
+		unsubscribeSecond();
+	} finally {
+		if (previousWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+		else Object.defineProperty(globalThis, "window", previousWindow);
+	}
+});
+
+test("does not restore another document after its external deletion or storage clear", () => {
+	const storage = createStorage();
+	const firstDocument = "https://example.test/first.pdf";
+	const secondDocument = "https://example.test/second.pdf";
+	storage.values.set(
+		STORAGE_KEY,
+		JSON.stringify({ [firstDocument]: [1, 3], [secondDocument]: [2] }),
+	);
+	const store = new BookmarkStore(storage);
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const eventTarget = new EventTarget();
+
+	Object.defineProperty(globalThis, "window", { configurable: true, value: eventTarget });
+	try {
+		const unsubscribeFirst = store.subscribe(firstDocument, () => undefined);
+		const unsubscribeSecond = store.subscribe(secondDocument, () => undefined);
+		storage.setWriteFailure(true);
+		expect(store.togglePage(firstDocument, 3, 5)).toEqual([1]);
+
+		storage.values.set(STORAGE_KEY, JSON.stringify({ [firstDocument]: [1, 3] }));
+		const deleteEvent = new Event("storage") as StorageEvent;
+		Object.defineProperty(deleteEvent, "key", { value: STORAGE_KEY });
+		eventTarget.dispatchEvent(deleteEvent);
+		expect(store.getBookmarks(firstDocument, 5)).toEqual([1]);
+		expect(store.getBookmarks(secondDocument, 5)).toEqual([]);
+
+		storage.values.delete(STORAGE_KEY);
+		const clearEvent = new Event("storage") as StorageEvent;
+		Object.defineProperty(clearEvent, "key", { value: null });
+		eventTarget.dispatchEvent(clearEvent);
+		expect(store.getBookmarks(firstDocument, 5)).toEqual([1]);
+		expect(store.getBookmarks(secondDocument, 5)).toEqual([]);
+		unsubscribeFirst();
+		unsubscribeSecond();
+	} finally {
+		if (previousWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+		else Object.defineProperty(globalThis, "window", previousWindow);
+	}
+});
+
 test("recovers from malformed stored data and notifies same-page subscribers", () => {
 	const storage = createStorage();
 	storage.values.set(STORAGE_KEY, "not valid JSON");
