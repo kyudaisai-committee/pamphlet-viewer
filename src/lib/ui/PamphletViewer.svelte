@@ -522,6 +522,16 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			display: contents;
 		}
 
+		:global(.settings-toolbar),
+		:global(.status-bar),
+		:global(.toolbar) {
+			flex-shrink: 0;
+		}
+
+		.reader-body {
+			flex: 1 1 0;
+		}
+
 		:global(.settings-toolbar) {
 			order: 1;
 		}

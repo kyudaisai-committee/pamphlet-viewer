@@ -142,6 +142,7 @@
 
 <section
 	class="page-area"
+	class:zoomed={zoom > 1}
 	class:dragging={pointerActive && hasScrollableContent()}
 	aria-label="パンフレット表示領域"
 	aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown"
@@ -209,6 +210,12 @@
 				border: 1px solid #c6c9cb;
 				background: #fff;
 			}
+		}
+	}
+
+	@container reader-toolbar (max-width: 700px) {
+		.page-area.zoomed .viewer-pages {
+			padding-inline: 50cqi;
 		}
 	}
 </style>
