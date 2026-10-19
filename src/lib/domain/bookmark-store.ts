@@ -82,7 +82,7 @@ export class BookmarkStore {
 		const records = serialized === null ? new Map<string, number[]>() : parseRecords(serialized);
 		if (records === null) return new Map(this.#fallback);
 		for (const [key, pages] of this.#fallback) {
-			if (!records.has(key)) records.set(key, pages);
+			records.set(key, pages);
 		}
 		return records;
 	}
