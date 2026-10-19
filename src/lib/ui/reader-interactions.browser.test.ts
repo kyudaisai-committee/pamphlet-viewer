@@ -66,20 +66,22 @@ test("navigates to validated configured chapters", async () => {
 	await firstPage;
 
 	const shadowRoot = element.shadowRoot;
-	const chapterSelect = shadowRoot?.querySelector<HTMLSelectElement>(
-		'select[aria-label="章へ移動"]',
+	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.toolbar > .chapter-control select[aria-label="章へ移動"]',
 	);
-	if (chapterSelect === null || chapterSelect === undefined) {
+	if (chapterSelect === null) {
 		throw new Error("The configured chapter list was not rendered.");
 	}
+	const visibleChapterSelect = browserPage.elementLocator(chapterSelect);
+	await expect.element(visibleChapterSelect).toBeVisible();
 	expect(Array.from(chapterSelect.options, (option) => option.textContent)).toEqual([
 		"章を選択",
 		"前半",
 		"後半",
 	]);
 
-	chapterSelect.value = "7";
-	chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	await visibleChapterSelect.selectOptions("7");
 	await expect.poll(() => element.page).toBe(7);
 	await expect.poll(() => chapterSelect.value).toBe("7");
 	element.page = 9;
@@ -96,51 +98,63 @@ test("persists bookmarks per document and restores the saved page list", async (
 	await firstPage;
 
 	const shadowRoot = element.shadowRoot;
-	const bookmarkButton = shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
-	if (shadowRoot === null || bookmarkButton === null || bookmarkButton === undefined) {
+	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+	const bookmarkButton = shadowRoot.querySelector<HTMLButtonElement>(
+		".page-controls > .bookmark-toggle",
+	);
+	if (bookmarkButton === null) {
 		throw new Error("The bookmark controls were not rendered.");
 	}
 	expect(bookmarkButton.disabled).toBe(false);
-	bookmarkButton.click();
+	await expect.element(browserPage.elementLocator(bookmarkButton)).toBeVisible();
+	await browserPage.elementLocator(bookmarkButton).click();
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
 	expect(
-		shadowRoot.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')?.options[1]
-			?.value,
+		shadowRoot.querySelector<HTMLSelectElement>(
+			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+		)?.options[1]?.value,
 	).toBe("1");
 
 	element.page = 3;
 	await expect.poll(() => element.page).toBe(3);
-	bookmarkButton.click();
+	await browserPage.elementLocator(bookmarkButton).click();
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
 
 	const bookmarkSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'[aria-label="ブックマーク一覧"]',
+		'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 	);
 	if (bookmarkSelect === null) throw new Error("The saved page list was not rendered.");
-	bookmarkSelect.value = "1";
-	bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
+	const desktopBookmarkSelect = browserPage.elementLocator(bookmarkSelect);
+	await expect.element(desktopBookmarkSelect).toBeVisible();
+	await desktopBookmarkSelect.selectOptions("1");
 	await expect.poll(() => element.page).toBe(1);
 
 	const secondDocumentPage = waitForPageChange(element);
 	element.src = "./different-reader.pdf";
 	await secondDocumentPage;
-	expect(shadowRoot.querySelector('[aria-label="ブックマーク一覧"]')).toBeNull();
+	expect(
+		shadowRoot.querySelector(
+			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+		),
+	).toBeNull();
 
 	const restoredPage = waitForPageChange(element);
 	element.src = "./reader-test.pdf";
 	await restoredPage;
 	const restoredOptions = shadowRoot.querySelector<HTMLSelectElement>(
-		'[aria-label="ブックマーク一覧"]',
+		'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 	)?.options;
 	expect(Array.from(restoredOptions ?? [], (option) => option.value)).toEqual(["", "1", "3"]);
 
 	element.page = 3;
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
-	bookmarkButton.click();
+	await browserPage.elementLocator(bookmarkButton).click();
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("false");
 	expect(
 		Array.from(
-			shadowRoot.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')?.options ?? [],
+			shadowRoot.querySelector<HTMLSelectElement>(
+				'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+			)?.options ?? [],
 			(option) => option.value,
 		),
 	).toEqual(["", "1"]);
@@ -159,18 +173,26 @@ test("synchronizes bookmarks between viewer instances and storage events", async
 	document.body.append(first, second);
 	await Promise.all([firstPage, secondPage]);
 
-	const firstButton = first.shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
-	const secondButton = second.shadowRoot?.querySelector<HTMLButtonElement>(".bookmark-toggle");
+	const firstButtonElement = first.shadowRoot?.querySelector<HTMLButtonElement>(
+		".page-controls > .bookmark-toggle",
+	);
+	const secondButtonElement = second.shadowRoot?.querySelector<HTMLButtonElement>(
+		".page-controls > .bookmark-toggle",
+	);
 	if (
-		firstButton === null ||
-		firstButton === undefined ||
-		secondButton === null ||
-		secondButton === undefined
+		firstButtonElement === null ||
+		firstButtonElement === undefined ||
+		secondButtonElement === null ||
+		secondButtonElement === undefined
 	) {
 		throw new Error("The bookmark controls were not rendered for both viewers.");
 	}
-	firstButton.click();
-	await expect.poll(() => secondButton.getAttribute("aria-pressed")).toBe("true");
+	const firstButton = browserPage.elementLocator(firstButtonElement);
+	const secondButton = browserPage.elementLocator(secondButtonElement);
+	await expect.element(firstButton).toBeVisible();
+	await expect.element(secondButton).toBeVisible();
+	await firstButton.click();
+	await expect.poll(() => secondButtonElement.getAttribute("aria-pressed")).toBe("true");
 
 	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
 	const newValue = JSON.stringify({ [documentKey]: [2, 4] });
@@ -179,8 +201,9 @@ test("synchronizes bookmarks between viewer instances and storage events", async
 	await expect
 		.poll(() =>
 			Array.from(
-				second.shadowRoot?.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]')
-					?.options ?? [],
+				second.shadowRoot?.querySelector<HTMLSelectElement>(
+					'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+				)?.options ?? [],
 				(option) => option.value,
 			),
 		)
