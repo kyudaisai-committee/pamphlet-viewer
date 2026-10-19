@@ -3,6 +3,22 @@
 
 	import type { FitMode, LayoutMode } from "../domain/layout";
 
+	interface ViewOption {
+		value: string;
+		fit: FitMode;
+		layout: LayoutMode;
+		label: string;
+	}
+
+	const VIEW_OPTIONS: readonly ViewOption[] = [
+		{ value: "auto-page", layout: "auto", fit: "page", label: "自動・ページ全体" },
+		{ value: "auto-width", layout: "auto", fit: "width", label: "自動・幅に合わせる" },
+		{ value: "single-page", layout: "single", fit: "page", label: "単ページ・ページ全体" },
+		{ value: "single-width", layout: "single", fit: "width", label: "単ページ・幅に合わせる" },
+		{ value: "spread-page", layout: "spread", fit: "page", label: "見開き・ページ全体" },
+		{ value: "spread-width", layout: "spread", fit: "width", label: "見開き・幅に合わせる" },
+	];
+
 	interface Props {
 		fit: FitMode;
 		layout: LayoutMode;
@@ -22,56 +38,34 @@
 		onLayoutChange,
 		onToggleFullscreen,
 	}: Props = $props();
+
+	let selectedView = $derived(
+		VIEW_OPTIONS.find((option) => option.fit === fit && option.layout === layout)?.value ??
+			VIEW_OPTIONS[0].value,
+	);
+
+	function onViewChange(value: string): void {
+		const option = VIEW_OPTIONS.find((viewOption) => viewOption.value === value);
+		if (option === undefined) return;
+		onLayoutChange(option.layout);
+		onFitChange(option.fit);
+	}
 </script>
 
 <div class="view-controls" role="group" aria-label="表示設定">
-	<div class="fit-controls" role="group" aria-label="ページの合わせ方">
-		<button type="button" aria-pressed={fit === "page"} disabled={!enabled} onclick={() => onFitChange("page")}>
-			ページ
-		</button>
-		<button type="button" aria-pressed={fit === "width"} disabled={!enabled} onclick={() => onFitChange("width")}>
-			幅
-		</button>
-	</div>
-	<label class="layout-control">
-		<span class="visually-hidden">ページ配置</span>
+	<label class="view-mode-control">
+		<span class="visually-hidden">表示方法</span>
 		<select
-			aria-label="ページ配置"
-			value={layout}
+			aria-label="表示方法"
+			value={selectedView}
 			disabled={!enabled}
-			onchange={(event) => onLayoutChange(event.currentTarget.value)}
+			onchange={(event) => onViewChange(event.currentTarget.value)}
 		>
-			<option value="auto">自動</option>
-			<option value="single">単ページ</option>
-			<option value="spread">見開き</option>
+			{#each VIEW_OPTIONS as option (option.value)}
+				<option value={option.value}>{option.label}</option>
+			{/each}
 		</select>
 	</label>
-	<details class="compact-settings">
-		<summary>表示設定</summary>
-		<div class="compact-settings-panel">
-			<div class="fit-controls" role="group" aria-label="ページの合わせ方">
-				<button type="button" aria-pressed={fit === "page"} disabled={!enabled} onclick={() => onFitChange("page")}>
-					ページ
-				</button>
-				<button type="button" aria-pressed={fit === "width"} disabled={!enabled} onclick={() => onFitChange("width")}>
-					幅
-				</button>
-			</div>
-			<label class="layout-control">
-				<span class="visually-hidden">ページ配置</span>
-				<select
-					aria-label="ページ配置"
-					value={layout}
-					disabled={!enabled}
-					onchange={(event) => onLayoutChange(event.currentTarget.value)}
-				>
-					<option value="auto">自動</option>
-					<option value="single">単ページ</option>
-					<option value="spread">見開き</option>
-				</select>
-			</label>
-		</div>
-	</details>
 	<button
 		class="icon-button fullscreen-toggle"
 		type="button"
@@ -93,30 +87,31 @@
 	.view-controls {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--pamphlet-viewer-control-gap);
 
 		button {
 			box-sizing: border-box;
-			min-height: 32px;
-			padding: 5px 7px;
-			border: 1px solid transparent;
-			border-radius: 4px;
+			min-height: var(--pamphlet-viewer-control-height);
+			padding: var(--pamphlet-viewer-control-padding-block)
+				var(--pamphlet-viewer-control-padding-inline);
+			border: var(--pamphlet-viewer-border-width) solid transparent;
+			border-radius: var(--pamphlet-viewer-control-radius);
 			background: transparent;
 			color: inherit;
 			font: inherit;
 			cursor: pointer;
 
 			&:hover:not(:disabled) {
-				background: #343a41;
+				background: var(--pamphlet-viewer-control-hover);
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-				outline-offset: 1px;
+				outline: var(--pamphlet-viewer-focus-ring);
+				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 			}
 
 			&:disabled {
-				color: #727981;
+				color: var(--pamphlet-viewer-disabled-text);
 				cursor: not-allowed;
 			}
 		}
@@ -124,31 +119,13 @@
 		.icon-button {
 			display: inline-grid;
 			place-items: center;
-			width: 34px;
-			padding: 5px;
+			width: var(--pamphlet-viewer-icon-button-width);
+			padding: var(--pamphlet-viewer-control-padding-block);
 		}
 
-		.fit-controls {
-			display: flex;
-			gap: 2px;
-			padding: 2px;
-			border: 1px solid var(--pamphlet-viewer-border, #454b52);
-			border-radius: 4px;
+		.view-mode-control {
+			min-width: 0;
 
-			button {
-				min-width: 38px;
-				min-height: 28px;
-				padding: 3px 6px;
-				font-size: 12px;
-
-				&[aria-pressed="true"] {
-					background: #3a4245;
-					color: #edf2ef;
-				}
-			}
-		}
-
-		.layout-control {
 			.visually-hidden {
 				position: absolute;
 				width: 1px;
@@ -162,86 +139,42 @@
 			}
 
 			select {
-				min-height: 32px;
+				box-sizing: border-box;
+				min-height: var(--pamphlet-viewer-control-height);
+				max-width: min(250px, 45cqi);
 				padding: 4px 7px;
-				border: 1px solid var(--pamphlet-viewer-border, #454b52);
-				border-radius: 3px;
-				background: #191c20;
+				border: var(--pamphlet-viewer-border-width) solid
+					var(--pamphlet-viewer-control-border);
+				border-radius: var(--pamphlet-viewer-field-radius);
+				background: var(--pamphlet-viewer-control-background);
 				color: inherit;
 				font: inherit;
 			}
 		}
 
-		.compact-settings {
-			display: none;
+	}
+	@container reader-toolbar (max-width: 700px) {
+		.view-controls {
+			gap: var(--pamphlet-viewer-compact-control-gap);
 
-			summary {
-				box-sizing: border-box;
-				display: flex;
-				align-items: center;
-				min-height: 44px;
-				padding: 4px 8px;
-				border: 1px solid var(--pamphlet-viewer-border, #454b52);
-				border-radius: 3px;
-				cursor: pointer;
-
-				&:focus-visible {
-					outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-					outline-offset: 1px;
-				}
+			button {
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 
-			&[open] .compact-settings-panel {
-				display: grid;
+			.view-mode-control select {
+				width: min(240px, calc(100cqi - 70px));
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 
-			.compact-settings-panel {
-				position: absolute;
-				z-index: 1;
-				inset-block-start: calc(100% + 6px);
-				inset-inline-end: 0;
-				grid-template-columns: auto auto;
-				gap: 8px;
-				width: max-content;
-				padding: 8px;
-				border: 1px solid var(--pamphlet-viewer-border, #454b52);
-				border-radius: 4px;
-				background: var(--pamphlet-viewer-panel, #24282e);
-
-				.fit-controls {
-					display: flex;
-				}
-
-				.layout-control {
-					display: block;
-				}
+			.icon-button {
+				width: var(--pamphlet-viewer-touch-target-size);
 			}
 		}
 	}
 
-	@container reader-toolbar (max-width: 700px) {
+	@container reader-toolbar (max-width: 340px) {
 		.view-controls {
-			grid-column: 2;
-			grid-row: 1;
-			gap: 4px;
-
-			button {
-				min-height: 44px;
-			}
-
-			.icon-button {
-				width: 44px;
-			}
-
-			> .fit-controls,
-			> .layout-control {
-				display: none;
-			}
-
-			.compact-settings {
-				position: relative;
-				display: block;
-			}
+			margin-inline-start: auto;
 		}
 	}
 </style>

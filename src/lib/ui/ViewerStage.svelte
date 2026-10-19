@@ -142,6 +142,7 @@
 
 <section
 	class="page-area"
+	class:zoomed={zoom > 1}
 	class:dragging={pointerActive && hasScrollableContent()}
 	aria-label="パンフレット表示領域"
 	aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown"
@@ -183,7 +184,7 @@
 		cursor: default;
 
 		&:focus-visible {
-			outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
+			outline: var(--pamphlet-viewer-focus-ring);
 			outline-offset: -3px;
 		}
 
@@ -209,6 +210,12 @@
 				border: 1px solid #c6c9cb;
 				background: #fff;
 			}
+		}
+	}
+
+	@container reader-toolbar (max-width: 700px) {
+		.page-area.zoomed .viewer-pages {
+			padding-inline: 50cqi;
 		}
 	}
 </style>

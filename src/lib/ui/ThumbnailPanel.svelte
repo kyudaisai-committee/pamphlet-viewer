@@ -138,7 +138,8 @@
 		height: 100%;
 		min-width: 0;
 		min-height: 0;
-		border-inline-end: 1px solid var(--pamphlet-viewer-border, #3b4148);
+		border-inline-end: var(--pamphlet-viewer-border-width) solid
+			var(--pamphlet-viewer-border, #3b4148);
 		background: var(--pamphlet-viewer-panel, #24282e);
 
 		.panel-heading {
@@ -146,9 +147,10 @@
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			min-height: 44px;
+			min-height: var(--pamphlet-viewer-touch-target-size);
 			padding: 4px 10px 4px 14px;
-			border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
+			border-bottom: var(--pamphlet-viewer-border-width) solid
+				var(--pamphlet-viewer-border, #3b4148);
 
 			h2 {
 				margin: 0;
@@ -159,21 +161,21 @@
 			button {
 				display: grid;
 				place-items: center;
-				width: 32px;
-				height: 32px;
-				border: 1px solid transparent;
-				border-radius: 4px;
+				width: var(--pamphlet-viewer-control-height);
+				height: var(--pamphlet-viewer-control-height);
+				border: var(--pamphlet-viewer-border-width) solid transparent;
+				border-radius: var(--pamphlet-viewer-control-radius);
 				background: transparent;
 				color: inherit;
 				cursor: pointer;
 
 				&:hover {
-					background: #343a41;
+					background: var(--pamphlet-viewer-control-hover);
 				}
 
 				&:focus-visible {
-					outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-					outline-offset: 1px;
+					outline: var(--pamphlet-viewer-focus-ring);
+					outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 				}
 			}
 		}
@@ -209,8 +211,8 @@
 						flex: 0 0 152px;
 						margin: 0;
 						padding: 7px;
-						border: 1px solid transparent;
-						border-radius: 4px;
+						border: var(--pamphlet-viewer-border-width) solid transparent;
+						border-radius: var(--pamphlet-viewer-panel-radius);
 						background: transparent;
 						color: #c6cbd1;
 						font: inherit;
@@ -219,7 +221,7 @@
 
 						&.current {
 							border-color: var(--pamphlet-viewer-accent, #a8c5bc);
-							background: #30373b;
+							background: var(--pamphlet-viewer-thumbnail-current);
 							color: #f3f5f4;
 						}
 
@@ -228,12 +230,12 @@
 						}
 
 						&:hover:not(.current) {
-							background: #2c3137;
+							background: var(--pamphlet-viewer-thumbnail-hover);
 						}
 
 						&:focus-visible {
-							outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-							outline-offset: 1px;
+							outline: var(--pamphlet-viewer-focus-ring);
+							outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 						}
 
 						.thumbnail-preview {
@@ -247,7 +249,7 @@
 							min-width: 0;
 							min-height: 0;
 							overflow: hidden;
-							border: 1px solid #454b52;
+							border: var(--pamphlet-viewer-border-width) solid #454b52;
 							background: #171a1e;
 
 							.thumbnail-placeholder {

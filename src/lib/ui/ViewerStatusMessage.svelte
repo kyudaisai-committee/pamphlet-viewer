@@ -42,16 +42,16 @@
 		}
 
 		button {
-			min-height: 34px;
+			min-height: var(--pamphlet-viewer-status-action-height);
 			padding: 6px 10px;
-			border: 1px solid currentColor;
+			border: var(--pamphlet-viewer-border-width) solid currentColor;
 			background: transparent;
 			color: inherit;
 			font: inherit;
 			cursor: pointer;
 
 			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #3157a4);
+				outline: var(--pamphlet-viewer-focus-ring);
 				outline-offset: 2px;
 			}
 		}

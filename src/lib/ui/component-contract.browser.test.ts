@@ -29,6 +29,7 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	element.page = 1;
 	element.layout = "single";
 	element.fit = "page";
+	element.config = { chapters: [{ title: "はじめに", page: 1 }] };
 
 	const pageChanged = new Promise<void>((resolve) => {
 		container.addEventListener(
@@ -61,8 +62,12 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	const shadowRoot = element.shadowRoot;
 	expect(shadowRoot).not.toBeNull();
 	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
+	const chapterSelect = shadowRoot?.querySelector<HTMLSelectElement>(
+		'select[aria-label="章へ移動"]',
+	);
 	const canvas = shadowRoot?.querySelector<HTMLCanvasElement>(".page-canvas");
 	expect(toolbar).not.toBeNull();
+	expect(chapterSelect?.selectedOptions[0]?.textContent).toBe("はじめに");
 	expect(canvas).not.toBeNull();
 	expect(getComputedStyle(toolbar as HTMLElement).display).toBe("flex");
 	expect(getComputedStyle(canvas as HTMLCanvasElement).display).toBe("block");

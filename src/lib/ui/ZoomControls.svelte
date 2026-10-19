@@ -71,26 +71,27 @@
 
 		button {
 			box-sizing: border-box;
-			min-height: 32px;
-			padding: 5px 7px;
-			border: 1px solid transparent;
-			border-radius: 4px;
+			min-height: var(--pamphlet-viewer-control-height);
+			padding: var(--pamphlet-viewer-control-padding-block)
+				var(--pamphlet-viewer-control-padding-inline);
+			border: var(--pamphlet-viewer-border-width) solid transparent;
+			border-radius: var(--pamphlet-viewer-control-radius);
 			background: transparent;
 			color: inherit;
 			font: inherit;
 			cursor: pointer;
 
 			&:hover:not(:disabled) {
-				background: #343a41;
+				background: var(--pamphlet-viewer-control-hover);
 			}
 
 			&:focus-visible {
-				outline: 2px solid var(--pamphlet-viewer-accent, #a8c5bc);
-				outline-offset: 1px;
+				outline: var(--pamphlet-viewer-focus-ring);
+				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
 			}
 
 			&:disabled {
-				color: #727981;
+				color: var(--pamphlet-viewer-disabled-text);
 				cursor: not-allowed;
 			}
 		}
@@ -98,8 +99,8 @@
 		.icon-button {
 			display: inline-grid;
 			place-items: center;
-			width: 34px;
-			padding: 5px;
+			width: var(--pamphlet-viewer-icon-button-width);
+			padding: var(--pamphlet-viewer-control-padding-block);
 		}
 
 		.zoom-slider {
@@ -126,7 +127,7 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.zoom-controls {
-			grid-column: 1 / -1;
+			flex: 1 1 100%;
 			justify-content: space-between;
 			gap: 3px;
 
@@ -138,7 +139,7 @@
 			}
 
 			.reset-zoom {
-				width: 44px;
+				width: var(--pamphlet-viewer-touch-target-size);
 				padding: 5px;
 			}
 
@@ -147,8 +148,9 @@
 			}
 
 			button {
-				min-height: 44px;
+				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
 		}
 	}
+
 </style>

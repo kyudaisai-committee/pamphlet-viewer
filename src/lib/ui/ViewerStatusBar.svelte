@@ -29,7 +29,8 @@
 		justify-content: flex-end;
 		min-height: 30px;
 		padding: 4px 12px;
-		border-top: 1px solid var(--pamphlet-viewer-border, #d8dce5);
+		border-top: var(--pamphlet-viewer-border-width) solid
+			var(--pamphlet-viewer-border, #d8dce5);
 		background: var(--pamphlet-viewer-toolbar, #fbfcfe);
 		color: #aeb4ba;
 		font-size: 12px;

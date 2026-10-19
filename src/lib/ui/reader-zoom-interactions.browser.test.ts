@@ -64,39 +64,44 @@ test("toolbar zoom, slider, and reset keep the page-area center in place", async
 	await expect.poll(() => pagePointError(pageArea, center, initialRatio)).toBeLessThanOrEqual(2);
 });
 
-test("Ctrl-wheel and pinch zoom preserve the pointer or gesture center", async () => {
-	await import("../entry");
-	const element = createViewer(createBackend());
-	const firstPage = waitForPageChange(element);
-	document.body.append(element);
-	await firstPage;
+test.each([390, 520, 700])(
+	"Ctrl-wheel and pinch zoom preserve the pointer or gesture center in a %i pixel host",
+	async (width) => {
+		await import("../entry");
+		const element = createViewer(createBackend(), width);
+		const firstPage = waitForPageChange(element);
+		document.body.append(element);
+		await firstPage;
 
-	const shadowRoot = getShadowRoot(element);
-	const pageArea = getPageArea(shadowRoot);
-	const point = getAreaPoint(pageArea, 0.63, 0.55);
-	const initialRatio = measurePageRatio(pageArea, point);
-	const initialWidth = getFrame(pageArea).getBoundingClientRect().width;
-	pageArea.dispatchEvent(createWheel(point, 1, 1.8));
-	await expect.poll(() => readZoom(shadowRoot)).toBe("180%");
-	await expect
-		.poll(() => getFrame(pageArea).getBoundingClientRect().width)
-		.toBeGreaterThan(initialWidth);
-	await expect.poll(() => pagePointError(pageArea, point, initialRatio)).toBeLessThanOrEqual(2);
+		const shadowRoot = getShadowRoot(element);
+		const pageArea = getPageArea(shadowRoot);
+		const point = getAreaPoint(pageArea, 0.63, 0.55);
+		const initialRatio = measurePageRatio(pageArea, point);
+		const initialWidth = getFrame(pageArea).getBoundingClientRect().width;
+		pageArea.dispatchEvent(createWheel(point, 1, 1.8));
+		await expect.poll(() => readZoom(shadowRoot)).toBe("180%");
+		await expect
+			.poll(() => getFrame(pageArea).getBoundingClientRect().width)
+			.toBeGreaterThan(initialWidth);
+		await expect.poll(() => pagePointError(pageArea, point, initialRatio)).toBeLessThanOrEqual(2);
 
-	const pinchStartRatio = measurePageRatio(pageArea, point);
-	const widthBeforePinch = getFrame(pageArea).getBoundingClientRect().width;
-	pageArea.dispatchEvent(createPointerEvent("pointerdown", 1, point.x - 30, point.y, "touch"));
-	pageArea.dispatchEvent(createPointerEvent("pointerdown", 2, point.x + 30, point.y, "touch"));
-	pageArea.dispatchEvent(createPointerEvent("pointermove", 1, point.x - 45, point.y, "touch"));
-	pageArea.dispatchEvent(createPointerEvent("pointermove", 2, point.x + 45, point.y, "touch"));
-	pageArea.dispatchEvent(createPointerEvent("pointerup", 1, point.x - 45, point.y, "touch"));
-	pageArea.dispatchEvent(createPointerEvent("pointerup", 2, point.x + 45, point.y, "touch"));
-	await expect.poll(() => readZoom(shadowRoot)).toBe("270%");
-	await expect
-		.poll(() => getFrame(pageArea).getBoundingClientRect().width)
-		.toBeGreaterThan(widthBeforePinch);
-	await expect.poll(() => pagePointError(pageArea, point, pinchStartRatio)).toBeLessThanOrEqual(2);
-});
+		const pinchStartRatio = measurePageRatio(pageArea, point);
+		const widthBeforePinch = getFrame(pageArea).getBoundingClientRect().width;
+		pageArea.dispatchEvent(createPointerEvent("pointerdown", 1, point.x - 30, point.y, "touch"));
+		pageArea.dispatchEvent(createPointerEvent("pointerdown", 2, point.x + 30, point.y, "touch"));
+		pageArea.dispatchEvent(createPointerEvent("pointermove", 1, point.x - 45, point.y, "touch"));
+		pageArea.dispatchEvent(createPointerEvent("pointermove", 2, point.x + 45, point.y, "touch"));
+		pageArea.dispatchEvent(createPointerEvent("pointerup", 1, point.x - 45, point.y, "touch"));
+		pageArea.dispatchEvent(createPointerEvent("pointerup", 2, point.x + 45, point.y, "touch"));
+		await expect.poll(() => readZoom(shadowRoot)).toBe("270%");
+		await expect
+			.poll(() => getFrame(pageArea).getBoundingClientRect().width)
+			.toBeGreaterThan(widthBeforePinch);
+		await expect
+			.poll(() => pagePointError(pageArea, point, pinchStartRatio))
+			.toBeLessThanOrEqual(2);
+	},
+);
 
 test("a stale zoom render cannot consume the latest zoom anchor", async () => {
 	await import("../entry");
@@ -180,9 +185,9 @@ test("a stale zoom render cannot consume the latest zoom anchor", async () => {
 	expect(pageChangeEvents).toBe(0);
 });
 
-function createViewer(backend: DocumentBackend): PamphletViewerElement {
+function createViewer(backend: DocumentBackend, width = 520): PamphletViewerElement {
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
-	element.style.width = "520px";
+	element.style.width = `${width}px`;
 	element.style.height = "620px";
 	element.layout = "single";
 	element.backend = backend;

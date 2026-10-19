@@ -6,6 +6,7 @@
 			layout: { type: "String", reflect: true },
 			fit: { type: "String", reflect: true },
 			backend: { attribute: "data-backend", type: "Object" },
+			config: { type: "Object" },
 		},
 		extend: extendViewerElement,
 	}}
@@ -25,13 +26,18 @@
 	import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 	import { ViewerController } from "../domain/viewer-controller.svelte";
 	import type { RenderInput, ViewerEvent } from "../domain/viewer-controller.svelte";
+import { ViewerBookmarks } from "../domain/viewer-bookmarks.svelte";
+import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
 	import type { PageRenderPlan } from "../domain/render-plan";
+import type { PamphletViewerConfig } from "@/lib/public-api";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
+	import ViewerSettingsToolbar from "./ViewerSettingsToolbar.svelte";
 	import ViewerStatusBar from "./ViewerStatusBar.svelte";
 	import ViewerToolbar from "./ViewerToolbar.svelte";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
+	import { observeResponsiveReaderOrder } from "./reader-region-order";
 	import { captureZoomAnchor, restoreZoomAnchor } from "./reader-zoom-anchor";
 
 	interface Props {
@@ -40,6 +46,7 @@
 		layout?: LayoutMode;
 		fit?: FitMode;
 		backend?: DocumentBackend;
+		config?: PamphletViewerConfig;
 	}
 
 	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
@@ -50,6 +57,7 @@
 		layout = $bindable<LayoutMode>("auto"),
 		fit = $bindable<FitMode>("page"),
 		backend,
+		config,
 	}: Props = $props();
 
 	const defaultBackend = new PdfiumBackend();
@@ -61,12 +69,24 @@
 	let zoom = $state(1);
 	let thumbnailsOpen = $state(false);
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
+	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
 	let pendingZoomAnchor: ZoomAnchor | null = null;
 	let pendingZoomAnchorRequestId: number | null = null;
 	let zoomAnchorVersion = 0;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
+	let chapters = $derived(resolveChapters(config, controller.pageCount));
+	let currentChapter = $derived(findCurrentChapter(chapters, page));
+	let resolvedSource = $derived(
+		src.trim().length === 0
+			? null
+			: resolveDocumentSource(src, pageArea?.ownerDocument.baseURI ?? document.baseURI),
+	);
+	let bookmarksEnabled = $derived(
+		controller.phase === "ready" && controller.pageCount > 0 && resolvedSource !== null,
+	);
+	let currentPageBookmarked = $derived(bookmarkController.pages.includes(page));
 	let displayedPages = $derived.by((): DisplayedPage[] =>
 		currentPages.flatMap((pageIndex) => {
 			const visual = controller.pageVisuals[pageIndex];
@@ -106,6 +126,13 @@
 			return;
 		}
 		untrack(() => void controller.load(resolvedSource, activeBackend));
+	});
+
+	$effect(() => {
+		const documentKey = resolvedSource;
+		const pageCount = controller.pageCount;
+		const enabled = bookmarksEnabled;
+		return bookmarkController.connect(documentKey, pageCount, enabled);
 	});
 
 	$effect(() => {
@@ -172,6 +199,7 @@
 
 	onMount(() => {
 		if (pageArea === undefined || shellElement === undefined) return;
+		const detachResponsiveOrder = observeResponsiveReaderOrder(shellElement);
 		const host = getViewerHost();
 		const fullscreenButton = shellElement.querySelector<HTMLElement>("[data-control='fullscreen']");
 		const detachFullscreen =
@@ -180,6 +208,7 @@
 				: () => undefined;
 		host?.dispatchEvent(new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }));
 		return () => {
+			detachResponsiveOrder();
 			detachFullscreen();
 			clearZoomAnchor();
 			controller.dispose();
@@ -212,6 +241,29 @@
 	function onPageChange(value: string): void {
 		clearZoomAnchor();
 		page = Number(value);
+	}
+
+	function onChapterChange(value: string): void {
+		const chapterPage = chapters.find((chapter) => String(chapter.page) === value)?.page;
+		if (chapterPage === undefined) return;
+		clearZoomAnchor();
+		page = chapterPage;
+	}
+
+	function toggleCurrentBookmark(): void {
+		bookmarkController.toggleCurrentPage(
+			resolvedSource,
+			page,
+			controller.pageCount,
+			bookmarksEnabled,
+		);
+	}
+
+	function selectBookmark(value: string): void {
+		const bookmarkedPage = bookmarkController.findPage(value, bookmarksEnabled);
+		if (bookmarkedPage === undefined) return;
+		clearZoomAnchor();
+		page = bookmarkedPage;
 	}
 
 	function onLayoutChange(value: string): void {
@@ -322,56 +374,75 @@
 </script>
 
 <div class="viewer-shell" bind:this={shellElement}>
-	<ViewerToolbar
-		page={page}
-		pageCount={controller.pageCount}
+	<div class="settings-region" data-reader-region="settings">
+		<ViewerSettingsToolbar
 		layout={parseLayout(layout) ?? "auto"}
 		fit={parseFit(fit) ?? "page"}
 		zoom={zoom}
 		enabled={controller.pageCount > 0}
-		canPrevious={page > 1}
-		canNext={page < controller.pageCount}
-		thumbnailsOpen={thumbnailsOpen}
 		fullscreen={fullscreenController.active}
-		onPageChange={onPageChange}
 		onLayoutChange={onLayoutChange}
 		onFitChange={onFitChange}
-		onPrevious={previousPage}
-		onNext={nextPage}
 		onZoomChange={onZoomChange}
 		onResetZoom={onResetZoom}
-		onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
 		onToggleFullscreen={() => void fullscreenController.toggle()}
 	/>
-	<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
-		{#if thumbnailsOpen}
-			<div class="thumbnail-slot">
-				<ThumbnailPanel
-					pageCount={controller.pageCount}
-					currentPages={currentPages}
-					visuals={controller.thumbnailVisuals}
-					onVisiblePagesChange={updateThumbnailPages}
-					onSelectPage={selectThumbnail}
-					onClose={() => (thumbnailsOpen = false)}
+	</div>
+	<div class="content-region" data-reader-region="body">
+		<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
+			{#if thumbnailsOpen}
+				<div class="thumbnail-slot">
+					<ThumbnailPanel
+						pageCount={controller.pageCount}
+						currentPages={currentPages}
+						visuals={controller.thumbnailVisuals}
+						onVisiblePagesChange={updateThumbnailPages}
+						onSelectPage={selectThumbnail}
+						onClose={() => (thumbnailsOpen = false)}
+					/>
+				</div>
+			{/if}
+			<div class="stage-slot">
+				<ViewerStage
+					pages={displayedPages}
+					phase={controller.phase}
+					failure={controller.failure}
+					{zoom}
+					bind:pageArea
+					onViewportChange={onViewportChange}
+					onZoomGesture={onZoomGesture}
+					onPrevious={previousPage}
+					onNext={nextPage}
+					onRetry={retry}
 				/>
 			</div>
-		{/if}
-		<div class="stage-slot">
-			<ViewerStage
-				pages={displayedPages}
-				phase={controller.phase}
-				failure={controller.failure}
-				{zoom}
-				bind:pageArea
-				onViewportChange={onViewportChange}
-				onZoomGesture={onZoomGesture}
-				onPrevious={previousPage}
-				onNext={nextPage}
-				onRetry={retry}
-			/>
 		</div>
 	</div>
-	<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
+	<div class="status-region" data-reader-region="status">
+		<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
+	</div>
+	<div class="navigation-region" data-reader-region="navigation">
+		<ViewerToolbar
+			page={page}
+			pageCount={controller.pageCount}
+			{chapters}
+			currentChapterPage={currentChapter?.page}
+			bookmarkPages={bookmarkController.pages}
+			bookmarked={currentPageBookmarked}
+			bookmarkEnabled={bookmarksEnabled}
+			enabled={controller.pageCount > 0}
+			canPrevious={page > 1}
+			canNext={page < controller.pageCount}
+			thumbnailsOpen={thumbnailsOpen}
+			onPageChange={onPageChange}
+			onChapterChange={onChapterChange}
+			onToggleBookmark={toggleCurrentBookmark}
+			onSelectBookmark={selectBookmark}
+			onPrevious={previousPage}
+			onNext={nextPage}
+			onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
+		/>
+	</div>
 </div>
 
 <style>
@@ -380,7 +451,7 @@
 		width: 100%;
 		min-width: 0;
 		min-height: 22rem;
-		color: #e4e7e9;
+		color: var(--pamphlet-viewer-text);
 		font: 14px/1.5 system-ui, sans-serif;
 		color-scheme: dark;
 		--pamphlet-viewer-text: #e4e7e9;
@@ -389,12 +460,41 @@
 		--pamphlet-viewer-panel: #24282e;
 		--pamphlet-viewer-toolbar: #24282e;
 		--pamphlet-viewer-accent: #a8c5bc;
+		--pamphlet-viewer-border-width: 1px;
+		--pamphlet-viewer-control-height: 32px;
+		--pamphlet-viewer-touch-target-size: 44px;
+		--pamphlet-viewer-icon-button-width: 34px;
+		--pamphlet-viewer-status-action-height: 34px;
+		--pamphlet-viewer-control-radius: 4px;
+		--pamphlet-viewer-field-radius: 3px;
+		--pamphlet-viewer-panel-radius: 4px;
+		--pamphlet-viewer-control-padding-block: 5px;
+		--pamphlet-viewer-control-padding-inline: 7px;
+		--pamphlet-viewer-control-gap: 6px;
+		--pamphlet-viewer-compact-control-gap: 4px;
+		--pamphlet-viewer-compact-toolbar-gap: 8px;
+		--pamphlet-viewer-compact-menu-gap: 8px;
+		--pamphlet-viewer-popup-offset: 6px;
+		--pamphlet-viewer-toolbar-height: 52px;
+		--pamphlet-viewer-toolbar-gap: 18px;
+		--pamphlet-viewer-toolbar-padding-block: 6px;
+		--pamphlet-viewer-toolbar-padding-inline: 12px;
+		--pamphlet-viewer-compact-toolbar-height: 56px;
+		--pamphlet-viewer-compact-toolbar-padding: 6px;
+		--pamphlet-viewer-control-background: #191c20;
+		--pamphlet-viewer-control-border: var(--pamphlet-viewer-border, #454b52);
+		--pamphlet-viewer-control-hover: #343a41;
+		--pamphlet-viewer-disabled-text: #727981;
+		--pamphlet-viewer-thumbnail-current: #30373b;
+		--pamphlet-viewer-thumbnail-hover: #2c3137;
+		--pamphlet-viewer-focus-ring: 2px solid var(--pamphlet-viewer-accent);
+		--pamphlet-viewer-focus-ring-offset: 1px;
 
 		&:fullscreen {
 			width: 100vw !important;
 			height: 100dvh !important;
 			min-height: 0 !important;
-			background: #191c20;
+			background: var(--pamphlet-viewer-stage);
 		}
 	}
 
@@ -405,21 +505,50 @@
 		width: 100vw !important;
 		height: 100dvh !important;
 		min-height: 0 !important;
-		background: #191c20;
+		background: var(--pamphlet-viewer-stage);
 	}
 
 	.viewer-shell {
 		box-sizing: border-box;
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 		width: 100%;
 		height: 100%;
 		min-height: inherit;
-		container-name: pamphlet-reader;
+		container-name: pamphlet-reader reader-toolbar;
 		container-type: inline-size;
 		overflow: hidden;
-		border: 1px solid var(--pamphlet-viewer-border);
-		background: #191c20;
+		border: var(--pamphlet-viewer-border-width) solid var(--pamphlet-viewer-border);
+		background: var(--pamphlet-viewer-stage);
+
+		.settings-region,
+		.navigation-region {
+			min-width: 0;
+		}
+
+		.navigation-region {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.settings-region {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.content-region {
+			grid-column: 1 / -1;
+			grid-row: 3;
+			display: flex;
+			min-width: 0;
+			min-height: 0;
+		}
+
+		.status-region {
+			grid-column: 1 / -1;
+			grid-row: 4;
+		}
 
 		&:popover-open {
 			position: fixed;
@@ -430,7 +559,7 @@
 			max-height: none;
 			margin: 0;
 			border: 0;
-			background: #191c20;
+			background: var(--pamphlet-viewer-stage);
 		}
 
 		.reader-body {
@@ -461,15 +590,42 @@
 		}
 	}
 
-	@container pamphlet-reader (max-width: 620px) {
-		.viewer-shell {
-			.reader-body.thumbnails-open {
-				grid-template-columns: minmax(0, 1fr);
-
-				.stage-slot {
-					display: none;
-				}
-			}
+	@container pamphlet-reader (min-width: 701px) and (max-width: 837px) {
+		.viewer-shell .settings-region {
+			grid-column: 1 / -1;
+			grid-row: 2;
 		}
+	}
+
+	@container pamphlet-reader (max-width: 700px) {
+		.viewer-shell .settings-region {
+			grid-column: 1 / -1;
+			grid-row: 1;
+		}
+
+		.viewer-shell .content-region {
+			grid-row: 3;
+		}
+
+		.viewer-shell .status-region {
+			grid-row: 4;
+		}
+
+		.viewer-shell .navigation-region {
+			grid-column: 1 / -1;
+			grid-row: 5;
+		}
+
+		.viewer-shell .reader-body {
+			flex: 1 1 0;
+		}
+
+		.viewer-shell .reader-body.thumbnails-open {
+			grid-template-columns: minmax(0, 1fr);
+
+			.stage-slot {
+				display: none;
+			}
+	}
 	}
 </style>
