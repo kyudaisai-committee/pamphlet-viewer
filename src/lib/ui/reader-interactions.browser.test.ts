@@ -461,9 +461,10 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 	document.body.append(element);
 	await firstPage;
 	const shadowRoot = element.shadowRoot;
-	const shell = shadowRoot?.querySelector<HTMLElement>(".viewer-shell");
-	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
-	const settingsToolbar = shadowRoot?.querySelector<HTMLElement>(".settings-toolbar");
+	if (shadowRoot === null) throw new Error("The reader shadow root was not rendered.");
+	const shell = shadowRoot.querySelector<HTMLElement>(".viewer-shell");
+	const toolbar = shadowRoot.querySelector<HTMLElement>(".toolbar");
+	const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
 	if (shell === null || toolbar === null || settingsToolbar === null) {
 		throw new Error("The desktop reader toolbars were not rendered.");
 	}
