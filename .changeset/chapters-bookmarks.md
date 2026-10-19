@@ -1,5 +1,5 @@
 ---
-"@kyudaisai/pamphlet-viewer": minor
+"@kyudaisai/pamphlet-viewer": patch
 ---
 
 型付きの設定オブジェクトで章のタイトルと開始ページを指定し、章一覧から移動できるようにしました。
