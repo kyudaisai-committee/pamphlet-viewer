@@ -471,7 +471,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		width: 100%;
 		height: 100%;
 		min-height: inherit;
-		container-name: pamphlet-reader;
+		container-name: pamphlet-reader reader-toolbar;
 		container-type: inline-size;
 		overflow: hidden;
 		border: 1px solid var(--pamphlet-viewer-border);
@@ -517,15 +517,33 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		}
 	}
 
-	@container pamphlet-reader (max-width: 620px) {
-		.viewer-shell {
-			.reader-body.thumbnails-open {
-				grid-template-columns: minmax(0, 1fr);
-
-				.stage-slot {
-					display: none;
-				}
-			}
+	@container pamphlet-reader (max-width: 700px) {
+		:global(.toolbar-container) {
+			display: contents;
 		}
+
+		:global(.settings-toolbar) {
+			order: 1;
+		}
+
+		.reader-body {
+			order: 2;
+		}
+
+		:global(.status-bar) {
+			order: 3;
+		}
+
+		:global(.toolbar) {
+			order: 4;
+		}
+
+		.viewer-shell .reader-body.thumbnails-open {
+			grid-template-columns: minmax(0, 1fr);
+
+			.stage-slot {
+				display: none;
+			}
+	}
 	}
 </style>

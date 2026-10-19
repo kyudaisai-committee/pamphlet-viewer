@@ -105,6 +105,8 @@
 			{onNext}
 			{onToggleThumbnails}
 		/>
+	</div>
+	<div class="settings-toolbar" role="group" aria-label="ズームと表示設定">
 		<ZoomControls {zoom} {enabled} {onZoomChange} {onResetZoom} />
 		<ViewerViewControls
 			{fit}
@@ -120,30 +122,69 @@
 
 <style>
 	.toolbar-container {
-		container-name: reader-toolbar;
-		container-type: inline-size;
+		box-sizing: border-box;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 18px;
+		width: 100%;
+		min-width: 0;
+		min-height: 52px;
+		padding: 6px 12px;
+		border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
+		background: var(--pamphlet-viewer-toolbar, #24282e);
 
 		.toolbar {
-			box-sizing: border-box;
 			display: flex;
-			flex-wrap: wrap;
 			align-items: center;
-			justify-content: space-between;
-			gap: 8px 18px;
-			min-height: 52px;
-			padding: 6px 12px;
-			border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
-			background: var(--pamphlet-viewer-toolbar, #24282e);
+			min-width: 0;
+		}
+
+		.settings-toolbar {
+			display: flex;
+			align-items: center;
+			justify-content: flex-end;
+			gap: 18px;
+			min-width: 0;
 		}
 	}
 
 	@container reader-toolbar (max-width: 700px) {
 		.toolbar-container {
+			display: contents;
+
 			.toolbar {
-				display: grid;
-				grid-template-columns: minmax(0, 1fr) auto;
-				gap: 6px 8px;
+				box-sizing: border-box;
+				position: relative;
+				display: flex;
+				align-items: center;
+				width: 100%;
+				min-height: 56px;
 				padding: 6px;
+				border-top: 1px solid var(--pamphlet-viewer-border, #3b4148);
+				background: var(--pamphlet-viewer-toolbar, #24282e);
+			}
+
+			.settings-toolbar {
+				box-sizing: border-box;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 8px;
+				width: 100%;
+				min-height: 56px;
+				padding: 6px;
+				border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
+				background: var(--pamphlet-viewer-toolbar, #24282e);
+			}
+		}
+	}
+
+	@container reader-toolbar (max-width: 340px) {
+		.toolbar-container {
+			.settings-toolbar {
+				flex-wrap: wrap;
+				row-gap: 4px;
 			}
 		}
 	}

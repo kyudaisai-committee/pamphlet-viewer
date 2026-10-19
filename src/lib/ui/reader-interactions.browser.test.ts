@@ -210,60 +210,183 @@ test("synchronizes bookmarks between viewer instances and storage events", async
 		.toEqual(["", "2", "4"]);
 });
 
-test("keeps chapter and saved-page navigation usable on a narrow host", async () => {
-	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
-	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3, 8] }));
-	await import("../entry");
-	const element = createViewer({ width: 390, height: 620 }, createBackend(12));
-	element.layout = "single";
-	element.config = {
-		chapters: [
-			{ title: "前半", page: 1 },
-			{ title: "後半", page: 7 },
-		],
-	};
-	const firstPage = waitForPageChange(element);
-	document.body.append(element);
-	await firstPage;
+test.each([320, 390])(
+	"keeps chapter and saved-page navigation usable at %i pixels",
+	async (width) => {
+		const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
+		localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3, 8] }));
+		await import("../entry");
+		const element = createViewer({ width, height: 620 }, createBackend(12));
+		element.layout = "auto";
+		element.config = {
+			chapters: [
+				{ title: "前半", page: 1 },
+				{ title: "後半", page: 7 },
+			],
+		};
+		const firstPage = waitForPageChange(element);
+		document.body.append(element);
+		await firstPage;
 
-	const shadowRoot = element.shadowRoot;
-	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
-	const compactNavigation = shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
-	if (
-		toolbar === null ||
-		toolbar === undefined ||
-		compactNavigation === null ||
-		compactNavigation === undefined
-	) {
-		throw new Error("The narrow reader navigation controls were not rendered.");
-	}
-	await expect.poll(() => toolbar.getBoundingClientRect().height).toBeLessThanOrEqual(120);
-	compactNavigation.querySelector<HTMLElement>("summary")?.click();
-	const chapterSelect = compactNavigation.querySelector<HTMLSelectElement>(
-		'select[aria-label="章へ移動"]',
-	);
-	const bookmarkSelect = compactNavigation.querySelector<HTMLSelectElement>(
-		'select[aria-label="ブックマーク一覧"]',
-	);
-	if (chapterSelect === null || bookmarkSelect === null) {
-		throw new Error("The compact chapter and bookmark lists were not rendered.");
-	}
-	expect(chapterSelect.getBoundingClientRect().right).toBeLessThanOrEqual(
-		toolbar.getBoundingClientRect().right,
-	);
-	expect(bookmarkSelect.getBoundingClientRect().right).toBeLessThanOrEqual(
-		toolbar.getBoundingClientRect().right,
-	);
-	chapterSelect.value = "7";
-	chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
-	await expect.poll(() => element.page).toBe(7);
-	expect(compactNavigation.open).toBe(false);
-	compactNavigation.querySelector<HTMLElement>("summary")?.click();
-	bookmarkSelect.value = "8";
-	bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
-	await expect.poll(() => element.page).toBe(8);
-	expect(compactNavigation.open).toBe(false);
-});
+		const shadowRoot = element.shadowRoot;
+		const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
+		const settingsToolbar = shadowRoot?.querySelector<HTMLElement>(".settings-toolbar");
+		const shell = shadowRoot?.querySelector<HTMLElement>(".viewer-shell");
+		const readerBody = shadowRoot?.querySelector<HTMLElement>(".reader-body");
+		const statusBar = shadowRoot?.querySelector<HTMLElement>(".status-bar");
+		const pageControls = shadowRoot?.querySelector<HTMLElement>(".page-controls");
+		const zoomControls = shadowRoot?.querySelector<HTMLElement>(".zoom-controls");
+		const viewControls = shadowRoot?.querySelector<HTMLElement>(".view-controls");
+		const zoomSlider = shadowRoot?.querySelector<HTMLInputElement>(".zoom-slider");
+		const zoomIn = shadowRoot?.querySelector<HTMLButtonElement>(
+			'.zoom-controls button[aria-label="拡大"]',
+		);
+		const settingsSummary = shadowRoot?.querySelector<HTMLElement>(".compact-settings > summary");
+		const settingsPanel = shadowRoot?.querySelector<HTMLElement>(".compact-settings-panel");
+		const compactNavigation = shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
+		const summary = compactNavigation?.querySelector<HTMLElement>("summary");
+		if (
+			toolbar === null ||
+			toolbar === undefined ||
+			settingsToolbar === null ||
+			settingsToolbar === undefined ||
+			shell === null ||
+			shell === undefined ||
+			readerBody === null ||
+			readerBody === undefined ||
+			statusBar === null ||
+			statusBar === undefined ||
+			pageControls === null ||
+			pageControls === undefined ||
+			zoomControls === null ||
+			zoomControls === undefined ||
+			viewControls === null ||
+			viewControls === undefined ||
+			zoomSlider === null ||
+			zoomSlider === undefined ||
+			zoomIn === null ||
+			zoomIn === undefined ||
+			settingsSummary === null ||
+			settingsSummary === undefined ||
+			settingsPanel === null ||
+			settingsPanel === undefined ||
+			compactNavigation === null ||
+			compactNavigation === undefined ||
+			summary === null ||
+			summary === undefined
+		) {
+			throw new Error("The narrow reader navigation controls were not rendered.");
+		}
+		expect(element.getBoundingClientRect().width).toBe(width);
+		const shellRect = shell.getBoundingClientRect();
+		const toolbarRect = toolbar.getBoundingClientRect();
+		const settingsToolbarRect = settingsToolbar.getBoundingClientRect();
+		const bodyRect = readerBody.getBoundingClientRect();
+		const statusRect = statusBar.getBoundingClientRect();
+		const pageControlsRect = pageControls.getBoundingClientRect();
+		const zoomControlsRect = zoomControls.getBoundingClientRect();
+		const viewControlsRect = viewControls.getBoundingClientRect();
+		expect(settingsToolbarRect.left).toBeGreaterThanOrEqual(shellRect.left);
+		expect(settingsToolbarRect.right).toBeLessThanOrEqual(shellRect.right);
+		expect(toolbarRect.left).toBeGreaterThanOrEqual(shellRect.left);
+		expect(toolbarRect.right).toBeLessThanOrEqual(shellRect.right);
+		expect(settingsToolbarRect.top).toBeGreaterThanOrEqual(shellRect.top);
+		expect(settingsToolbarRect.bottom).toBeLessThanOrEqual(bodyRect.top);
+		expect(bodyRect.bottom).toBeLessThanOrEqual(statusRect.top);
+		expect(statusRect.bottom).toBeLessThanOrEqual(toolbarRect.top);
+		expect(toolbarRect.bottom).toBeLessThanOrEqual(shellRect.bottom);
+		expect(pageControlsRect.top).toBeGreaterThanOrEqual(toolbarRect.top);
+		expect(pageControlsRect.bottom).toBeLessThanOrEqual(toolbarRect.bottom);
+		expect(zoomControlsRect.top).toBeGreaterThanOrEqual(settingsToolbarRect.top);
+		expect(zoomControlsRect.bottom).toBeLessThanOrEqual(settingsToolbarRect.bottom);
+		expect(viewControlsRect.top).toBeGreaterThanOrEqual(settingsToolbarRect.top);
+		expect(viewControlsRect.bottom).toBeLessThanOrEqual(settingsToolbarRect.bottom);
+		const zoomAndViewDoNotOverlap =
+			zoomControlsRect.right <= viewControlsRect.left ||
+			viewControlsRect.right <= zoomControlsRect.left ||
+			zoomControlsRect.bottom <= viewControlsRect.top ||
+			viewControlsRect.bottom <= zoomControlsRect.top;
+		expect(zoomAndViewDoNotOverlap).toBe(true);
+		const summaryLocator = browserPage.elementLocator(summary);
+		await expect.element(summaryLocator).toBeVisible();
+		await summaryLocator.click();
+		await expect.poll(() => compactNavigation.open).toBe(true);
+		const panel = compactNavigation.querySelector<HTMLElement>(".compact-navigation-panel");
+		const chapterSelect = compactNavigation.querySelector<HTMLSelectElement>(
+			'select[aria-label="章へ移動"]',
+		);
+		const bookmarkSelect = compactNavigation.querySelector<HTMLSelectElement>(
+			'select[aria-label="ブックマーク一覧"]',
+		);
+		if (panel === null || chapterSelect === null || bookmarkSelect === null) {
+			throw new Error("The compact chapter and bookmark lists were not rendered.");
+		}
+		const panelLocator = browserPage.elementLocator(panel);
+		const chapterLocator = browserPage.elementLocator(chapterSelect);
+		const bookmarkLocator = browserPage.elementLocator(bookmarkSelect);
+		await expect.element(panelLocator).toBeVisible();
+		await expect.element(chapterLocator).toBeVisible();
+		await expect.element(bookmarkLocator).toBeVisible();
+		const panelRect = panel.getBoundingClientRect();
+		expect(panelRect.width).toBeLessThanOrEqual(280);
+		expect(panelRect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+		expect(panelRect.right).toBeLessThanOrEqual(toolbarRect.right);
+		expect(panelRect.left).toBeGreaterThanOrEqual(shellRect.left);
+		expect(panelRect.right).toBeLessThanOrEqual(shellRect.right);
+		expect(panelRect.bottom).toBeLessThanOrEqual(toolbarRect.top);
+		for (const select of [chapterSelect, bookmarkSelect]) {
+			const selectRect = select.getBoundingClientRect();
+			expect(selectRect.left).toBeGreaterThanOrEqual(panelRect.left);
+			expect(selectRect.right).toBeLessThanOrEqual(panelRect.right);
+			expect(selectRect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+			expect(selectRect.right).toBeLessThanOrEqual(toolbarRect.right);
+			expect(selectRect.left).toBeGreaterThanOrEqual(shellRect.left);
+			expect(selectRect.right).toBeLessThanOrEqual(shellRect.right);
+		}
+		await chapterLocator.selectOptions("7");
+		await expect.poll(() => element.page).toBe(7);
+		expect(compactNavigation.open).toBe(false);
+
+		await summaryLocator.click();
+		const bookmarkToggle = compactNavigation.querySelector<HTMLButtonElement>(".bookmark-toggle");
+		if (bookmarkToggle === null) throw new Error("The compact bookmark toggle was not rendered.");
+		await browserPage.elementLocator(bookmarkToggle).click();
+		await expect.poll(() => bookmarkToggle.getAttribute("aria-pressed")).toBe("true");
+		expect(JSON.parse(localStorage.getItem(BOOKMARKS_STORAGE_KEY) ?? "null")).toEqual({
+			[documentKey]: [3, 7, 8],
+		});
+
+		await summaryLocator.click();
+		await bookmarkLocator.selectOptions("8");
+		await expect.poll(() => element.page).toBe(8);
+		expect(compactNavigation.open).toBe(false);
+		await summaryLocator.click();
+		await browserPage.elementLocator(bookmarkToggle).click();
+		await expect.poll(() => bookmarkToggle.getAttribute("aria-pressed")).toBe("false");
+		expect(JSON.parse(localStorage.getItem(BOOKMARKS_STORAGE_KEY) ?? "null")).toEqual({
+			[documentKey]: [3, 7],
+		});
+
+		await browserPage.elementLocator(zoomIn).click();
+		await expect.poll(() => Number(zoomSlider.value)).toBeGreaterThan(1);
+		const settingsSummaryLocator = browserPage.elementLocator(settingsSummary);
+		await settingsSummaryLocator.click();
+		await expect.element(browserPage.elementLocator(settingsPanel)).toBeVisible();
+		const settingsPanelRect = settingsPanel.getBoundingClientRect();
+		expect(settingsPanelRect.top).toBeGreaterThanOrEqual(
+			settingsSummary.getBoundingClientRect().bottom,
+		);
+		expect(settingsPanelRect.left).toBeGreaterThanOrEqual(shellRect.left);
+		expect(settingsPanelRect.right).toBeLessThanOrEqual(shellRect.right);
+		const layoutSelect = settingsPanel.querySelector<HTMLSelectElement>(
+			'select[aria-label="ページ配置"]',
+		);
+		if (layoutSelect === null)
+			throw new Error("The compact page layout selector was not rendered.");
+		await browserPage.elementLocator(layoutSelect).selectOptions("single");
+		await expect.poll(() => element.layout).toBe("single");
+	},
+);
 
 test("uses the host width for mobile thumbnail mode and closes after selection", async () => {
 	await import("../entry");

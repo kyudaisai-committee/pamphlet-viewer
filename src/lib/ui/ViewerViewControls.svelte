@@ -221,8 +221,6 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.view-controls {
-			grid-column: 2;
-			grid-row: 1;
 			gap: 4px;
 
 			button {
@@ -242,6 +240,12 @@
 				position: relative;
 				display: block;
 			}
+		}
+	}
+
+	@container reader-toolbar (max-width: 340px) {
+		.view-controls {
+			margin-inline-start: auto;
 		}
 	}
 </style>

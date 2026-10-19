@@ -126,7 +126,6 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.zoom-controls {
-			grid-column: 1 / -1;
 			justify-content: space-between;
 			gap: 3px;
 
@@ -149,6 +148,12 @@
 			button {
 				min-height: 44px;
 			}
+		}
+	}
+
+	@container reader-toolbar (max-width: 340px) {
+		.zoom-controls {
+			flex: 1 1 100%;
 		}
 	}
 </style>

@@ -127,6 +127,7 @@
 		inset-inline-end: 0;
 		display: grid;
 		gap: 8px;
+		box-sizing: border-box;
 		width: min(280px, calc(100cqi - 12px));
 		padding: 10px;
 		border: 1px solid var(--pamphlet-viewer-border, #3b4148);
@@ -173,8 +174,13 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.compact-navigation {
-			position: relative;
+			position: static;
 			display: block;
+
+			.compact-navigation-panel {
+				inset-block-start: auto;
+				inset-block-end: calc(100% + 6px);
+			}
 		}
 	}
 </style>
