@@ -13,6 +13,8 @@
 		"dev": "vite",
 		"build": "vite build && pnpm build:library",
 		"build:library": "vite build --config vite.library.config.ts",
+		"changeset": "changeset",
+		"changeset:version": "changeset version && pnpm install --lockfile-only && pnpm format",
 		"preview": "vite preview",
 		"check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
 		"format": "oxfmt",

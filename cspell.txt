@@ -19,3 +19,4 @@ linejoin
 evenodd
 mdsvex
 vite
+kyudaisai
