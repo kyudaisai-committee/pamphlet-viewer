@@ -14,6 +14,16 @@ pnpm verify
 
 package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`を指します。リポジトリのpackageはprivateのままで、npm公開は行いません。
 
+## GitHub Releases
+
+リリース対象の変更を含むPull Requestでは、`pnpm changeset`を実行して変更内容と`patch`・`minor`・`major`のいずれかを選び、生成された`.changeset/`のファイルをコミットしてください。`main`へのマージ後にGitHub Actionsがバージョン更新Pull Requestを作成します。そのPull Requestをマージすると、既存CIを再利用して検査とビルドを行い、ビルド済みのライブラリからGitHub Releaseを作成します。タグは`v<version>`、リリースノートはGitHubが生成します。
+
+初回のminor変更はalphaとして出し、バージョンを`0.1.0-alpha.0`にします。`0.0.0`の間はReleaseを作成しません。alpha版を継続する間はChangesetsのpre modeを維持し、安定版へ移行するときは`pnpm exec changeset pre exit`で終了してから、生成されたバージョン更新Pull Requestをマージしてください。
+
+バージョン更新Pull Requestの作成には、リポジトリ設定の **Settings → Actions → General → Workflow permissions** で **Allow GitHub Actions to create and approve pull requests** を有効にしてください。
+
+GitHub Releaseの`pamphlet-viewer-<version>.tgz`をダウンロードして展開すると、`dist/library/`の中身がアーカイブのルートにあります。JavaScript、型定義、Worker、WASM、chunks、assetsを相対構造のまま同じ配信先へ配置してください。パッケージはprivateのままなので、npmからはインストールできません。
+
 ## HTMLへの埋め込み
 
 ```html

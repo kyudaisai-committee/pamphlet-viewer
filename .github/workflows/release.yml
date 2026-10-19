@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Version packages
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Select release mode
+        id: mode
+        uses: changesets/action/select-mode@v2
+      - name: Create or update version pull request
+        if: steps.mode.outputs.mode == 'version'
+        uses: changesets/action/version@v2
+        with:
+          pr-base-branch: main
+          pr-title: "chore: パッケージバージョンを更新"
+          commit-message: "chore: パッケージバージョンを更新"
+          script: pnpm changeset:version
+
+  build:
+    name: Build release artifact
+    needs: version
+    if: needs.version.outputs.mode == 'none' || needs.version.outputs.mode == 'publish'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      upload_library_artifact: true
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - version
+      - build
+    if: needs.version.outputs.mode == 'none' || needs.version.outputs.mode == 'publish'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download library build
+        uses: actions/download-artifact@v4
+        with:
+          name: library-dist
+          path: dist/library
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(pnpm exec node -p "require('./package.json').version")"
+          if [ "$version" = "0.0.0" ]; then
+            echo "Skipping GitHub Release while the package version is 0.0.0."
+            exit 0
+          fi
+
+          release_tags="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"
+          if grep -Fxq "v$version" <<< "$release_tags"; then
+            echo "GitHub Release v$version already exists; skipping."
+            exit 0
+          fi
+
+          archive="pamphlet-viewer-${version}.tgz"
+          tar -czf "$archive" -C dist/library .
+
+          release_args=(
+            gh release create "v${version}" "$archive"
+            --target "$GITHUB_SHA"
+            --title "@kyudaisai/pamphlet-viewer ${version}"
+            --generate-notes
+          )
+          case "$version" in
+            *-*) release_args+=(--prerelease) ;;
+          esac
+          "${release_args[@]}"
