@@ -88,6 +88,39 @@ test("navigates to validated configured chapters", async () => {
 	await expect.poll(() => chapterSelect.value).toBe("7");
 });
 
+test("selects fit and page layout together on desktop", async () => {
+	await import("../entry");
+	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
+	element.layout = "auto";
+	element.fit = "page";
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const select = element.shadowRoot?.querySelector<HTMLSelectElement>(
+		'.view-mode-control select[aria-label="表示方法"]',
+	);
+	if (select === null || select === undefined) {
+		throw new Error("The combined view mode selector was not rendered.");
+	}
+	const viewModeSelect = browserPage.elementLocator(select);
+	await expect.element(viewModeSelect).toBeVisible();
+	expect(Array.from(select.options, (option) => option.textContent)).toEqual([
+		"自動・ページ全体",
+		"自動・幅に合わせる",
+		"単ページ・ページ全体",
+		"単ページ・幅に合わせる",
+		"見開き・ページ全体",
+		"見開き・幅に合わせる",
+	]);
+	await viewModeSelect.selectOptions("spread-width");
+	await expect.poll(() => element.layout).toBe("spread");
+	await expect.poll(() => element.fit).toBe("width");
+	await viewModeSelect.selectOptions("single-page");
+	await expect.poll(() => element.layout).toBe("single");
+	await expect.poll(() => element.fit).toBe("page");
+});
+
 test("persists bookmarks per document and restores the saved page list", async () => {
 	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
 	await import("../entry");
@@ -241,8 +274,9 @@ test.each([320, 390])(
 		const zoomIn = shadowRoot?.querySelector<HTMLButtonElement>(
 			'.zoom-controls button[aria-label="拡大"]',
 		);
-		const settingsSummary = shadowRoot?.querySelector<HTMLElement>(".compact-settings > summary");
-		const settingsPanel = shadowRoot?.querySelector<HTMLElement>(".compact-settings-panel");
+		const viewModeSelect = shadowRoot?.querySelector<HTMLSelectElement>(
+			'.view-mode-control select[aria-label="表示方法"]',
+		);
 		const compactNavigation = shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
 		const summary = compactNavigation?.querySelector<HTMLElement>("summary");
 		if (
@@ -266,10 +300,8 @@ test.each([320, 390])(
 			zoomSlider === undefined ||
 			zoomIn === null ||
 			zoomIn === undefined ||
-			settingsSummary === null ||
-			settingsSummary === undefined ||
-			settingsPanel === null ||
-			settingsPanel === undefined ||
+			viewModeSelect === null ||
+			viewModeSelect === undefined ||
 			compactNavigation === null ||
 			compactNavigation === undefined ||
 			summary === null ||
@@ -286,6 +318,7 @@ test.each([320, 390])(
 		const pageControlsRect = pageControls.getBoundingClientRect();
 		const zoomControlsRect = zoomControls.getBoundingClientRect();
 		const viewControlsRect = viewControls.getBoundingClientRect();
+		const viewModeRect = viewModeSelect.getBoundingClientRect();
 		expect(settingsToolbarRect.left).toBeGreaterThanOrEqual(shellRect.left);
 		expect(settingsToolbarRect.right).toBeLessThanOrEqual(shellRect.right);
 		expect(toolbarRect.left).toBeGreaterThanOrEqual(shellRect.left);
@@ -301,6 +334,12 @@ test.each([320, 390])(
 		expect(zoomControlsRect.bottom).toBeLessThanOrEqual(settingsToolbarRect.bottom);
 		expect(viewControlsRect.top).toBeGreaterThanOrEqual(settingsToolbarRect.top);
 		expect(viewControlsRect.bottom).toBeLessThanOrEqual(settingsToolbarRect.bottom);
+		expect(viewControlsRect.left).toBeGreaterThanOrEqual(settingsToolbarRect.left);
+		expect(viewControlsRect.right).toBeLessThanOrEqual(settingsToolbarRect.right);
+		expect(viewModeRect.top).toBeGreaterThanOrEqual(settingsToolbarRect.top);
+		expect(viewModeRect.bottom).toBeLessThanOrEqual(settingsToolbarRect.bottom);
+		expect(viewModeRect.left).toBeGreaterThanOrEqual(settingsToolbarRect.left);
+		expect(viewModeRect.right).toBeLessThanOrEqual(settingsToolbarRect.right);
 		const zoomAndViewDoNotOverlap =
 			zoomControlsRect.right <= viewControlsRect.left ||
 			viewControlsRect.right <= zoomControlsRect.left ||
@@ -369,22 +408,11 @@ test.each([320, 390])(
 
 		await browserPage.elementLocator(zoomIn).click();
 		await expect.poll(() => Number(zoomSlider.value)).toBeGreaterThan(1);
-		const settingsSummaryLocator = browserPage.elementLocator(settingsSummary);
-		await settingsSummaryLocator.click();
-		await expect.element(browserPage.elementLocator(settingsPanel)).toBeVisible();
-		const settingsPanelRect = settingsPanel.getBoundingClientRect();
-		expect(settingsPanelRect.top).toBeGreaterThanOrEqual(
-			settingsSummary.getBoundingClientRect().bottom,
-		);
-		expect(settingsPanelRect.left).toBeGreaterThanOrEqual(shellRect.left);
-		expect(settingsPanelRect.right).toBeLessThanOrEqual(shellRect.right);
-		const layoutSelect = settingsPanel.querySelector<HTMLSelectElement>(
-			'select[aria-label="ページ配置"]',
-		);
-		if (layoutSelect === null)
-			throw new Error("The compact page layout selector was not rendered.");
-		await browserPage.elementLocator(layoutSelect).selectOptions("single");
+		const viewModeLocator = browserPage.elementLocator(viewModeSelect);
+		await expect.element(viewModeLocator).toBeVisible();
+		await viewModeLocator.selectOptions("single-width");
 		await expect.poll(() => element.layout).toBe("single");
+		await expect.poll(() => element.fit).toBe("width");
 	},
 );
 
@@ -403,13 +431,15 @@ test("uses the host width for mobile thumbnail mode and closes after selection",
 	const stageSlot = shadowRoot.querySelector<HTMLElement>(".stage-slot");
 	const readerBody = shadowRoot.querySelector<HTMLElement>(".reader-body");
 	const toolbar = shadowRoot.querySelector<HTMLElement>(".toolbar");
-	const compactSettings = shadowRoot.querySelector<HTMLElement>(".compact-settings");
-	if (stageSlot === null || readerBody === null || toolbar === null || compactSettings === null) {
+	const viewModeSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.view-mode-control select[aria-label="表示方法"]',
+	);
+	if (stageSlot === null || readerBody === null || toolbar === null || viewModeSelect === null) {
 		throw new Error("The mobile reader controls are missing.");
 	}
 	await expect.poll(() => getComputedStyle(stageSlot).display).toBe("none");
 	expect(getComputedStyle(readerBody).gridTemplateColumns.trim().split(" ")).toHaveLength(1);
-	expect(getComputedStyle(compactSettings).display).toBe("block");
+	await expect.element(browserPage.elementLocator(viewModeSelect)).toBeVisible();
 	expect(toolbar.getBoundingClientRect().height).toBeLessThanOrEqual(120);
 	shadowRoot.querySelector<HTMLButtonElement>('[data-page-index="2"] .thumbnail-entry')?.click();
 	await expect.poll(() => element.page).toBe(3);

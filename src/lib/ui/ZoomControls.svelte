@@ -126,6 +126,7 @@
 
 	@container reader-toolbar (max-width: 700px) {
 		.zoom-controls {
+			flex: 1 1 100%;
 			justify-content: space-between;
 			gap: 3px;
 
@@ -151,9 +152,4 @@
 		}
 	}
 
-	@container reader-toolbar (max-width: 340px) {
-		.zoom-controls {
-			flex: 1 1 100%;
-		}
-	}
 </style>
