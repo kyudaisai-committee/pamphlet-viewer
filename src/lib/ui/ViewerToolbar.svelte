@@ -124,6 +124,7 @@
 	.toolbar-container {
 		box-sizing: border-box;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: 18px;
@@ -137,7 +138,7 @@
 		.toolbar {
 			display: flex;
 			align-items: center;
-			min-width: 0;
+			min-width: max-content;
 		}
 
 		.settings-toolbar {
@@ -145,7 +146,7 @@
 			align-items: center;
 			justify-content: flex-end;
 			gap: 18px;
-			min-width: 0;
+			min-width: max-content;
 		}
 	}
 
@@ -160,6 +161,7 @@
 				align-items: center;
 				width: 100%;
 				min-height: 56px;
+				min-width: 0;
 				padding: 6px;
 				border-top: 1px solid var(--pamphlet-viewer-border, #3b4148);
 				background: var(--pamphlet-viewer-toolbar, #24282e);
@@ -174,6 +176,7 @@
 				gap: 8px;
 				width: 100%;
 				min-height: 56px;
+				min-width: 0;
 				padding: 6px;
 				border-bottom: 1px solid var(--pamphlet-viewer-border, #3b4148);
 				background: var(--pamphlet-viewer-toolbar, #24282e);

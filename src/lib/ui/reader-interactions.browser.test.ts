@@ -446,6 +446,113 @@ test("uses the host width for mobile thumbnail mode and closes after selection",
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 });
 
+test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (width) => {
+	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
+	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3] }));
+	await import("../entry");
+	const element = createViewer({ width, height: 620 }, createBackend(12));
+	element.config = {
+		chapters: [
+			{ title: "前半", page: 1 },
+			{ title: "長い章タイトル", page: 7 },
+		],
+	};
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+	const shadowRoot = element.shadowRoot;
+	const shell = shadowRoot?.querySelector<HTMLElement>(".viewer-shell");
+	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
+	const settingsToolbar = shadowRoot?.querySelector<HTMLElement>(".settings-toolbar");
+	if (shell === null || toolbar === null || settingsToolbar === null) {
+		throw new Error("The desktop reader toolbars were not rendered.");
+	}
+	const shellRect = shell.getBoundingClientRect();
+	const toolbarRect = toolbar.getBoundingClientRect();
+	const settingsRect = settingsToolbar.getBoundingClientRect();
+	const compact = width <= 701;
+	const selectors = compact
+		? [
+				".page-controls",
+				".zoom-controls",
+				'.view-mode-control select[aria-label="表示方法"]',
+				'.fullscreen-toggle[aria-label="全画面表示"]',
+			]
+		: [
+				".page-controls",
+				'.toolbar > .chapter-control select[aria-label="章へ移動"]',
+				'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+				".zoom-controls",
+				'.view-mode-control select[aria-label="表示方法"]',
+				'.fullscreen-toggle[aria-label="全画面表示"]',
+			];
+	const controls = selectors.map((selector) => {
+		const control = shadowRoot.querySelector<HTMLElement>(selector);
+		if (control === null) throw new Error(`The desktop control ${selector} was not rendered.`);
+		return { selector, rect: control.getBoundingClientRect().toJSON() };
+	});
+	for (const { selector } of controls) {
+		const control = shadowRoot.querySelector<HTMLElement>(selector);
+		if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
+		await expect.element(browserPage.elementLocator(control)).toBeVisible();
+	}
+	for (const { selector } of controls) {
+		const control = shadowRoot.querySelector<HTMLElement>(selector);
+		if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
+		const rect = control.getBoundingClientRect();
+		const parentRect =
+			selector === ".zoom-controls" || selector.includes("view-") || selector.includes("fullscreen")
+				? settingsRect
+				: toolbarRect;
+		expect(rect.left, `${selector} left edge`).toBeGreaterThanOrEqual(parentRect.left);
+		expect(rect.right, `${selector} right edge`).toBeLessThanOrEqual(parentRect.right);
+		expect(rect.left, `${selector} host left edge`).toBeGreaterThanOrEqual(shellRect.left);
+		expect(rect.right, `${selector} host right edge`).toBeLessThanOrEqual(shellRect.right);
+	}
+	if (compact) {
+		const readerBody = shadowRoot?.querySelector<HTMLElement>(".reader-body");
+		const summary = shadowRoot?.querySelector<HTMLElement>(".compact-navigation summary");
+		if (
+			readerBody === null ||
+			readerBody === undefined ||
+			summary === null ||
+			summary === undefined
+		) {
+			throw new Error("The compact navigation controls were not rendered.");
+		}
+		expect(settingsRect.bottom).toBeLessThanOrEqual(readerBody.getBoundingClientRect().top);
+		expect(readerBody.getBoundingClientRect().bottom).toBeLessThanOrEqual(toolbarRect.top);
+		await browserPage.elementLocator(summary).click();
+		const panel = shadowRoot?.querySelector<HTMLElement>(".compact-navigation-panel");
+		if (panel === null || panel === undefined)
+			throw new Error("The compact navigation panel is missing.");
+		await expect.element(browserPage.elementLocator(panel)).toBeVisible();
+		const panelRect = panel.getBoundingClientRect();
+		expect(panelRect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+		expect(panelRect.right).toBeLessThanOrEqual(toolbarRect.right);
+	} else {
+		for (const selector of [
+			'.toolbar > .chapter-control select[aria-label="章へ移動"]',
+			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+		]) {
+			const control = shadowRoot?.querySelector<HTMLElement>(selector);
+			if (control === null || control === undefined) {
+				throw new Error(`The desktop control ${selector} was not rendered.`);
+			}
+			await expect.element(browserPage.elementLocator(control)).toBeVisible();
+			const rect = control.getBoundingClientRect();
+			expect(rect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+			expect(rect.right).toBeLessThanOrEqual(toolbarRect.right);
+		}
+		const toolbarsDoNotOverlap =
+			toolbarRect.right <= settingsRect.left ||
+			settingsRect.right <= toolbarRect.left ||
+			toolbarRect.bottom <= settingsRect.top ||
+			settingsRect.bottom <= toolbarRect.top;
+		expect(toolbarsDoNotOverlap).toBe(true);
+	}
+});
+
 test("falls back to a top-layer fullscreen reader and restores the embed size on Escape", async () => {
 	await import("../entry");
 	const element = createViewer({ width: 390, height: 600 }, createBackend(2));
