@@ -35,7 +35,10 @@ export default defineConfig(
 			"vitest.config.ts",
 		],
 		languageOptions: {
-			parserOptions: { projectService: true },
+			parserOptions: {
+				projectService: true,
+				extraFileExtensions: [".svelte"],
+			},
 		},
 		rules: {
 			"@typescript-eslint/no-deprecated": "error",
