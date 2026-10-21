@@ -240,17 +240,18 @@ describe("PdfRangeLoader response validation", () => {
 	});
 
 	it("does not restore cache state when disposed during a range request", async () => {
-		let resolveResponse: ((response: Response) => void) | null = null;
+		const responseResolver: { current: ((response: Response) => void) | null } = { current: null };
 		vi.stubGlobal(
 			"fetch",
 			() =>
 				new Promise<Response>((resolve) => {
-					resolveResponse = resolve;
+					responseResolver.current = resolve;
 				}),
 		);
 		const loader = createLoader();
 		const pendingInitialization = loader.initialize();
 		loader.dispose();
+		const resolveResponse = responseResolver.current;
 		if (resolveResponse === null) throw new Error("The initial range request did not start.");
 		resolveResponse(createRangeResponse(0, RANGE_CHUNK_SIZE - 1, RANGE_CHUNK_SIZE));
 
