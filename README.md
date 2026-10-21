@@ -2,10 +2,6 @@
 
 `@embedpdf/pdfium`（EmbedPDF）を使ってPDFを表示する、Svelte 5製のWeb Componentです。ES moduleとして配布し、Svelte以外のHTMLページにも埋め込めます。PDFはHTTP Rangeで必要な範囲を取得します。
 
-## 配布物の取得
-
-[GitHub Releases](https://github.com/kyudaisai-committee/pamphlet-viewer/releases)から`pamphlet-viewer-<version>.tgz`をダウンロードして展開してください。アーカイブのルートにJavaScript、型定義、Worker、WASM、chunks、assetsが含まれます。相対パスの構成を保ったまま、すべてを同じ配信先へ配置してください。
-
 ## HTMLへの埋め込み
 
 ```html
