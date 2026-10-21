@@ -1,23 +1,26 @@
+import { createRangeBatchPlan, type RangeBatch } from "./range-batch";
 import { RangeChunkCache } from "./range-chunk-cache";
-import { cancelResponseBody, parseContentRange, readBoundedResponseBody } from "./range-response";
+import { requestPdfRange } from "./range-request";
 
 export const RANGE_CHUNK_SIZE = 256 * 1024;
 export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
 export const RANGE_FETCH_CONCURRENCY = 4;
-export const RANGE_REQUEST_TIMEOUT_MS = 30_000;
-const MAX_FILE_LENGTH = 0xffff_ffff;
+export const RANGE_REQUEST_MAX_CHUNKS = 4;
 
 export { parseContentRange } from "./range-response";
+export { RANGE_REQUEST_TIMEOUT_MS } from "./range-request";
 
 export class PdfRangeLoader {
 	#cache: RangeChunkCache;
 	#cacheLimitBytes: number;
+	#cacheLowWatermarkBytes: number;
 	#missingChunks = new Set<number>();
 	#hintedChunks = new Set<number>();
 	#cacheEpoch = 0;
 	#totalLength: number | null = null;
 	#etag: string | null = null;
 	#lastModified: string | null = null;
+	#disposed = false;
 
 	constructor(
 		private readonly url: string,
@@ -28,10 +31,8 @@ export class PdfRangeLoader {
 			throw new RangeError(`PDF range cache must be at least ${RANGE_CHUNK_SIZE} bytes.`);
 		}
 		this.#cacheLimitBytes = cacheLimitBytes;
-		this.#cache = new RangeChunkCache(
-			cacheLimitBytes,
-			Math.max(RANGE_CHUNK_SIZE, Math.floor(cacheLimitBytes / 2)),
-		);
+		this.#cacheLowWatermarkBytes = Math.max(RANGE_CHUNK_SIZE, Math.floor(cacheLimitBytes / 2));
+		this.#cache = new RangeChunkCache(cacheLimitBytes, this.#cacheLowWatermarkBytes);
 	}
 
 	get totalLength(): number | null {
@@ -55,6 +56,7 @@ export class PdfRangeLoader {
 	}
 
 	dispose(): void {
+		this.#disposed = true;
 		this.#cache.clear();
 		this.#missingChunks.clear();
 		this.#hintedChunks.clear();
@@ -64,8 +66,11 @@ export class PdfRangeLoader {
 	}
 
 	async initialize(): Promise<number> {
+		this.#throwIfDisposed();
 		if (this.#totalLength !== null) return this.#totalLength;
-		if (await this.#fetchChunk(0)) this.#cacheEpoch += 1;
+		if (await this.#fetchBatch({ startIndex: 0, chunkIndexes: [0], hasRequiredChunk: true })) {
+			this.#cacheEpoch += 1;
+		}
 		if (this.#totalLength === null) {
 			throw new Error("The server did not provide a valid Content-Range header.");
 		}
@@ -138,27 +143,49 @@ export class PdfRangeLoader {
 	}
 
 	async fetchMissingChunks(includeHints = false): Promise<number> {
-		const queuedIndexes = includeHints
-			? new Set([...this.#missingChunks, ...this.#hintedChunks])
-			: this.#missingChunks;
-		const indices = [...queuedIndexes].slice(0, RANGE_FETCH_CONCURRENCY);
-		const results = await Promise.allSettled(indices.map((index) => this.#fetchChunk(index)));
-		if (results.some((result) => result.status === "fulfilled" && result.value)) {
-			this.#cacheEpoch += 1;
-		}
-		const rejection = results.find(
-			(result): result is PromiseRejectedResult => result.status === "rejected",
+		this.#throwIfDisposed();
+		const cacheCapacityChunks = Math.floor(this.#cacheLimitBytes / RANGE_CHUNK_SIZE);
+		const freeChunkCapacity = Math.floor(
+			(this.#cacheLimitBytes - this.#cache.byteLength) / RANGE_CHUNK_SIZE,
 		);
-		if (rejection !== undefined) throw rejection.reason;
-		let retainedCount = 0;
-		for (const index of indices) {
-			if (this.#cache.get(index) !== undefined) {
-				this.#missingChunks.delete(index);
-				this.#hintedChunks.delete(index);
-				retainedCount += 1;
+		const evictionChunkCapacity = Math.floor(
+			(this.#cacheLimitBytes - this.#cacheLowWatermarkBytes) / RANGE_CHUNK_SIZE,
+		);
+		const batches = createRangeBatchPlan(this.#missingChunks, this.#hintedChunks, {
+			includeHints,
+			maxChunkCount: Math.min(
+				cacheCapacityChunks,
+				Math.max(1, freeChunkCapacity, evictionChunkCapacity),
+			),
+			maxChunksPerRequest: RANGE_REQUEST_MAX_CHUNKS,
+		});
+		let cacheEvicted = false;
+		for (let offset = 0; offset < batches.length; offset += RANGE_FETCH_CONCURRENCY) {
+			const wave = batches.slice(offset, offset + RANGE_FETCH_CONCURRENCY);
+			const results = await Promise.allSettled(wave.map((batch) => this.#fetchBatch(batch)));
+			this.#throwIfDisposed();
+			cacheEvicted ||= results.some((result) => result.status === "fulfilled" && result.value);
+			const rejection = results.find(
+				(result): result is PromiseRejectedResult => result.status === "rejected",
+			);
+			if (rejection !== undefined) {
+				if (cacheEvicted) this.#cacheEpoch += 1;
+				throw rejection.reason;
 			}
 		}
-		if (retainedCount !== indices.length) {
+		if (cacheEvicted) this.#cacheEpoch += 1;
+
+		let retainedCount = 0;
+		for (const batch of batches) {
+			for (const index of batch.chunkIndexes) {
+				if (this.#cache.get(index) !== undefined) {
+					this.#missingChunks.delete(index);
+					this.#hintedChunks.delete(index);
+					retainedCount += 1;
+				}
+			}
+		}
+		if (retainedCount !== batches.reduce((count, batch) => count + batch.chunkIndexes.length, 0)) {
 			throw new Error("The requested PDF byte ranges exceed the 64 MiB working cache.");
 		}
 		return retainedCount;
@@ -188,89 +215,42 @@ export class PdfRangeLoader {
 		);
 	}
 
-	async #fetchChunk(index: number): Promise<boolean> {
-		if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-
-		const requestController = new AbortController();
-		let timedOut = false;
-		const abortRequest = function abortForParentSignal(): void {
-			requestController.abort();
-		};
-		this.signal.addEventListener("abort", abortRequest, { once: true });
-		const timeoutId = setTimeout(function abortTimedOutRequest(): void {
-			timedOut = true;
-			requestController.abort();
-		}, RANGE_REQUEST_TIMEOUT_MS);
-
-		const start = index * RANGE_CHUNK_SIZE;
-		const requestEnd = start + RANGE_CHUNK_SIZE - 1;
-		const headers = new Headers({ Range: `bytes=${start}-${requestEnd}` });
-		const ifRange = this.#etag && !this.#etag.startsWith("W/") ? this.#etag : this.#lastModified;
-		if (ifRange !== null) headers.set("If-Range", ifRange);
-
-		try {
-			const response = await fetch(this.url, { headers, signal: requestController.signal });
-			if (response.status !== 206) {
-				cancelResponseBody(response);
-				throw new Error(`The server returned HTTP ${response.status} to a byte-range request.`);
-			}
-
-			const range = parseContentRange(response.headers.get("Content-Range"));
-			if (range === null || range.start !== start) {
-				cancelResponseBody(response);
-				throw new Error("The server returned an invalid Content-Range header.");
-			}
-			if (range.total > MAX_FILE_LENGTH) {
-				cancelResponseBody(response);
-				throw new Error("PDF files must be smaller than 4 GiB.");
-			}
-			const expectedEnd = Math.min(requestEnd, range.total - 1);
-			if (range.end !== expectedEnd) {
-				cancelResponseBody(response);
-				throw new Error("The server returned an incomplete byte range.");
-			}
-			if (this.#totalLength !== null && range.total !== this.#totalLength) {
-				cancelResponseBody(response);
-				throw new Error("The PDF length changed while it was being loaded.");
-			}
-			if (!this.#matchesValidator(response)) {
-				cancelResponseBody(response);
-				throw new Error("The PDF representation changed while it was being loaded.");
-			}
-
-			const expectedLength = range.end - range.start + 1;
-			const bytes = await readBoundedResponseBody(response, expectedLength);
-			if (bytes.byteLength !== expectedLength) {
-				throw new Error("The server returned a byte range with an unexpected length.");
-			}
-
-			this.#totalLength = range.total;
-			this.#rememberValidators(response);
-			return this.#cache.set(index, bytes);
-		} catch (error) {
-			if (this.signal.aborted) {
-				throw new DOMException("PDF loading was cancelled.", "AbortError");
-			}
-			if (timedOut) {
-				throw new Error("The PDF byte-range request timed out.", { cause: error });
-			}
-			throw error;
-		} finally {
-			clearTimeout(timeoutId);
-			this.signal.removeEventListener("abort", abortRequest);
+	async #fetchBatch(batch: RangeBatch): Promise<boolean> {
+		this.#throwIfDisposed();
+		const start = batch.startIndex * RANGE_CHUNK_SIZE;
+		const requestedEnd = start + batch.chunkIndexes.length * RANGE_CHUNK_SIZE - 1;
+		const response = await requestPdfRange({
+			url: this.url,
+			signal: this.signal,
+			start,
+			requestedEnd,
+			totalLength: this.#totalLength,
+			etag: this.#etag,
+			lastModified: this.#lastModified,
+		});
+		this.#throwIfDisposed();
+		if (
+			(this.#totalLength !== null && this.#totalLength !== response.totalLength) ||
+			(this.#etag !== null && this.#etag !== response.etag) ||
+			(this.#lastModified !== null && this.#lastModified !== response.lastModified)
+		) {
+			throw new Error("The PDF representation changed while it was being loaded.");
 		}
+		this.#totalLength ??= response.totalLength;
+		this.#etag ??= response.etag;
+		this.#lastModified ??= response.lastModified;
+
+		let cacheEvicted = false;
+		for (const index of batch.chunkIndexes) {
+			const chunkOffset = (index - batch.startIndex) * RANGE_CHUNK_SIZE;
+			const chunkEnd = Math.min(chunkOffset + RANGE_CHUNK_SIZE, response.bytes.byteLength);
+			const chunk = response.bytes.slice(chunkOffset, chunkEnd);
+			cacheEvicted = this.#cache.set(index, chunk) || cacheEvicted;
+		}
+		return cacheEvicted;
 	}
 
-	#matchesValidator(response: Response): boolean {
-		const etag = response.headers.get("ETag");
-		const lastModified = response.headers.get("Last-Modified");
-		if (this.#etag !== null && etag !== this.#etag) return false;
-		if (this.#lastModified !== null && lastModified !== this.#lastModified) return false;
-		return true;
-	}
-
-	#rememberValidators(response: Response): void {
-		this.#etag ??= response.headers.get("ETag");
-		this.#lastModified ??= response.headers.get("Last-Modified");
+	#throwIfDisposed(): void {
+		if (this.#disposed) throw new DOMException("PDF loading was cancelled.", "AbortError");
 	}
 }
