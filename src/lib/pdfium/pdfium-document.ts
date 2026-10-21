@@ -102,8 +102,13 @@ export class PdfiumDocumentSession {
 	}
 
 	async #initialize(): Promise<void> {
-		this.#fileLength = await this.loader.initialize();
-		this.#pdfium = await getPdfium(this.wasmUrl);
+		if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
+		const [fileLength, pdfium] = await Promise.all([
+			this.loader.initialize(),
+			getPdfium(this.wasmUrl),
+		]);
+		this.#fileLength = fileLength;
+		this.#pdfium = pdfium;
 		this.#availability = await PdfiumAvailabilitySession.open(
 			createAvailabilityApi(this.#pdfium),
 			this.loader,

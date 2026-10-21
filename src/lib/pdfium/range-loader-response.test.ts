@@ -192,8 +192,85 @@ describe("PdfRangeLoader response validation", () => {
 			loader.dispose();
 		}
 	});
+
+	it("rejects conflicting validators from concurrent ranges", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 4;
+		const pendingResponses = new Map<number, (response: Response) => void>();
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const range = new Headers(init?.headers).get("Range");
+			const match = range === null ? null : /^bytes=(\d+)-(\d+)$/.exec(range);
+			if (range === null || match === null) throw new Error("A byte range was not requested.");
+			const start = Number(match[1]);
+			const end = Number(match[2]);
+			if (start === 0) return createRangeResponse(start, end, fileLength);
+			return new Promise<Response>((resolve) => pendingResponses.set(start, resolve));
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const loader = createLoader();
+		try {
+			await loader.initialize();
+			loader.readInto(RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1);
+			loader.readInto(3 * RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1);
+			const pendingFetch = loader.fetchMissingChunks();
+			await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+			const resolveFirst = pendingResponses.get(RANGE_CHUNK_SIZE);
+			if (resolveFirst === undefined) throw new Error("The first range request did not start.");
+			resolveFirst(
+				createRangeResponse(RANGE_CHUNK_SIZE, 2 * RANGE_CHUNK_SIZE - 1, fileLength, ETAG),
+			);
+			await vi.waitFor(() => expect(loader.cachedByteLength).toBe(2 * RANGE_CHUNK_SIZE));
+
+			const resolveSecond = pendingResponses.get(3 * RANGE_CHUNK_SIZE);
+			if (resolveSecond === undefined) throw new Error("The second range request did not start.");
+			resolveSecond(
+				createRangeResponse(
+					3 * RANGE_CHUNK_SIZE,
+					4 * RANGE_CHUNK_SIZE - 1,
+					fileLength,
+					'"different-document"',
+				),
+			);
+			await expect(pendingFetch).rejects.toThrow("representation changed");
+			expect(loader.cachedByteLength).toBe(2 * RANGE_CHUNK_SIZE);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("does not restore cache state when disposed during a range request", async () => {
+		let resolveResponse: ((response: Response) => void) | null = null;
+		vi.stubGlobal(
+			"fetch",
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveResponse = resolve;
+				}),
+		);
+		const loader = createLoader();
+		const pendingInitialization = loader.initialize();
+		loader.dispose();
+		if (resolveResponse === null) throw new Error("The initial range request did not start.");
+		resolveResponse(createRangeResponse(0, RANGE_CHUNK_SIZE - 1, RANGE_CHUNK_SIZE));
+
+		await expect(pendingInitialization).rejects.toMatchObject({ name: "AbortError" });
+		expect(loader.totalLength).toBeNull();
+		expect(loader.cachedByteLength).toBe(0);
+	});
 });
 
 function createLoader(signal = new AbortController().signal): PdfRangeLoader {
 	return new PdfRangeLoader("https://example.test/document.pdf", signal);
+}
+
+function createRangeResponse(
+	start: number,
+	end: number,
+	totalLength: number,
+	etag: string | null = null,
+): Response {
+	const headers = new Headers({ "Content-Range": `bytes ${start}-${end}/${totalLength}` });
+	if (etag !== null) headers.set("ETag", etag);
+	return new Response(new Uint8Array(end - start + 1), { status: 206, headers });
 }

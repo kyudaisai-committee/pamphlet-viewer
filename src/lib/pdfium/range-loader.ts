@@ -20,6 +20,7 @@ export class PdfRangeLoader {
 	#totalLength: number | null = null;
 	#etag: string | null = null;
 	#lastModified: string | null = null;
+	#disposed = false;
 
 	constructor(
 		private readonly url: string,
@@ -55,6 +56,7 @@ export class PdfRangeLoader {
 	}
 
 	dispose(): void {
+		this.#disposed = true;
 		this.#cache.clear();
 		this.#missingChunks.clear();
 		this.#hintedChunks.clear();
@@ -64,6 +66,7 @@ export class PdfRangeLoader {
 	}
 
 	async initialize(): Promise<number> {
+		this.#throwIfDisposed();
 		if (this.#totalLength !== null) return this.#totalLength;
 		if (await this.#fetchBatch({ startIndex: 0, chunkIndexes: [0], hasRequiredChunk: true })) {
 			this.#cacheEpoch += 1;
@@ -140,6 +143,7 @@ export class PdfRangeLoader {
 	}
 
 	async fetchMissingChunks(includeHints = false): Promise<number> {
+		this.#throwIfDisposed();
 		const cacheCapacityChunks = Math.floor(this.#cacheLimitBytes / RANGE_CHUNK_SIZE);
 		const freeChunkCapacity = Math.floor(
 			(this.#cacheLimitBytes - this.#cache.byteLength) / RANGE_CHUNK_SIZE,
@@ -159,6 +163,7 @@ export class PdfRangeLoader {
 		for (let offset = 0; offset < batches.length; offset += RANGE_FETCH_CONCURRENCY) {
 			const wave = batches.slice(offset, offset + RANGE_FETCH_CONCURRENCY);
 			const results = await Promise.allSettled(wave.map((batch) => this.#fetchBatch(batch)));
+			this.#throwIfDisposed();
 			cacheEvicted ||= results.some((result) => result.status === "fulfilled" && result.value);
 			const rejection = results.find(
 				(result): result is PromiseRejectedResult => result.status === "rejected",
@@ -211,6 +216,7 @@ export class PdfRangeLoader {
 	}
 
 	async #fetchBatch(batch: RangeBatch): Promise<boolean> {
+		this.#throwIfDisposed();
 		const start = batch.startIndex * RANGE_CHUNK_SIZE;
 		const requestedEnd = start + batch.chunkIndexes.length * RANGE_CHUNK_SIZE - 1;
 		const response = await requestPdfRange({
@@ -222,6 +228,14 @@ export class PdfRangeLoader {
 			etag: this.#etag,
 			lastModified: this.#lastModified,
 		});
+		this.#throwIfDisposed();
+		if (
+			(this.#totalLength !== null && this.#totalLength !== response.totalLength) ||
+			(this.#etag !== null && this.#etag !== response.etag) ||
+			(this.#lastModified !== null && this.#lastModified !== response.lastModified)
+		) {
+			throw new Error("The PDF representation changed while it was being loaded.");
+		}
 		this.#totalLength ??= response.totalLength;
 		this.#etag ??= response.etag;
 		this.#lastModified ??= response.lastModified;
@@ -234,5 +248,9 @@ export class PdfRangeLoader {
 			cacheEvicted = this.#cache.set(index, chunk) || cacheEvicted;
 		}
 		return cacheEvicted;
+	}
+
+	#throwIfDisposed(): void {
+		if (this.#disposed) throw new DOMException("PDF loading was cancelled.", "AbortError");
 	}
 }
