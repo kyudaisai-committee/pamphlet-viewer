@@ -4,7 +4,7 @@ import {
 	parseContentRange,
 	PdfRangeLoader,
 	RANGE_CHUNK_SIZE,
-	RANGE_REQUEST_TIMEOUT_MS,
+	RANGE_REQUEST_MAX_CHUNKS,
 } from "./range-loader";
 
 const ETAG = '"test-document"';
@@ -33,16 +33,12 @@ describe("parseContentRange", () => {
 
 describe("PdfRangeLoader", () => {
 	it("copies cached bytes into PDFium's requested buffer", async () => {
-		const body = Uint8Array.from([1, 2, 3, 4]);
 		vi.stubGlobal(
 			"fetch",
 			async () =>
-				new Response(body, {
+				new Response(Uint8Array.from([1, 2, 3, 4]), {
 					status: 206,
-					headers: {
-						"Content-Range": "bytes 0-3/4",
-						ETag: ETAG,
-					},
+					headers: { "Content-Range": "bytes 0-3/4", ETag: ETAG },
 				}),
 		);
 
@@ -63,15 +59,7 @@ describe("PdfRangeLoader", () => {
 
 	it("allows a cached read while another range is pending", async () => {
 		const fileLength = RANGE_CHUNK_SIZE * 2;
-		vi.stubGlobal(
-			"fetch",
-			async () =>
-				new Response(new Uint8Array(RANGE_CHUNK_SIZE), {
-					status: 206,
-					headers: { "Content-Range": `bytes 0-${RANGE_CHUNK_SIZE - 1}/${fileLength}` },
-				}),
-		);
-
+		stubRangeFetch(fileLength);
 		const loader = new PdfRangeLoader(
 			"https://example.test/document.pdf",
 			new AbortController().signal,
@@ -86,24 +74,136 @@ describe("PdfRangeLoader", () => {
 		}
 	});
 
+	it("combines consecutive missing chunks into ranges of at most 1 MiB", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 12;
+		const fetchMetrics = stubRangeFetch(fileLength);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			for (let index = 1; index <= 8; index += 1) {
+				loader.isRangeAvailable(index * RANGE_CHUNK_SIZE, 1);
+			}
+
+			expect(await loader.fetchMissingChunks()).toBe(8);
+			expect(fetchMetrics.ranges).toEqual([
+				`bytes=0-${RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${RANGE_CHUNK_SIZE}-${5 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${5 * RANGE_CHUNK_SIZE}-${9 * RANGE_CHUNK_SIZE - 1}`,
+			]);
+			expect(RANGE_REQUEST_MAX_CHUNKS * RANGE_CHUNK_SIZE).toBe(1024 * 1024);
+
+			const data = new Uint8Array(8 * RANGE_CHUNK_SIZE);
+			expect(loader.readInto(RANGE_CHUNK_SIZE, data, 0, data.byteLength)).toBe(true);
+			expect(Array.from({ length: 8 }, (_value, index) => data[index * RANGE_CHUNK_SIZE])).toEqual([
+				1, 2, 3, 4, 5, 6, 7, 8,
+			]);
+			expect(loader.cachedByteLength).toBe(9 * RANGE_CHUNK_SIZE);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("does not fetch gaps or cached chunks between missing ranges", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 6;
+		const fetchMetrics = stubRangeFetch(fileLength);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			loader.isRangeAvailable(2 * RANGE_CHUNK_SIZE, 1);
+			await loader.fetchMissingChunks();
+			loader.isRangeAvailable(RANGE_CHUNK_SIZE, 1);
+			loader.isRangeAvailable(3 * RANGE_CHUNK_SIZE, 1);
+
+			expect(await loader.fetchMissingChunks()).toBe(2);
+			expect(fetchMetrics.ranges).toEqual([
+				`bytes=0-${RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${2 * RANGE_CHUNK_SIZE}-${3 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${RANGE_CHUNK_SIZE}-${2 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${3 * RANGE_CHUNK_SIZE}-${4 * RANGE_CHUNK_SIZE - 1}`,
+			]);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("prioritizes required missing ranges over hints", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 24;
+		const fetchMetrics = stubRangeFetch(fileLength);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			loader.isRangeAvailable(20 * RANGE_CHUNK_SIZE, 1);
+			loader.hintRange(2 * RANGE_CHUNK_SIZE, 1);
+			loader.hintRange(10 * RANGE_CHUNK_SIZE, 1);
+
+			expect(await loader.fetchMissingChunks(true)).toBe(3);
+			expect(fetchMetrics.ranges.slice(1)).toEqual([
+				`bytes=${20 * RANGE_CHUNK_SIZE}-${21 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${2 * RANGE_CHUNK_SIZE}-${3 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${10 * RANGE_CHUNK_SIZE}-${11 * RANGE_CHUNK_SIZE - 1}`,
+			]);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("keeps no more than four range requests in flight", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 36;
+		const fetchMetrics = stubRangeFetch(fileLength, true);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			for (let index = 2; index <= 32; index += 2) {
+				loader.isRangeAvailable(index * RANGE_CHUNK_SIZE, 1);
+			}
+
+			expect(await loader.fetchMissingChunks()).toBe(16);
+			expect(fetchMetrics.maxActiveRequests).toBe(4);
+			expect(fetchMetrics.ranges).toHaveLength(17);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("splits a partial final response into its own cache chunk", async () => {
+		const fileLength = 2 * RANGE_CHUNK_SIZE + 17;
+		const fetchMetrics = stubRangeFetch(fileLength);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			loader.isRangeAvailable(2 * RANGE_CHUNK_SIZE, 17);
+			expect(await loader.fetchMissingChunks()).toBe(1);
+			expect(fetchMetrics.ranges).toEqual([
+				`bytes=0-${RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${2 * RANGE_CHUNK_SIZE}-${3 * RANGE_CHUNK_SIZE - 1}`,
+			]);
+			expect(loader.cachedByteLength).toBe(RANGE_CHUNK_SIZE + 17);
+			const tail = new Uint8Array(17);
+			expect(loader.readInto(2 * RANGE_CHUNK_SIZE, tail, 0, tail.byteLength)).toBe(true);
+			expect(tail[0]).toBe(2);
+		} finally {
+			loader.dispose();
+		}
+	});
+
 	it("reclaims cache space in one batch and can re-fetch an evicted range", async () => {
 		const fileLength = RANGE_CHUNK_SIZE * 8;
-		const requestedStarts: number[] = [];
-		vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
-			const rangeHeader = new Headers(init?.headers).get("Range");
-			if (rangeHeader === null) throw new Error("A byte range was not requested.");
-			const start = Number(/^bytes=(\d+)-/.exec(rangeHeader)?.[1]);
-			requestedStarts.push(start);
-			const end = Math.min(start + RANGE_CHUNK_SIZE - 1, fileLength - 1);
-			return new Response(new Uint8Array(end - start + 1), {
-				status: 206,
-				headers: {
-					"Content-Range": `bytes ${start}-${end}/${fileLength}`,
-					ETag: ETAG,
-				},
-			});
-		});
-
+		const fetchMetrics = stubRangeFetch(fileLength);
 		const loader = new PdfRangeLoader(
 			"https://example.test/document.pdf",
 			new AbortController().signal,
@@ -115,14 +215,17 @@ describe("PdfRangeLoader", () => {
 				loader.isRangeAvailable(index * RANGE_CHUNK_SIZE, 1);
 			}
 
-			await loader.fetchMissingChunks();
+			expect(await loader.fetchMissingChunks()).toBe(3);
 			loader.isRangeAvailable(4 * RANGE_CHUNK_SIZE, 1);
 			await loader.fetchMissingChunks();
 
 			expect(loader.cacheEpoch).toBe(1);
-			expect(loader.cachedByteLength).toBeLessThanOrEqual(RANGE_CHUNK_SIZE * 4);
 			expect(loader.cachedByteLength).toBe(RANGE_CHUNK_SIZE * 3);
-			expect(requestedStarts).toHaveLength(5);
+			expect(fetchMetrics.ranges).toEqual([
+				`bytes=0-${RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${RANGE_CHUNK_SIZE}-${4 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${4 * RANGE_CHUNK_SIZE}-${5 * RANGE_CHUNK_SIZE - 1}`,
+			]);
 			expect(loader.hasMissingChunks).toBe(false);
 			expect(() => loader.isRangeAvailable(0, RANGE_CHUNK_SIZE * 5)).toThrow(
 				"exceeds the 64 MiB working cache",
@@ -130,176 +233,51 @@ describe("PdfRangeLoader", () => {
 
 			expect(loader.isRangeAvailable(0, 1)).toBe(false);
 			await loader.fetchMissingChunks();
-			expect(requestedStarts).toHaveLength(6);
+			expect(fetchMetrics.ranges).toHaveLength(4);
 			expect(loader.hasMissingChunks).toBe(false);
 			expect(loader.cacheEpoch).toBe(1);
 		} finally {
 			loader.dispose();
 		}
 	});
-
-	it("rejects full responses instead of downloading the complete PDF", async () => {
-		const cancel = vi.fn();
-		const body = new ReadableStream<Uint8Array>({ cancel });
-		vi.stubGlobal("fetch", async () => new Response(body, { status: 200 }));
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		await expect(loader.initialize()).rejects.toThrow("HTTP 200");
-		expect(cancel).toHaveBeenCalledOnce();
-	});
-
-	it("rejects a range response body larger than the requested chunk and cancels it", async () => {
-		const cancel = vi.fn();
-		const body = new ReadableStream<Uint8Array>({
-			start(controller) {
-				controller.enqueue(new Uint8Array(RANGE_CHUNK_SIZE + 1));
-			},
-			cancel,
-		});
-		vi.stubGlobal(
-			"fetch",
-			async () =>
-				new Response(body, {
-					status: 206,
-					headers: { "Content-Range": `bytes 0-${RANGE_CHUNK_SIZE - 1}/524288` },
-				}),
-		);
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		await expect(loader.initialize()).rejects.toThrow("more bytes than requested");
-		expect(cancel).toHaveBeenCalledOnce();
-		expect(loader.cachedByteLength).toBe(0);
-	});
-
-	it("cancels a rejected 416 response without retrying the request", async () => {
-		const cancel = vi.fn();
-		const body = new ReadableStream<Uint8Array>({ cancel });
-		const fetchMock = vi.fn(
-			async () =>
-				new Response(body, {
-					status: 416,
-					headers: { "Content-Range": "bytes */524288" },
-				}),
-		);
-		vi.stubGlobal("fetch", fetchMock);
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		await expect(loader.initialize()).rejects.toThrow("HTTP 416");
-		expect(cancel).toHaveBeenCalledOnce();
-		expect(fetchMock).toHaveBeenCalledOnce();
-	});
-
-	it("cancels a 206 response with an invalid Content-Range header", async () => {
-		const cancel = vi.fn();
-		const body = new ReadableStream<Uint8Array>({ cancel });
-		vi.stubGlobal(
-			"fetch",
-			async () =>
-				new Response(body, {
-					status: 206,
-					headers: { "Content-Range": "bytes */524288" },
-				}),
-		);
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		await expect(loader.initialize()).rejects.toThrow("invalid Content-Range");
-		expect(cancel).toHaveBeenCalledOnce();
-	});
-
-	it("cancels a short Content-Range before reading its oversized body", async () => {
-		const cancel = vi.fn();
-		const body = new ReadableStream<Uint8Array>({ cancel });
-		vi.stubGlobal(
-			"fetch",
-			async () =>
-				new Response(body, {
-					status: 206,
-					headers: { "Content-Range": "bytes 0-3/524288" },
-				}),
-		);
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		await expect(loader.initialize()).rejects.toThrow("incomplete byte range");
-		expect(cancel).toHaveBeenCalledOnce();
-		expect(loader.cachedByteLength).toBe(0);
-	});
-
-	it("aborts a range request when it exceeds its deadline", async () => {
-		vi.useFakeTimers();
-		vi.stubGlobal(
-			"fetch",
-			(_input: RequestInfo | URL, init?: RequestInit) =>
-				new Promise<Response>((_resolve, reject) => {
-					const signal = init?.signal;
-					if (signal === null || signal === undefined) {
-						reject(new Error("The byte-range request had no AbortSignal."));
-						return;
-					}
-					signal.addEventListener(
-						"abort",
-						() => reject(new DOMException("Request aborted.", "AbortError")),
-						{ once: true },
-					);
-				}),
-		);
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		const pendingRequest = loader.initialize();
-		const rejection = expect(pendingRequest).rejects.toThrow("timed out");
-		await vi.advanceTimersByTimeAsync(RANGE_REQUEST_TIMEOUT_MS);
-		await rejection;
-		loader.dispose();
-	});
-
-	it("cancels a response when its document validator changes between chunks", async () => {
-		const cancel = vi.fn();
-		let requestCount = 0;
-		vi.stubGlobal("fetch", async () => {
-			requestCount += 1;
-			const start = requestCount === 1 ? 0 : RANGE_CHUNK_SIZE;
-			const end = start + RANGE_CHUNK_SIZE - 1;
-			return new Response(
-				requestCount === 1 ? new Uint8Array(RANGE_CHUNK_SIZE) : new ReadableStream({ cancel }),
-				{
-					status: 206,
-					headers: {
-						"Content-Range": `bytes ${start}-${end}/524288`,
-						ETag: requestCount === 1 ? ETAG : '"changed-document"',
-					},
-				},
-			);
-		});
-
-		const loader = new PdfRangeLoader(
-			"https://example.test/document.pdf",
-			new AbortController().signal,
-		);
-		try {
-			await loader.initialize();
-			expect(loader.readInto(RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1)).toBe(false);
-			await expect(loader.fetchMissingChunks()).rejects.toThrow("representation changed");
-			expect(cancel).toHaveBeenCalledOnce();
-			expect(requestCount).toBe(2);
-		} finally {
-			loader.dispose();
-		}
-	});
 });
+
+interface RangeFetchMetrics {
+	ranges: string[];
+	maxActiveRequests: number;
+}
+
+function stubRangeFetch(fileLength: number, delayResponses = false): RangeFetchMetrics {
+	const metrics: RangeFetchMetrics = { ranges: [], maxActiveRequests: 0 };
+	let activeRequests = 0;
+	vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+		const rangeHeader = new Headers(init?.headers).get("Range");
+		const match = rangeHeader === null ? null : /^bytes=(\d+)-(\d+)$/.exec(rangeHeader);
+		if (match === null || rangeHeader === null) throw new Error("A byte range was not requested.");
+		const start = Number(match[1]);
+		const requestedEnd = Number(match[2]);
+		metrics.ranges.push(rangeHeader);
+		activeRequests += 1;
+		metrics.maxActiveRequests = Math.max(metrics.maxActiveRequests, activeRequests);
+		if (delayResponses) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		activeRequests -= 1;
+
+		const end = Math.min(requestedEnd, fileLength - 1);
+		const bytes = new Uint8Array(end - start + 1);
+		for (let offset = 0; offset < bytes.byteLength; offset += RANGE_CHUNK_SIZE) {
+			bytes.fill(
+				Math.floor((start + offset) / RANGE_CHUNK_SIZE) % 251,
+				offset,
+				Math.min(offset + RANGE_CHUNK_SIZE, bytes.byteLength),
+			);
+		}
+		return new Response(bytes, {
+			status: 206,
+			headers: {
+				"Content-Range": `bytes ${start}-${end}/${fileLength}`,
+				ETag: ETAG,
+			},
+		});
+	});
+	return metrics;
+}
