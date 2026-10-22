@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { PdfiumBackend } from "../document/pdfium-backend";
 import { calculateFitScale } from "../domain/layout";
@@ -57,7 +58,9 @@ test("retries a fatal PDF worker through the viewer and restores page, zoom, and
 		await expect.poll(() => zoomSlider.value).toBe("2");
 		await expect.poll(() => shadowRoot.querySelector('[role="alert"] button')).not.toBeNull();
 
-		shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button')?.click();
+		const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button');
+		if (retryButton === null) throw new Error("The retry button was not rendered.");
+		await userEvent.click(retryButton);
 		await expect.poll(() => ControlledWorker.instances.length).toBe(2);
 		const recoveredWorker = getControlledWorker(1);
 		const recoveredOpen = await waitForWorkerRequest(recoveredWorker, "open");

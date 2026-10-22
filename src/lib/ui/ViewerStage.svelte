@@ -77,6 +77,7 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		if (event.pointerType === "mouse" && event.button !== 0) return;
+		if (startsInInteractiveElement(event)) return;
 		const accepted = gestures.pointerDown(
 			event.pointerId,
 			{ x: event.clientX, y: event.clientY },
@@ -87,6 +88,15 @@
 		event.preventDefault();
 		pageArea?.focus({ preventScroll: true });
 		if (event.isTrusted) pageArea?.setPointerCapture(event.pointerId);
+	}
+
+	function startsInInteractiveElement(event: PointerEvent): boolean {
+		return (
+		event.target instanceof Element &&
+		event.target.closest(
+			'button, a[href], input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="button"], [tabindex]:not([tabindex="-1"])',
+		) !== null
+		);
 	}
 
 	function onPointerMove(event: PointerEvent): void {
