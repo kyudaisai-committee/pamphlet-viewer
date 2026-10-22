@@ -38,6 +38,7 @@ test.each([390, 660, 700, 701, 702, 703, 840])(
 		if (pageEntry === null) throw new Error("The third page thumbnail is missing.");
 		pageEntry.click();
 		await expect.poll(() => element.page).toBe(3);
+		await waitForDisplayedPageFrame(shadowRoot, 2);
 		if (stageIsHidden) {
 			await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 		} else {
@@ -71,6 +72,7 @@ test("uses the resized stage visibility when selecting a thumbnail", async () =>
 	if (thirdPage === null) throw new Error("The third page thumbnail is missing.");
 	thirdPage.click();
 	await expect.poll(() => element.page).toBe(3);
+	await waitForDisplayedPageFrame(shadowRoot, 2);
 	expect(shadowRoot.querySelector(".thumbnail-panel")).not.toBeNull();
 
 	element.style.width = "660px";
@@ -81,6 +83,7 @@ test("uses the resized stage visibility when selecting a thumbnail", async () =>
 	if (fourthPage === null) throw new Error("The fourth page thumbnail is missing.");
 	fourthPage.click();
 	await expect.poll(() => element.page).toBe(4);
+	await waitForDisplayedPageFrame(shadowRoot, 3);
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 });
 
@@ -123,8 +126,25 @@ test("keeps thumbnails open when fullscreen makes the stage visible", async () =
 	if (thirdPage === null) throw new Error("The third page thumbnail is missing.");
 	thirdPage.click();
 	await expect.poll(() => element.page).toBe(3);
+	await waitForDisplayedPageFrame(shadowRoot, 2);
 	expect(shadowRoot.querySelector(".thumbnail-panel")).not.toBeNull();
 });
+
+async function waitForDisplayedPageFrame(shadowRoot: ShadowRoot, pageIndex: number): Promise<void> {
+	await expect
+		.poll(() => {
+			const stageSlot = shadowRoot.querySelector<HTMLElement>(".stage-slot");
+			const pageFrame = shadowRoot.querySelector<HTMLElement>(
+				`.page-frame[data-page-index="${pageIndex}"]`,
+			);
+			if (stageSlot === null || pageFrame === null) return false;
+			const bounds = pageFrame.getBoundingClientRect();
+			return (
+				getComputedStyle(stageSlot).display === "flex" && bounds.width > 0 && bounds.height > 0
+			);
+		})
+		.toBe(true);
+}
 
 function createViewer(width: number): PamphletViewerElement {
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
