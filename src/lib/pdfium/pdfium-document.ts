@@ -28,6 +28,7 @@ export class PdfiumDocumentSession {
 	#pdfium: WrappedPdfiumModule | null = null;
 	#availability: PdfiumAvailabilitySession | null = null;
 	#fileLength: number | null = null;
+	#pageCount: number | null = null;
 	#disposed = false;
 	#poisoned = false;
 
@@ -61,10 +62,10 @@ export class PdfiumDocumentSession {
 
 	get info(): PdfiumDocumentInfo {
 		const availability = this.#availability;
-		if (this.#fileLength === null || availability === null) {
+		if (this.#fileLength === null || this.#pageCount === null || availability === null) {
 			throw new Error("The PDF document is not open.");
 		}
-		return { pageCount: availability.pageCount, fileLength: this.#fileLength };
+		return { pageCount: this.#pageCount, fileLength: this.#fileLength };
 	}
 
 	get isPoisoned(): boolean {
@@ -99,6 +100,7 @@ export class PdfiumDocumentSession {
 		this.#availability = null;
 		this.loader.dispose();
 		this.#fileLength = null;
+		this.#pageCount = null;
 	}
 
 	async #initialize(): Promise<void> {
@@ -114,6 +116,7 @@ export class PdfiumDocumentSession {
 			this.loader,
 			this.signal,
 		);
+		this.#pageCount = this.#availability.pageCount;
 	}
 
 	async #runPageOperation<T>(
@@ -150,9 +153,12 @@ export class PdfiumDocumentSession {
 
 	#assertPageIndex(pageIndex: number): void {
 		const availability = this.#availability;
-		if (availability === null) throw new Error("The PDF document is not open.");
-		if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= availability.pageCount) {
-			throw new RangeError(`Page index must be between 0 and ${availability.pageCount - 1}.`);
+		const pageCount = this.#pageCount;
+		if (availability === null || pageCount === null) {
+			throw new Error("The PDF document is not open.");
+		}
+		if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= pageCount) {
+			throw new RangeError(`Page index must be between 0 and ${pageCount - 1}.`);
 		}
 	}
 }
