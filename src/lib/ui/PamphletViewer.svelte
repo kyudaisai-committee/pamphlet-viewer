@@ -348,7 +348,14 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	function selectThumbnail(selectedPage: number): void {
 		clearZoomAnchor();
 		page = selectedPage;
-		if ((getViewerHost()?.getBoundingClientRect().width ?? 0) <= 620) thumbnailsOpen = false;
+		const stageSlot = shellElement?.querySelector<HTMLElement>(".stage-slot");
+		if (
+			stageSlot !== null &&
+			stageSlot !== undefined &&
+			getComputedStyle(stageSlot).display === "none"
+		) {
+			thumbnailsOpen = false;
+		}
 	}
 
 	function onViewportChange(nextViewport: ViewportSize): void {
