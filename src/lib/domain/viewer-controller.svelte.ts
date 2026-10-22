@@ -156,6 +156,7 @@ export class ViewerController {
 	}
 
 	failInvalidOption(message: string): void {
+		this.#invalidateRenderRequests();
 		this.#setFailure({ code: "invalid-option", message, retryable: false });
 	}
 
@@ -163,6 +164,7 @@ export class ViewerController {
 		if (this.pageSource === null || this.#sourceUnavailable) return null;
 		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0) return null;
 		if (!Number.isSafeInteger(input.page) || input.page < 1 || input.page > this.pageCount) {
+			this.#invalidateRenderRequests();
 			this.#setFailure({
 				code: "invalid-page",
 				message: `ページ番号は1から${this.pageCount}の範囲で指定してください。`,
@@ -381,16 +383,20 @@ export class ViewerController {
 
 	#handleSourceUnavailable(): void {
 		this.#sourceUnavailable = true;
-		this.#renderId += 1;
-		this.#pendingRender = null;
-		this.#lastRenderKey = "";
-		this.#failedRenderKey = "";
-		this.#renderQueue?.cancelQueued("visible");
+		this.#invalidateRenderRequests();
 		this.#setFailure({
 			code: "render-failed",
 			message: "ページを表示できませんでした。もう一度お試しください。",
 			retryable: true,
 		});
+	}
+
+	#invalidateRenderRequests(): void {
+		this.#renderId += 1;
+		this.#pendingRender = null;
+		this.#lastRenderKey = "";
+		this.#failedRenderKey = "";
+		this.#renderQueue?.cancelQueued("visible");
 	}
 
 	#setFailure(failure: ViewerFailure): void {
