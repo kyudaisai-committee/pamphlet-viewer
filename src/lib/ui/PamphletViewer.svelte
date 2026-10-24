@@ -73,6 +73,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
+	let lastObservedPage = page;
 	let pendingZoomAnchor: ZoomAnchor | null = null;
 	let pendingZoomAnchorRequestId: number | null = null;
 	let zoomAnchorVersion = 0;
@@ -150,6 +151,23 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		const pageCount = controller.pageCount;
 		const enabled = bookmarksEnabled;
 		return bookmarkController.connect(documentKey, pageCount, enabled);
+	});
+
+	$effect(() => {
+		const currentPage = page;
+		if (currentPage === lastObservedPage) return;
+		lastObservedPage = currentPage;
+		untrack(() => {
+			zoom = 1;
+			zoomRenderScheduler.cancel();
+			clearZoomAnchor();
+		});
+		void tick().then(() => {
+			if (page !== currentPage) return;
+			if (pageArea === undefined) return;
+			pageArea.scrollTop = 0;
+			pageArea.scrollLeft = 0;
+		});
 	});
 
 	$effect(() => {

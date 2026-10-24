@@ -203,6 +203,7 @@ test("page changes cancel a pending zoom render and unmount cancels its timer", 
 	element.page = 2;
 	await expect.poll(() => tracker.renderCalls).toBe(2);
 	expect(tracker.renderPages).toEqual([0, 1]);
+	await expect.poll(() => readZoom(shadowRoot)).toBe("100%");
 	const pageRender = tracker.pending[0];
 	if (pageRender === undefined) throw new Error("The page transition render was not deferred.");
 	pageRender.resolve(pixelVisual());
@@ -217,6 +218,111 @@ test("page changes cancel a pending zoom render and unmount cancels its timer", 
 	element.remove();
 	await waitForTimeout(ZOOM_RENDER_DELAY_MS + 20);
 	expect(tracker.renderCalls).toBe(callsBeforeUnmount);
+});
+
+test("every navigation path resets zoom, including the page property and attribute", async () => {
+	await import("../entry");
+	const element = createViewer(createBackend(undefined, 8), 840);
+	element.config = {
+		chapters: [
+			{ title: "前半", page: 4 },
+			{ title: "後半", page: 8 },
+		],
+	};
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = getShadowRoot(element);
+	const zoomIn = shadowRoot.querySelector<HTMLButtonElement>(
+		'.zoom-controls button[aria-label="拡大"]',
+	);
+	const previous = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="前のページ"]');
+	const next = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="次のページ"]');
+	const pageInput = shadowRoot.querySelector<HTMLInputElement>('[aria-label="ページ番号"]');
+	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.toolbar select[aria-label="章へ移動"]',
+	);
+	const bookmarkToggle = shadowRoot.querySelector<HTMLButtonElement>(
+		".page-controls > .bookmark-toggle",
+	);
+	if (
+		zoomIn === null ||
+		previous === null ||
+		next === null ||
+		pageInput === null ||
+		chapterSelect === null ||
+		bookmarkToggle === null
+	) {
+		throw new Error("The page navigation controls were not rendered.");
+	}
+
+	await zoomThenNavigate(zoomIn, () => next.click(), element, 2);
+	await zoomThenNavigate(zoomIn, () => previous.click(), element, 1);
+	await zoomThenNavigate(
+		zoomIn,
+		() => {
+			pageInput.value = "3";
+			pageInput.dispatchEvent(new Event("change", { bubbles: true }));
+		},
+		element,
+		3,
+	);
+	await zoomThenNavigate(
+		zoomIn,
+		() => {
+			chapterSelect.value = "4";
+			chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+		},
+		element,
+		4,
+	);
+
+	bookmarkToggle.click();
+	await expect.poll(() => bookmarkToggle.getAttribute("aria-pressed")).toBe("true");
+	element.page = 6;
+	await expect.poll(() => element.page).toBe(6);
+	const bookmarkSelect = shadowRoot.querySelector<HTMLSelectElement>(
+		'.toolbar select[aria-label="ブックマーク一覧"]',
+	);
+	if (bookmarkSelect === null) throw new Error("The bookmark list was not rendered.");
+	await zoomThenNavigate(
+		zoomIn,
+		() => {
+			bookmarkSelect.value = "4";
+			bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
+		},
+		element,
+		4,
+	);
+
+	const thumbnailToggle = shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle");
+	if (thumbnailToggle === null) throw new Error("The thumbnail control was not rendered.");
+	await zoomIn.click();
+	await expect.poll(() => readZoom(shadowRoot)).toBe("120%");
+	thumbnailToggle.click();
+	await expect.poll(() => shadowRoot.querySelector(".thumbnail-scroll")).not.toBeNull();
+	const thumbnailScroll = shadowRoot.querySelector<HTMLElement>(".thumbnail-scroll");
+	if (thumbnailScroll === null) throw new Error("The thumbnail list was not rendered.");
+	thumbnailScroll.scrollTop = 7 * 160;
+	thumbnailScroll.dispatchEvent(new Event("scroll"));
+	await expect
+		.poll(() => shadowRoot.querySelector('[data-page-index="7"] .thumbnail-entry'))
+		.not.toBeNull();
+	const thumbnail = shadowRoot.querySelector<HTMLButtonElement>(
+		'[data-page-index="7"] .thumbnail-entry',
+	);
+	if (thumbnail === null) throw new Error("The eighth page thumbnail was not rendered.");
+	thumbnail.click();
+	await expect.poll(() => element.page).toBe(8);
+	await expect.poll(() => readZoom(shadowRoot)).toBe("100%");
+
+	await zoomThenNavigate(zoomIn, () => (element.page = 2), element, 2);
+	await zoomIn.click();
+	await expect.poll(() => readZoom(shadowRoot)).toBe("120%");
+	element.setAttribute("page", "3");
+	await expect.poll(() => element.page).toBe(3);
+	await expect.poll(() => readZoom(shadowRoot)).toBe("100%");
 });
 
 test("a deferred older raster preserves the latest zoom preview and anchor", async () => {
@@ -403,6 +509,19 @@ function waitForPageChange(element: PamphletViewerElement): Promise<void> {
 	return new Promise((resolve) =>
 		element.addEventListener("pagechange", () => resolve(), { once: true }),
 	);
+}
+
+async function zoomThenNavigate(
+	zoomIn: HTMLButtonElement,
+	navigate: () => void,
+	element: PamphletViewerElement,
+	expectedPage: number,
+): Promise<void> {
+	zoomIn.click();
+	await expect.poll(() => readZoom(getShadowRoot(element))).toBe("120%");
+	navigate();
+	await expect.poll(() => element.page).toBe(expectedPage);
+	await expect.poll(() => readZoom(getShadowRoot(element))).toBe("100%");
 }
 
 function flushUi(): Promise<void> {
