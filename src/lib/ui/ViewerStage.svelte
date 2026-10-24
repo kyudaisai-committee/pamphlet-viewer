@@ -81,10 +81,8 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		if (event.pointerType === "mouse" && event.button !== 0) return;
-		if (event.pointerType === "touch" && startsAtViewportEdge(event)) {
-			swipeCandidate = null;
-			return;
-		}
+		const startedAtViewportEdge = event.pointerType === "touch" && startsAtViewportEdge(event);
+		if (startedAtViewportEdge) swipeCandidate = null;
 		if (startsInInteractiveElement(event)) {
 			swipeCandidate = null;
 			return;
@@ -98,6 +96,7 @@
 		if (!accepted) return;
 		if (gestures.activePointerCount === 1) {
 			swipeCandidate =
+				!startedAtViewportEdge &&
 				event.pointerType === "touch" &&
 				zoom <= 1 &&
 				pageArea !== undefined &&
