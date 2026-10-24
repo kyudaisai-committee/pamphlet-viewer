@@ -1,5 +1,12 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- 2b70d8a: 64MiBを超える非線形化PDFで、2ページ目以降が描画できなくなる問題を修正します。
+- 48d7506: ズーム操作中は既存の描画を即時に拡大縮小し、操作が止まった後の最新倍率で再描画するようにします。
+
 ## 0.1.0-alpha.3
 
 ### Patch Changes
