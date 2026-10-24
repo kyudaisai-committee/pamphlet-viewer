@@ -63,6 +63,9 @@ describe("PdfiumDocumentSession", () => {
 			FPDFAvail_IsDocAvail() {
 				return 1;
 			},
+			FPDFAvail_IsLinearized() {
+				return 1;
+			},
 			FPDFAvail_GetDocument() {
 				return 2;
 			},
@@ -133,6 +136,9 @@ describe("PdfiumDocumentSession", () => {
 			},
 			FPDFAvail_Destroy() {},
 			FPDFAvail_IsDocAvail() {
+				return 1;
+			},
+			FPDFAvail_IsLinearized() {
 				return 1;
 			},
 			FPDFAvail_GetDocument() {

@@ -153,6 +153,7 @@ function createPdfiumMock(): {
 		FPDFAvail_Create: createAvailability,
 		FPDFAvail_Destroy: vi.fn(),
 		FPDFAvail_IsDocAvail: vi.fn(() => 1),
+		FPDFAvail_IsLinearized: vi.fn(() => 1),
 		FPDFAvail_GetDocument: vi.fn(() => 2),
 		FPDFAvail_IsPageAvail: vi.fn(() => 1),
 		FPDF_CloseDocument: vi.fn(),
