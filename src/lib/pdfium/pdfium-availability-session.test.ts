@@ -19,6 +19,7 @@ interface FakePdfium {
 	getDocumentCount(): number;
 	getAvailabilityCount(): number;
 	setPageAvailability(status: number): void;
+	setLinearizationStatus(status: number): void;
 }
 
 function createFakeLoader(options: FakeLoaderOptions = {}): PdfRangeLoader {
@@ -48,6 +49,7 @@ function createFakePdfium(): FakePdfium {
 	let documentCount = 0;
 	let availabilityCount = 0;
 	let pageAvailability = 1;
+	let linearizationStatus = 1;
 	const runtime: PdfiumRuntimeApi = {
 		malloc(size) {
 			events.push(`malloc:${size}`);
@@ -89,6 +91,9 @@ function createFakePdfium(): FakePdfium {
 		FPDFAvail_IsDocAvail() {
 			return 1;
 		},
+		FPDFAvail_IsLinearized() {
+			return linearizationStatus;
+		},
 		FPDFAvail_IsPageAvail() {
 			return pageAvailability;
 		},
@@ -114,6 +119,9 @@ function createFakePdfium(): FakePdfium {
 		},
 		setPageAvailability(status) {
 			pageAvailability = status;
+		},
+		setLinearizationStatus(status) {
+			linearizationStatus = status;
 		},
 	};
 }
@@ -251,4 +259,31 @@ describe("PdfiumAvailabilitySession", () => {
 		session.dispose();
 		expect(pdfium.events.slice(eventCount)).toEqual([]);
 	});
+
+	it.each([0, -1])(
+		"skips whole-file page availability for linearization status %i",
+		async (status) => {
+			let cacheEpoch = 0;
+			const pdfium = createFakePdfium();
+			pdfium.setLinearizationStatus(status);
+			const isLinearized = vi.spyOn(pdfium.api, "FPDFAvail_IsLinearized");
+			const isPageAvailable = vi.spyOn(pdfium.api, "FPDFAvail_IsPageAvail");
+			const session = await PdfiumAvailabilitySession.open(
+				pdfium.api,
+				createFakeLoader({ getCacheEpoch: () => cacheEpoch }),
+				new AbortController().signal,
+			);
+			try {
+				session.beginPageOperation();
+				await session.ensurePageAvailable(0);
+				cacheEpoch += 1;
+				session.beginPageOperation();
+				await session.ensurePageAvailable(1);
+				expect(isPageAvailable).not.toHaveBeenCalled();
+				expect(isLinearized).toHaveBeenCalledTimes(2);
+			} finally {
+				session.dispose();
+			}
+		},
+	);
 });

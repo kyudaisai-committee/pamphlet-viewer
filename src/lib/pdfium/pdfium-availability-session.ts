@@ -18,6 +18,7 @@ export interface PdfiumAvailabilityApi {
 	FPDFAvail_Destroy(availability: number): void;
 	FPDFAvail_GetDocument(availability: number, password: string): number;
 	FPDFAvail_IsDocAvail(availability: number, hints: number): number;
+	FPDFAvail_IsLinearized(availability: number): number;
 	FPDFAvail_IsPageAvail(availability: number, pageIndex: number, hints: number): number;
 	FPDF_CloseDocument(document: number): void;
 	FPDF_GetLastError(): number;
@@ -30,6 +31,7 @@ export class PdfiumAvailabilitySession {
 	#availability = 0;
 	#document = 0;
 	#pageCount: number | null = null;
+	#isLinearized: boolean | null = null;
 	#nativeCacheEpoch: number;
 	#callbackError: Error | null = null;
 	#rebuildCount = 0;
@@ -127,6 +129,7 @@ export class PdfiumAvailabilitySession {
 			this.#throwIfAborted();
 			await this.#openDocument();
 			this.#throwIfAborted();
+			if (this.#isLinearized !== true) return;
 			const status = this.runNative(() =>
 				this.pdfium.FPDFAvail_IsPageAvail(
 					this.#availability,
@@ -193,6 +196,7 @@ export class PdfiumAvailabilitySession {
 			this.#availability = 0;
 			if (!this.#tryCleanup(() => this.pdfium.FPDFAvail_Destroy(availability))) return;
 		}
+		this.#isLinearized = null;
 
 		this.#fileAccess?.dispose();
 		this.#fileAccess = null;
@@ -247,7 +251,15 @@ export class PdfiumAvailabilitySession {
 							this.#throwPdfiumError("PDFium returned an invalid page count");
 						} else {
 							this.#pageCount = pageCount;
-							return;
+							const linearized = this.runNative(() =>
+								this.pdfium.FPDFAvail_IsLinearized(this.#availability),
+							);
+							if (this.loader.hasMissingChunks) {
+								rebuildAfterFetch = true;
+							} else {
+								this.#isLinearized = linearized === 1 ? true : linearized === 0 ? false : null;
+								return;
+							}
 						}
 					}
 				}
@@ -316,6 +328,7 @@ export class PdfiumAvailabilitySession {
 
 	#createAvailability(): void {
 		if (this.#availability !== 0) return;
+		this.#isLinearized = null;
 		const fileAccess = this.#requireFileAccess();
 		this.runNative(
 			() => this.pdfium.FPDFAvail_Create(fileAccess.fileAvail, fileAccess.fileAccess),

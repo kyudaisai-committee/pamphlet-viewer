@@ -311,6 +311,7 @@ function createAvailabilityApi(pdfium: WrappedPdfiumModule): PdfiumAvailabilityA
 		FPDFAvail_GetDocument: (availability, password) =>
 			pdfium.FPDFAvail_GetDocument(availability, password),
 		FPDFAvail_IsDocAvail: (availability, hints) => pdfium.FPDFAvail_IsDocAvail(availability, hints),
+		FPDFAvail_IsLinearized: (availability) => pdfium.FPDFAvail_IsLinearized(availability),
 		FPDFAvail_IsPageAvail: (availability, pageIndex, hints) =>
 			pdfium.FPDFAvail_IsPageAvail(availability, pageIndex, hints),
 		FPDF_CloseDocument: (document) => pdfium.FPDF_CloseDocument(document),
