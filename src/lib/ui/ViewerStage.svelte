@@ -82,7 +82,10 @@
 	function onPointerDown(event: PointerEvent): void {
 		if (event.pointerType === "mouse" && event.button !== 0) return;
 		const startedAtViewportEdge = event.pointerType === "touch" && startsAtViewportEdge(event);
-		if (startedAtViewportEdge) swipeCandidate = null;
+		if (startedAtViewportEdge) {
+			swipeCandidate = null;
+			if (gestures.activePointerCount === 0) return;
+		}
 		if (startsInInteractiveElement(event)) {
 			swipeCandidate = null;
 			return;

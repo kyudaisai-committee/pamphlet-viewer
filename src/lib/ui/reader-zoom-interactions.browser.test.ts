@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { page as browserPage } from "vitest/browser";
 
 import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
 import type { PamphletViewerElement } from "../public-api";
@@ -23,8 +24,13 @@ interface RenderTracker {
 	pending: Deferred<PageVisual>[];
 }
 
-afterEach(() => {
+beforeEach(async () => {
+	await browserPage.viewport(1280, 900);
+});
+
+afterEach(async () => {
 	document.body.replaceChildren();
+	await browserPage.viewport(1280, 900);
 });
 
 test("toolbar zoom, slider, and reset keep the page-area center in place", async () => {
