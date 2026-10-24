@@ -16,6 +16,8 @@
 		plan: PageRenderPlan;
 	}
 
+	const SYSTEM_EDGE_GESTURE_ZONE = 24;
+
 	interface Props {
 		pages: readonly DisplayedPage[];
 		phase: ViewerPhase;
@@ -79,6 +81,10 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		if (event.pointerType === "mouse" && event.button !== 0) return;
+		if (event.pointerType === "touch" && startsAtViewportEdge(event)) {
+			swipeCandidate = null;
+			return;
+		}
 		if (startsInInteractiveElement(event)) {
 			swipeCandidate = null;
 			return;
@@ -113,6 +119,16 @@
 		event.target.closest(
 			'button, a[href], input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="button"], [tabindex]:not([tabindex="-1"])',
 		) !== null
+		);
+	}
+
+	function startsAtViewportEdge(event: PointerEvent): boolean {
+		const view = pageArea?.ownerDocument.defaultView;
+		return (
+			view !== null &&
+			view !== undefined &&
+			(event.clientX <= SYSTEM_EDGE_GESTURE_ZONE ||
+				event.clientX >= view.innerWidth - SYSTEM_EDGE_GESTURE_ZONE)
 		);
 	}
 

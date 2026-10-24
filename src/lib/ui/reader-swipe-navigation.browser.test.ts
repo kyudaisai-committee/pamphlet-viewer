@@ -38,6 +38,7 @@ test("vertical, short, mouse, pinch, canceled, lost-capture, interactive, and zo
 	dispatchSwipe(pageArea, 1, { x: 250, y: 160 }, { x: 200, y: 240 }, "touch");
 	dispatchSwipe(pageArea, 2, { x: 250, y: 160 }, { x: 225, y: 160 }, "touch");
 	dispatchSwipe(pageArea, 3, { x: 250, y: 160 }, { x: 170, y: 160 }, "mouse");
+	dispatchSwipe(pageArea, 10, { x: 8, y: 160 }, { x: 110, y: 160 }, "touch");
 
 	pageArea.dispatchEvent(createPointerEvent("pointerdown", 4, 250, 160, "touch"));
 	pageArea.dispatchEvent(createPointerEvent("pointerdown", 5, 290, 160, "touch"));
