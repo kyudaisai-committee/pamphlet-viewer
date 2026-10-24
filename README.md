@@ -95,7 +95,7 @@ viewer?.addEventListener("pagechange", (event) => {
 
 ## PDFとアセットの配信条件
 
-PDFサーバーはRange要求に対して正しい`Content-Range`を伴う`206 Partial Content`を返してください。`Accept-Ranges: bytes`だけでは不十分です。Rangeを無視した`200 OK`、`416 Range Not Satisfiable`、不正な`Content-Range`、通信timeoutはエラーになり、PDF全体を取得するfallbackは行いません。Rangeを理解し、PDFのbyte位置とvalidatorを一貫させるようCDNや圧縮設定を確認してください。
+PDFサーバーはRange要求に対して正しい`Content-Range`を伴う`206 Partial Content`を返してください。`Accept-Ranges: bytes`だけでは不十分です。Rangeを無視した`200 OK`、`416 Range Not Satisfiable`、不正な`Content-Range`、通信timeoutはエラーになり、PDF全体を取得するfallbackは行いません。初回Range要求がリダイレクトされた場合、検証に成功した応答の最終URLを後続Range要求で再利用します。Rangeを理解し、PDFのbyte位置とvalidatorを一貫させるようCDNや圧縮設定を確認してください。
 
 別originのPDFを使う場合は、CORSで`Range`と`If-Range`要求ヘッダーを許可し、`Content-Range`、`ETag`、`Last-Modified`応答ヘッダーを公開してください。`ETag`または`Last-Modified`を使うと、範囲の要求に`If-Range`を付けて同一PDF表現か確認します。
 

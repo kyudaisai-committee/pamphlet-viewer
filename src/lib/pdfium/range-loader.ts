@@ -20,13 +20,15 @@ export class PdfRangeLoader {
 	#totalLength: number | null = null;
 	#etag: string | null = null;
 	#lastModified: string | null = null;
+	#requestUrl: string;
 	#disposed = false;
 
 	constructor(
-		private readonly url: string,
+		url: string,
 		private readonly signal: AbortSignal,
 		cacheLimitBytes = RANGE_CACHE_LIMIT,
 	) {
+		this.#requestUrl = url;
 		if (!Number.isSafeInteger(cacheLimitBytes) || cacheLimitBytes < RANGE_CHUNK_SIZE) {
 			throw new RangeError(`PDF range cache must be at least ${RANGE_CHUNK_SIZE} bytes.`);
 		}
@@ -220,7 +222,7 @@ export class PdfRangeLoader {
 		const start = batch.startIndex * RANGE_CHUNK_SIZE;
 		const requestedEnd = start + batch.chunkIndexes.length * RANGE_CHUNK_SIZE - 1;
 		const response = await requestPdfRange({
-			url: this.url,
+			url: this.#requestUrl,
 			signal: this.signal,
 			start,
 			requestedEnd,
@@ -235,6 +237,9 @@ export class PdfRangeLoader {
 			(this.#lastModified !== null && this.#lastModified !== response.lastModified)
 		) {
 			throw new Error("The PDF representation changed while it was being loaded.");
+		}
+		if (this.#totalLength === null && response.responseUrl !== "") {
+			this.#requestUrl = response.responseUrl;
 		}
 		this.#totalLength ??= response.totalLength;
 		this.#etag ??= response.etag;
