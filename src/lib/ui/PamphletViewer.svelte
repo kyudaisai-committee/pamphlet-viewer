@@ -39,6 +39,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 	import { observeResponsiveReaderOrder } from "./reader-region-order";
 	import { captureZoomAnchor, restoreZoomAnchor } from "./reader-zoom-anchor";
+	import { ZoomRenderScheduler } from "./zoom-render-scheduler";
 
 	interface Props {
 		src?: string;
@@ -63,6 +64,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	const defaultBackend = new PdfiumBackend();
 	const controller = new ViewerController(dispatchControllerEvent);
 	const fullscreenController = new ReaderFullscreenController();
+	const zoomRenderScheduler = new ZoomRenderScheduler();
 	let shellElement = $state<HTMLElement>();
 	let pageArea = $state<HTMLElement>();
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
@@ -74,6 +76,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	let pendingZoomAnchor: ZoomAnchor | null = null;
 	let pendingZoomAnchorRequestId: number | null = null;
 	let zoomAnchorVersion = 0;
+	let lastRenderInput: RenderInput | null = null;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
 	let chapters = $derived(resolveChapters(config, controller.pageCount));
@@ -91,7 +94,21 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		currentPages.flatMap((pageIndex) => {
 			const visual = controller.pageVisuals[pageIndex];
 			const plan = controller.pageRenderPlans[pageIndex];
-			return visual === undefined || plan === undefined ? [] : [{ pageIndex, visual, plan }];
+			if (visual === undefined || plan === undefined) return [];
+			const renderedZoom = controller.renderedZoom;
+			const zoomRatio = renderedZoom === null ? 1 : zoom / renderedZoom;
+			return [
+				{
+					pageIndex,
+					visual,
+					plan: {
+						...plan,
+						displayScale: plan.displayScale * zoomRatio,
+						displayWidth: plan.displayWidth * zoomRatio,
+						displayHeight: plan.displayHeight * zoomRatio,
+					},
+				},
+			];
 		}),
 	);
 
@@ -104,9 +121,9 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			untrack(() => {
 				if (hadPreviousSource) page = 1;
 				zoom = 1;
-				pendingZoomAnchor = null;
-				pendingZoomAnchorRequestId = null;
-				zoomAnchorVersion += 1;
+				zoomRenderScheduler.cancel();
+				lastRenderInput = null;
+				clearZoomAnchor();
 				thumbnailsOpen = false;
 				thumbnailPageIndexes = [];
 				controller.closeThumbnails();
@@ -138,56 +155,87 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	$effect(() => {
 		const pageSource = controller.pageSource;
 		const pageCount = controller.pageCount;
-		if (pageSource === null || pageCount < 1) return;
-		const anchor = pendingZoomAnchor;
-		if (anchor !== null && !currentPages.includes(anchor.pageIndex)) {
-			untrack(clearZoomAnchor);
+		const phase = controller.phase;
+		if (pageSource === null || pageCount < 1) {
+			untrack(() => {
+				zoomRenderScheduler.cancel();
+				lastRenderInput = null;
+			});
+			return;
 		}
 		const input = createRenderInput();
 		if (input === null) {
-			untrack(() =>
-				controller.failInvalidOption("ページ配置またはフィット方法の値が正しくありません。"),
-			);
+			untrack(() => {
+				zoomRenderScheduler.cancel();
+				lastRenderInput = null;
+				controller.failInvalidOption("ページ配置またはフィット方法の値が正しくありません。");
+			});
 			return;
 		}
-		const requestId = untrack(() => controller.requestRender(input));
-		if (pendingZoomAnchor !== null) pendingZoomAnchorRequestId = requestId;
+		if (phase === "error") {
+			untrack(() => {
+				zoomRenderScheduler.cancel();
+				lastRenderInput = null;
+				clearZoomAnchor();
+				controller.requestRender(input);
+			});
+			return;
+		}
+		const previousInput = lastRenderInput;
+		lastRenderInput = input;
+		if (previousInput !== null && isZoomOnlyRenderChange(previousInput, input)) {
+			untrack(() => {
+				zoomRenderScheduler.schedule(() => {
+					const currentInput = createRenderInput();
+					if (
+						controller.phase !== "ready" ||
+						!sameRenderInput(input, currentInput)
+					) {
+						return;
+					}
+					const requestId = controller.requestRender(input);
+					if (requestId === null) {
+						clearZoomAnchor();
+						return;
+					}
+					if (pendingZoomAnchor !== null) pendingZoomAnchorRequestId = requestId;
+				});
+			});
+			return;
+		}
+		untrack(() => {
+			zoomRenderScheduler.cancel();
+			if (previousInput !== null && !sameRenderContext(previousInput, input)) {
+				clearZoomAnchor();
+			}
+			controller.requestRender(input);
+		});
 	});
 
 	$effect(() => {
+		const phase = controller.phase;
 		const renderRevision = controller.renderRevision;
 		const renderedRequestId = controller.renderedRequestId;
-		const phase = controller.phase;
 		const anchor = pendingZoomAnchor;
 		const expectedRequestId = pendingZoomAnchorRequestId;
 		if (anchor === null) return;
-		if (phase === "error") {
-			clearZoomAnchor();
+		if (phase === "error" || !currentPages.includes(anchor.pageIndex)) {
+			untrack(clearZoomAnchor);
 			return;
 		}
 		if (
 			renderRevision === 0 ||
-			expectedRequestId === null ||
-			renderedRequestId !== expectedRequestId
+			renderedRequestId === null ||
+			(expectedRequestId !== null && renderedRequestId !== expectedRequestId)
 		) {
 			return;
 		}
-		const anchorVersion = zoomAnchorVersion;
-		void tick().then(() => {
-			const area = pageArea;
-			if (
-				anchorVersion !== zoomAnchorVersion ||
-				pendingZoomAnchorRequestId !== expectedRequestId ||
-				area?.isConnected !== true ||
-				controller.renderedRequestId !== expectedRequestId
-			) {
-				return;
-			}
-			if (restoreZoomAnchor(area, anchor)) {
-				pendingZoomAnchor = null;
-				pendingZoomAnchorRequestId = null;
-			}
-		});
+		scheduleZoomAnchorRestore(
+			anchor,
+			zoomAnchorVersion,
+			expectedRequestId,
+			expectedRequestId !== null,
+		);
 	});
 
 	$effect(() => {
@@ -210,6 +258,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		return () => {
 			detachResponsiveOrder();
 			detachFullscreen();
+			zoomRenderScheduler.cancel();
 			clearZoomAnchor();
 			controller.dispose();
 		};
@@ -275,6 +324,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	}
 
 	function onFitChange(value: FitMode): void {
+		clearZoomAnchor();
 		fit = value;
 	}
 
@@ -309,16 +359,60 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	function setZoomAt(value: number, point: GesturePoint): void {
 		const nextZoom = Math.max(0.1, Math.min(8, value));
 		if (nextZoom === zoom) return;
-		pendingZoomAnchor = pageArea === undefined ? null : captureZoomAnchor(pageArea, point);
+		const anchor = pageArea === undefined ? null : captureZoomAnchor(pageArea, point);
+		pendingZoomAnchor = anchor;
 		pendingZoomAnchorRequestId = null;
 		zoomAnchorVersion += 1;
+		const anchorVersion = zoomAnchorVersion;
 		zoom = nextZoom;
+		if (anchor !== null) scheduleZoomAnchorRestore(anchor, anchorVersion, null, false);
 	}
 
 	function clearZoomAnchor(): void {
 		pendingZoomAnchor = null;
 		pendingZoomAnchorRequestId = null;
 		zoomAnchorVersion += 1;
+	}
+
+	function scheduleZoomAnchorRestore(
+		anchor: ZoomAnchor,
+		anchorVersion: number,
+		expectedRequestId: number | null,
+		clearWhenRestored: boolean,
+	): void {
+		void tick().then(() => {
+			const area = pageArea;
+			if (
+				anchorVersion !== zoomAnchorVersion ||
+				pendingZoomAnchor !== anchor ||
+				!currentPages.includes(anchor.pageIndex) ||
+				controller.phase === "error" ||
+				area?.isConnected !== true ||
+				(expectedRequestId !== null && controller.renderedRequestId !== expectedRequestId)
+			) {
+				return;
+			}
+			if (restoreZoomAnchor(area, anchor) && clearWhenRestored) clearZoomAnchor();
+		});
+	}
+
+	function isZoomOnlyRenderChange(previous: RenderInput, next: RenderInput): boolean {
+		return sameRenderContext(previous, next) && previous.zoom !== next.zoom;
+	}
+
+	function sameRenderInput(first: RenderInput, second: RenderInput | null): boolean {
+		return second !== null && sameRenderContext(first, second) && first.zoom === second.zoom;
+	}
+
+	function sameRenderContext(first: RenderInput, second: RenderInput): boolean {
+		return (
+			first.page === second.page &&
+			first.layout === second.layout &&
+			first.fit === second.fit &&
+			first.viewport.width === second.viewport.width &&
+			first.viewport.height === second.viewport.height &&
+			(first.devicePixelRatio ?? 1) === (second.devicePixelRatio ?? 1)
+		);
 	}
 
 	function createRenderInput(): RenderInput | null {

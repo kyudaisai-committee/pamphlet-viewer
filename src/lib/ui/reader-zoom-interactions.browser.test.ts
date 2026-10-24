@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "vitest";
 
 import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
 import type { PamphletViewerElement } from "../public-api";
+import { ZOOM_RENDER_DELAY_MS } from "./zoom-render-scheduler";
 
 interface Point {
 	x: number;
@@ -15,6 +16,7 @@ interface Deferred<T> {
 
 interface RenderTracker {
 	renderCalls: number;
+	completedRenders: number;
 	renderScales: number[];
 	renderPages: number[];
 	holdRenders: boolean;
@@ -103,16 +105,18 @@ test.each([390, 520, 700])(
 	},
 );
 
-test("a stale zoom render cannot consume the latest zoom anchor", async () => {
+test("zoom previews immediately and coalesces deferred raster work at the latest zoom", async () => {
 	await import("../entry");
 	const tracker: RenderTracker = {
 		renderCalls: 0,
+		completedRenders: 0,
 		renderScales: [],
 		renderPages: [],
 		holdRenders: false,
 		pending: [],
 	};
 	const element = createViewer(createBackend(tracker));
+	element.style.height = "1000px";
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
 	await firstPage;
@@ -124,65 +128,154 @@ test("a stale zoom render cannot consume the latest zoom anchor", async () => {
 	const shadowRoot = getShadowRoot(element);
 	const pageArea = getPageArea(shadowRoot);
 	const widthAtOneHundredPercent = getFrame(pageArea).getBoundingClientRect().width;
-	const center = getAreaPoint(pageArea, 0.5, 0.5);
-	const ratioAtOneHundredPercent = measurePageRatio(pageArea, center);
-	const zoomSlider = shadowRoot.querySelector<HTMLInputElement>(".zoom-slider");
-	if (zoomSlider === null) throw new Error("The zoom slider was not rendered.");
-	zoomSlider.value = "2";
-	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
-	await expect.poll(() => readZoom(shadowRoot)).toBe("200%");
-	await expect.poll(() => tracker.renderCalls).toBe(2);
-	await expect
-		.poll(() => getFrame(pageArea).getBoundingClientRect().width)
-		.toBeGreaterThan(widthAtOneHundredPercent);
-	await expect
-		.poll(() => pagePointError(pageArea, center, ratioAtOneHundredPercent))
-		.toBeLessThanOrEqual(2);
+	const initialRenderScale = tracker.renderScales[0];
+	if (initialRenderScale === undefined)
+		throw new Error("The initial page render was not recorded.");
 	tracker.holdRenders = true;
 
-	const firstPointer = getAreaPoint(pageArea, 0.35, 0.4);
-	pageArea.dispatchEvent(createWheel(firstPointer, 2, 3));
-	await expect.poll(() => readZoom(shadowRoot)).toBe("300%");
-	await expect.poll(() => tracker.renderCalls).toBeGreaterThanOrEqual(3);
-	const latestPointer = getAreaPoint(pageArea, 0.65, 0.62);
-	const expectedLatestRatio = measurePageRatio(pageArea, latestPointer);
-	pageArea.dispatchEvent(createWheel(latestPointer, 3, 4));
-	await expect.poll(() => readZoom(shadowRoot)).toBe("400%");
-	const scrollBeforeStaleCompletion = { left: pageArea.scrollLeft, top: pageArea.scrollTop };
-	const widthBeforeStaleCompletion = getFrame(pageArea).getBoundingClientRect().width;
-
-	const staleRender = tracker.pending[0];
-	if (staleRender === undefined) throw new Error("The stale zoom render was not deferred.");
-	const callsBeforeStaleResolution = tracker.renderCalls;
-	staleRender.resolve(pixelVisual());
-	await expect.poll(() => tracker.renderCalls).toBeGreaterThan(callsBeforeStaleResolution);
-	expect(pageArea.scrollLeft).toBe(scrollBeforeStaleCompletion.left);
-	expect(pageArea.scrollTop).toBe(scrollBeforeStaleCompletion.top);
-	expect(getFrame(pageArea).getBoundingClientRect().width).toBe(widthBeforeStaleCompletion);
-
-	let resolvedRenderIndex = 1;
-	const fourHundredPercentWidth = widthAtOneHundredPercent * 3.5;
-	while (getFrame(pageArea).getBoundingClientRect().width <= fourHundredPercentWidth) {
-		const latestRender = tracker.pending[resolvedRenderIndex];
-		if (latestRender === undefined) throw new Error("The latest zoom render was not deferred.");
-		const callsBeforeResolution = tracker.renderCalls;
-		latestRender.resolve(pixelVisual());
-		resolvedRenderIndex += 1;
-		await expect
-			.poll(
-				() =>
-					getFrame(pageArea).getBoundingClientRect().width > fourHundredPercentWidth ||
-					tracker.renderCalls > callsBeforeResolution,
-			)
-			.toBe(true);
+	const zoomSlider = shadowRoot.querySelector<HTMLInputElement>(".zoom-slider");
+	if (zoomSlider === null) throw new Error("The zoom slider was not rendered.");
+	const sliderAnchor = getAreaPoint(pageArea, 0.5, 0.5);
+	const initialRatio = measurePageRatio(pageArea, sliderAnchor);
+	for (const value of ["2", "2.8", "3.2", "4"]) {
+		zoomSlider.value = value;
+		zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
 	}
-	expect(getFrame(pageArea).getBoundingClientRect().width).toBeGreaterThan(fourHundredPercentWidth);
-	expect(tracker.renderScales.at(-1)).toBeGreaterThan((tracker.renderScales[1] ?? 0) * 1.75);
-	expect(tracker.renderPages.every((renderedPage) => renderedPage === 0)).toBe(true);
+	await flushUi();
+	expect(readZoom(shadowRoot)).toBe("400%");
+	expect(getFrame(pageArea).getBoundingClientRect().width).toBeGreaterThan(
+		widthAtOneHundredPercent * 3.5,
+	);
+	expect(pagePointError(pageArea, sliderAnchor, initialRatio)).toBeLessThanOrEqual(2);
+	expect(tracker.renderCalls).toBe(1);
+
+	await expect.poll(() => tracker.renderCalls).toBe(2);
+	expect(tracker.pending).toHaveLength(1);
+	expect(tracker.renderScales[1]).toBeGreaterThan(initialRenderScale * 3.5);
+	expect(tracker.renderPages).toEqual([0, 0]);
+
+	const latestRender = tracker.pending[0];
+	if (latestRender === undefined) throw new Error("The latest zoom render was not deferred.");
+	latestRender.resolve(pixelVisual());
+	await flushUi();
+	expect(getFrame(pageArea).getBoundingClientRect().width).toBeGreaterThan(
+		widthAtOneHundredPercent * 3.5,
+	);
 	await expect
-		.poll(() => pagePointError(pageArea, latestPointer, expectedLatestRatio))
+		.poll(() => pagePointError(pageArea, sliderAnchor, initialRatio))
 		.toBeLessThanOrEqual(2);
 	expect(pageChangeEvents).toBe(0);
+});
+
+test("page changes cancel a pending zoom render and unmount cancels its timer", async () => {
+	await import("../entry");
+	const tracker: RenderTracker = {
+		renderCalls: 0,
+		completedRenders: 0,
+		renderScales: [],
+		renderPages: [],
+		holdRenders: false,
+		pending: [],
+	};
+	const element = createViewer(createBackend(tracker, 2));
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+	tracker.holdRenders = true;
+
+	const shadowRoot = getShadowRoot(element);
+	const zoomSlider = shadowRoot.querySelector<HTMLInputElement>(".zoom-slider");
+	if (zoomSlider === null) throw new Error("The zoom slider was not rendered.");
+	zoomSlider.value = "2.5";
+	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+	await flushUi();
+	expect(tracker.renderCalls).toBe(1);
+
+	const secondPage = new Promise<void>((resolve) => {
+		element.addEventListener(
+			"pagechange",
+			(event) => {
+				if ((event as CustomEvent<{ page: number }>).detail.page === 2) resolve();
+			},
+			{ once: true },
+		);
+	});
+	element.page = 2;
+	await expect.poll(() => tracker.renderCalls).toBe(2);
+	expect(tracker.renderPages).toEqual([0, 1]);
+	const pageRender = tracker.pending[0];
+	if (pageRender === undefined) throw new Error("The page transition render was not deferred.");
+	pageRender.resolve(pixelVisual());
+	await secondPage;
+	await waitForTimeout(ZOOM_RENDER_DELAY_MS + 20);
+	expect(tracker.renderPages.slice(1).every((pageIndex) => pageIndex === 1)).toBe(true);
+
+	zoomSlider.value = "3";
+	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+	await flushUi();
+	const callsBeforeUnmount = tracker.renderCalls;
+	element.remove();
+	await waitForTimeout(ZOOM_RENDER_DELAY_MS + 20);
+	expect(tracker.renderCalls).toBe(callsBeforeUnmount);
+});
+
+test("a deferred older raster preserves the latest zoom preview and anchor", async () => {
+	await import("../entry");
+	const tracker: RenderTracker = {
+		renderCalls: 0,
+		completedRenders: 0,
+		renderScales: [],
+		renderPages: [],
+		holdRenders: false,
+		pending: [],
+	};
+	const element = createViewer(createBackend(tracker));
+	element.style.height = "1000px";
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+	tracker.holdRenders = true;
+
+	const shadowRoot = getShadowRoot(element);
+	const pageArea = getPageArea(shadowRoot);
+	const zoomSlider = shadowRoot.querySelector<HTMLInputElement>(".zoom-slider");
+	if (zoomSlider === null) throw new Error("The zoom slider was not rendered.");
+	const anchorPoint = getAreaPoint(pageArea, 0.5, 0.5);
+	const initialRatio = measurePageRatio(pageArea, anchorPoint);
+	const initialWidth = getFrame(pageArea).getBoundingClientRect().width;
+
+	zoomSlider.value = "1.1";
+	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+	await flushUi();
+	await expect.poll(() => tracker.renderCalls).toBe(2);
+	const olderRender = tracker.pending[0];
+	if (olderRender === undefined) throw new Error("The first zoom render was not deferred.");
+
+	zoomSlider.value = "1.2";
+	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+	await flushUi();
+	const latestWidth = getFrame(pageArea).getBoundingClientRect().width;
+	const latestRatio = measurePageRatio(pageArea, anchorPoint);
+	expect(readZoom(shadowRoot)).toBe("120%");
+	expect(latestWidth).toBeGreaterThan(initialWidth * 1.15);
+
+	olderRender.resolve(pixelVisual());
+	await expect.poll(() => tracker.completedRenders).toBe(2);
+	await flushUi();
+	expect(getFrame(pageArea).getBoundingClientRect().width).toBe(latestWidth);
+	expect(pagePointError(pageArea, anchorPoint, latestRatio)).toBeLessThanOrEqual(2);
+
+	await expect.poll(() => tracker.renderCalls).toBe(3);
+	expect(tracker.renderPages).toEqual([0, 0, 0]);
+	expect(tracker.renderScales[2]).toBeGreaterThan((tracker.renderScales[0] ?? 0) * 1.15);
+	const latestRender = tracker.pending[1];
+	if (latestRender === undefined) throw new Error("The latest zoom render was not deferred.");
+	latestRender.resolve(pixelVisual());
+	await expect.poll(() => tracker.completedRenders).toBe(3);
+	await flushUi();
+	expect(getFrame(pageArea).getBoundingClientRect().width).toBe(latestWidth);
+	expect(pagePointError(pageArea, anchorPoint, initialRatio)).toBeLessThanOrEqual(2);
+	element.remove();
 });
 
 function createViewer(backend: DocumentBackend, width = 520): PamphletViewerElement {
@@ -195,11 +288,11 @@ function createViewer(backend: DocumentBackend, width = 520): PamphletViewerElem
 	return element;
 }
 
-function createBackend(tracker?: RenderTracker): DocumentBackend {
+function createBackend(tracker?: RenderTracker, pageCount = 1): DocumentBackend {
 	return {
 		async open(): Promise<PageSource> {
 			return {
-				pageCount: 1,
+				pageCount,
 				async getPageSize() {
 					return { width: 300, height: 400 };
 				},
@@ -208,10 +301,16 @@ function createBackend(tracker?: RenderTracker): DocumentBackend {
 					tracker.renderCalls += 1;
 					tracker.renderScales.push(scale);
 					tracker.renderPages.push(pageIndex);
-					if (!tracker.holdRenders) return pixelVisual();
+					if (!tracker.holdRenders) {
+						tracker.completedRenders += 1;
+						return pixelVisual();
+					}
 					const pending = createDeferred<PageVisual>();
 					tracker.pending.push(pending);
-					return pending.promise;
+					return pending.promise.then((visual) => {
+						tracker.completedRenders += 1;
+						return visual;
+					});
 				},
 				dispose() {},
 			};
@@ -304,4 +403,12 @@ function waitForPageChange(element: PamphletViewerElement): Promise<void> {
 	return new Promise((resolve) =>
 		element.addEventListener("pagechange", () => resolve(), { once: true }),
 	);
+}
+
+function flushUi(): Promise<void> {
+	return Promise.resolve().then(() => undefined);
+}
+
+function waitForTimeout(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
