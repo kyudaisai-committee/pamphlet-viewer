@@ -25,10 +25,15 @@ test("rebuilds PDFium state after bounded cache eviction and re-renders an evict
 		RANGE_CHUNK_SIZE * 4,
 	);
 	try {
+		const firstPageSize = await session.getPageSize(0);
+		expect(firstPageSize).toEqual({ width: 300, height: 400 });
+		const metricsAfterSize = await readMetrics();
+		const firstContentChunk = RANGE_CHUNK_SIZE;
+		expect(countChunkRequests(metricsAfterSize, firstContentChunk)).toBe(0);
+
 		const firstPage = await session.renderPage(0, 1);
 		expectCenterColor(firstPage, "blue");
 		const firstMetrics = await readMetrics();
-		const firstContentChunk = RANGE_CHUNK_SIZE;
 		expect(countChunkRequests(firstMetrics, firstContentChunk)).toBe(1);
 
 		for (const pageIndex of [6, 12, 18]) {

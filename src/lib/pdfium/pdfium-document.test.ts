@@ -129,6 +129,31 @@ describe("PdfiumDocumentSession", () => {
 	it("retries page operations after a temporary range failure while reopening", async () => {
 		const { PdfiumDocumentSession } = await import("./pdfium-document");
 		let nextPointer = 100;
+		const heap = new Uint8Array(256);
+		const malloc = vi.fn((size: number) => {
+			const pointer = nextPointer;
+			nextPointer += Math.max(size, 16);
+			return pointer;
+		});
+		const free = vi.fn();
+		const loadPage = vi.fn(() => 3);
+		let missFirstSizeRead = true;
+		const getPageSizeByIndex = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
+			if (missFirstSizeRead) {
+				missFirstSizeRead = false;
+				rangeLoaderMocks.hasMissingChunks = true;
+				return false;
+			}
+			const view = new DataView(heap.buffer);
+			view.setFloat32(pointer, 1, true);
+			view.setFloat32(pointer + Float32Array.BYTES_PER_ELEMENT, 1, true);
+			return true;
+		});
+		rangeLoaderMocks.fetchMissingChunks.mockImplementationOnce(async () => {
+			rangeLoaderMocks.hasMissingChunks = false;
+			rangeLoaderMocks.cacheEpoch += 1;
+			return 1;
+		});
 		const pdfium = {
 			PDFiumExt_Init() {},
 			FPDFAvail_Create() {
@@ -155,9 +180,8 @@ describe("PdfiumDocumentSession", () => {
 			FPDF_GetPageCount() {
 				return 1;
 			},
-			FPDF_LoadPage() {
-				return 3;
-			},
+			FPDF_LoadPage: loadPage,
+			FPDF_GetPageSizeByIndexF: getPageSizeByIndex,
 			FPDF_GetPageWidthF() {
 				return 1;
 			},
@@ -177,14 +201,7 @@ describe("PdfiumDocumentSession", () => {
 			},
 			FPDFBitmap_Destroy() {},
 			pdfium: {
-				wasmExports: {
-					malloc() {
-						const pointer = nextPointer;
-						nextPointer += 16;
-						return pointer;
-					},
-					free() {},
-				},
+				wasmExports: { malloc, free },
 				addFunction() {
 					const pointer = nextPointer;
 					nextPointer += 1;
@@ -192,7 +209,7 @@ describe("PdfiumDocumentSession", () => {
 				},
 				removeFunction() {},
 				setValue() {},
-				HEAPU8: new Uint8Array(16),
+				HEAPU8: heap,
 			},
 		} as unknown as WrappedPdfiumModule;
 
@@ -209,6 +226,10 @@ describe("PdfiumDocumentSession", () => {
 		);
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
 		expect(await session.getPageSize(0)).toEqual({ width: 1, height: 1 });
+		expect(loadPage).not.toHaveBeenCalled();
+		expect(getPageSizeByIndex).toHaveBeenCalledTimes(2);
+		expect(free).toHaveBeenCalledWith(getPageSizeByIndex.mock.calls[0]?.[2]);
+		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledOnce();
 
 		rangeLoaderMocks.cacheEpoch = 1;
 		rangeLoaderMocks.hasMissingChunks = true;
@@ -221,6 +242,7 @@ describe("PdfiumDocumentSession", () => {
 
 		rangeLoaderMocks.hasMissingChunks = false;
 		expect(await session.getPageSize(0)).toEqual({ width: 1, height: 1 });
+		expect(loadPage).not.toHaveBeenCalled();
 		expect(await session.renderPage(0, 1)).toMatchObject({
 			type: "pixels",
 			width: 1,

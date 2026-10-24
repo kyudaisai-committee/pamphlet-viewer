@@ -17,6 +17,8 @@ const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
 const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
 const TINY_PAGE_FIXTURE_PATH = "/__tiny-page-range-fixture.pdf";
 const TINY_PAGE_METRICS_PATH = "/__tiny-page-range-metrics";
+const ROTATED_CROP_FIXTURE_PATH = "/__rotated-crop-range-fixture.pdf";
+const ROTATED_CROP_METRICS_PATH = "/__rotated-crop-range-metrics";
 const EVICTION_FIXTURE_PATH = "/__pdfium-eviction-fixture.pdf";
 const EVICTION_METRICS_PATH = "/__pdfium-eviction-metrics";
 const REDIRECT_FIXTURE_PATH = "/__pdfium-redirect-range-fixture.pdf";
@@ -51,6 +53,10 @@ export function rangeFixturePlugin(): Plugin {
 		createPdfFixture({ tinyPageNumbers: [16, 17] }),
 		TINY_PAGE_METRICS_PATH,
 	);
+	const rotatedCropFixture = createFixtureRecord(
+		createPdfFixture({ rotatedCropPageNumber: 1, midDocumentFillerBytes: 0 }),
+		ROTATED_CROP_METRICS_PATH,
+	);
 	const evictionFixture = createFixtureRecord(
 		createPdfFixture({ contentGapBytes: 256 * 1024, midDocumentFillerBytes: 0 }),
 		EVICTION_METRICS_PATH,
@@ -61,6 +67,7 @@ export function rangeFixturePlugin(): Plugin {
 		[FIXTURE_PATH, regularFixture],
 		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
 		[TINY_PAGE_FIXTURE_PATH, tinyPageFixture],
+		[ROTATED_CROP_FIXTURE_PATH, rotatedCropFixture],
 		[EVICTION_FIXTURE_PATH, evictionFixture],
 		[REDIRECT_TARGET_PATH, redirectFixture],
 	]);
