@@ -9,6 +9,7 @@ export interface PdfFixtureOptions {
 	tinyPageNumbers?: readonly number[];
 	contentGapBytes?: number;
 	midDocumentFillerBytes?: number;
+	rotatedCropPageNumber?: number;
 }
 
 export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
@@ -23,7 +24,9 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		const pageObject = 3 + index;
 		return `${pageObject} 0 R`;
 	});
-	const pagesObject = `<< /Type /Pages /Count ${PAGE_COUNT} /Kids [${pageReferences.join(" ")}] >>`;
+	const inheritedMediaBox =
+		options.rotatedCropPageNumber === undefined ? "" : " /MediaBox [0 0 300 400]";
+	const pagesObject = `<< /Type /Pages /Count ${PAGE_COUNT} /Kids [${pageReferences.join(" ")}]${inheritedMediaBox} >>`;
 	appendObject(chunks, offsets, 2, pagesObject, position);
 	position += chunks.at(-1)?.byteLength ?? 0;
 
@@ -32,7 +35,13 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		const contentObject = 3 + PAGE_COUNT + index;
 		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
 		const mediaBox = tinyPage ? "0 0 24 24" : "0 0 300 400";
-		const pageBody = `<< /Type /Page /Parent 2 0 R /MediaBox [${mediaBox}] /Resources << >> /Contents ${contentObject} 0 R >>`;
+		const rotatedCropPage = options.rotatedCropPageNumber === index + 1;
+		const pageGeometry = rotatedCropPage
+			? "/CropBox [25 40 225 340] /Rotate 90"
+			: options.rotatedCropPageNumber === undefined
+				? `/MediaBox [${mediaBox}]`
+				: "/MediaBox [0 0 300 400]";
+		const pageBody = `<< /Type /Page /Parent 2 0 R ${pageGeometry} /Resources << >> /Contents ${contentObject} 0 R >>`;
 		appendObject(chunks, offsets, pageObject, pageBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}

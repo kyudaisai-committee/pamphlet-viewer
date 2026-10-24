@@ -18,6 +18,7 @@ export interface PdfRangeResponse {
 	totalLength: number;
 	etag: string | null;
 	lastModified: string | null;
+	responseUrl: string;
 }
 
 export async function requestPdfRange(
@@ -85,6 +86,7 @@ export async function requestPdfRange(
 			totalLength: range.total,
 			etag: response.headers.get("ETag"),
 			lastModified: response.headers.get("Last-Modified"),
+			responseUrl: response.url,
 		};
 	} catch (error) {
 		if (signal.aborted) {

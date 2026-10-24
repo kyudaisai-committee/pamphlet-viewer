@@ -17,8 +17,13 @@ const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
 const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
 const TINY_PAGE_FIXTURE_PATH = "/__tiny-page-range-fixture.pdf";
 const TINY_PAGE_METRICS_PATH = "/__tiny-page-range-metrics";
+const ROTATED_CROP_FIXTURE_PATH = "/__rotated-crop-range-fixture.pdf";
+const ROTATED_CROP_METRICS_PATH = "/__rotated-crop-range-metrics";
 const EVICTION_FIXTURE_PATH = "/__pdfium-eviction-fixture.pdf";
 const EVICTION_METRICS_PATH = "/__pdfium-eviction-metrics";
+const REDIRECT_FIXTURE_PATH = "/__pdfium-redirect-range-fixture.pdf";
+const REDIRECT_TARGET_PATH = "/__pdfium-redirect-range-target.pdf";
+const REDIRECT_METRICS_PATH = "/__pdfium-redirect-range-metrics";
 const CORS_ORIGIN_PATH = "/__pdfium-cors-origin";
 const CORS_CLOSE_PATH = "/__pdfium-cors-close";
 const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
@@ -48,15 +53,23 @@ export function rangeFixturePlugin(): Plugin {
 		createPdfFixture({ tinyPageNumbers: [16, 17] }),
 		TINY_PAGE_METRICS_PATH,
 	);
+	const rotatedCropFixture = createFixtureRecord(
+		createPdfFixture({ rotatedCropPageNumber: 1, midDocumentFillerBytes: 0 }),
+		ROTATED_CROP_METRICS_PATH,
+	);
 	const evictionFixture = createFixtureRecord(
 		createPdfFixture({ contentGapBytes: 256 * 1024, midDocumentFillerBytes: 0 }),
 		EVICTION_METRICS_PATH,
 	);
+	const redirectFixture = createFixtureRecord(Buffer.alloc(512 * 1024), REDIRECT_METRICS_PATH);
+	let redirectRequests = 0;
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
 		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
 		[TINY_PAGE_FIXTURE_PATH, tinyPageFixture],
+		[ROTATED_CROP_FIXTURE_PATH, rotatedCropFixture],
 		[EVICTION_FIXTURE_PATH, evictionFixture],
+		[REDIRECT_TARGET_PATH, redirectFixture],
 	]);
 	const corsServers = new Map<number, ReturnType<typeof createServer>>();
 	const corsAssetRequests = new Map<number, string[]>();
@@ -90,8 +103,21 @@ export function rangeFixturePlugin(): Plugin {
 				}
 				if (pathname === RESET_PATH) {
 					for (const fixture of fixtures.values()) resetMetrics(fixture.metrics);
+					redirectRequests = 0;
 					response.setHeader("Content-Type", "application/json");
 					response.end(JSON.stringify({ reset: true }));
+					return;
+				}
+				if (pathname === REDIRECT_METRICS_PATH) {
+					response.setHeader("Content-Type", "application/json");
+					response.end(JSON.stringify({ ...redirectFixture.metrics, redirects: redirectRequests }));
+					return;
+				}
+				if (pathname === REDIRECT_FIXTURE_PATH) {
+					redirectRequests += 1;
+					response.statusCode = 302;
+					response.setHeader("Location", REDIRECT_TARGET_PATH);
+					response.end();
 					return;
 				}
 				if (pathname === CORS_ORIGIN_PATH) {

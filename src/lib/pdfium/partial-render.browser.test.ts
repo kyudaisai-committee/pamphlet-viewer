@@ -82,6 +82,30 @@ test("renders tiny pages at a fit scale above eight without exceeding the pixel 
 	}
 }, 120_000);
 
+test("matches page-size and render dimensions for an inherited rotated CropBox", async () => {
+	const worker = new PdfiumWorkerClient();
+	try {
+		const url = new URL("/__rotated-crop-range-fixture.pdf", window.location.href).href;
+		const info = await worker.open(url);
+		expect(info.pageCount).toBe(24);
+
+		const pageSize = await worker.getPageSize(0);
+		const visual = await worker.renderPage(0, 1);
+		if (visual.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		expect(pageSize).toEqual({ width: 300, height: 200 });
+		expect(visual.width).toBe(pageSize.width);
+		expect(visual.height).toBe(pageSize.height);
+
+		const pixels = new Uint8ClampedArray(visual.pixels);
+		const centerOffset =
+			(Math.floor(visual.height / 2) * visual.width + Math.floor(visual.width / 2)) * 4;
+		expect(pixels[centerOffset]).toBeLessThan(80);
+		expect(pixels[centerOffset + 2]).toBeGreaterThan(150);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
 test("renders pages from a linearized PDF using additional byte ranges", async () => {
 	const resetResponse = await fetch("/__pdfium-range-reset");
 	expect(resetResponse.ok).toBe(true);
