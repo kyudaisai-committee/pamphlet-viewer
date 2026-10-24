@@ -48,6 +48,7 @@ export class ViewerController {
 	pageCount = $state(0);
 	renderRevision = $state(0);
 	renderedRequestId = $state<number | null>(null);
+	renderedZoom = $state<number | null>(null);
 	pageSource = $state<PageSource | null>(null);
 	pageVisuals = $state<Record<number, PageVisual>>({});
 	pageRenderPlans = $state<Record<number, PageRenderPlan>>({});
@@ -305,6 +306,7 @@ export class ViewerController {
 			this.pageVisuals = nextPages;
 			this.pageRenderPlans = nextPlans;
 			this.renderedRequestId = request.id;
+			this.renderedZoom = request.zoom;
 			this.renderRevision += 1;
 			const visiblePages = pageIndexes.map((index) => index + 1);
 			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
@@ -354,6 +356,7 @@ export class ViewerController {
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
 		this.renderedRequestId = null;
+		this.renderedZoom = null;
 		if (!preservePageChangeKey) this.#lastPageChangeKey = "";
 		this.#failedRenderKey = "";
 		this.#renderQueue?.dispose();
