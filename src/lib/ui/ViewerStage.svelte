@@ -5,7 +5,7 @@
 	import type { PageRenderPlan } from "../domain/render-plan";
 	import type { ViewerFailure, ViewerPhase } from "../domain/viewer-controller.svelte";
 	import type { ViewportSize } from "../domain/layout";
-	import { ReaderGestureController } from "../domain/reader-gesture";
+	import { detectPageSwipeDirection, ReaderGestureController } from "../domain/reader-gesture";
 	import type { GesturePoint } from "../domain/reader-gesture";
 	import PageCanvas from "./PageCanvas.svelte";
 	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";
@@ -15,6 +15,8 @@
 		visual: PageVisual;
 		plan: PageRenderPlan;
 	}
+
+	const SYSTEM_EDGE_GESTURE_ZONE = 24;
 
 	interface Props {
 		pages: readonly DisplayedPage[];
@@ -43,6 +45,7 @@
 	}: Props = $props();
 	const gestures = new ReaderGestureController();
 	let pointerActive = $state(false);
+	let swipeCandidate: { pointerId: number; start: GesturePoint; startedAt: number } | null = null;
 
 	onMount(() => {
 		if (pageArea === undefined) return;
@@ -66,6 +69,7 @@
 			pageArea?.removeEventListener("wheel", onWheel);
 			pageArea?.removeEventListener("keydown", onKeydown);
 			gestures.clear();
+			swipeCandidate = null;
 		};
 	});
 
@@ -77,13 +81,34 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		if (event.pointerType === "mouse" && event.button !== 0) return;
-		if (startsInInteractiveElement(event)) return;
+		const startedAtViewportEdge = event.pointerType === "touch" && startsAtViewportEdge(event);
+		if (startedAtViewportEdge) {
+			swipeCandidate = null;
+			if (gestures.activePointerCount === 0) return;
+		}
+		if (startsInInteractiveElement(event)) {
+			swipeCandidate = null;
+			return;
+		}
+		const point = { x: event.clientX, y: event.clientY };
 		const accepted = gestures.pointerDown(
 			event.pointerId,
-			{ x: event.clientX, y: event.clientY },
+			point,
 			zoom,
 		);
 		if (!accepted) return;
+		if (gestures.activePointerCount === 1) {
+			swipeCandidate =
+				!startedAtViewportEdge &&
+				event.pointerType === "touch" &&
+				zoom <= 1 &&
+				pageArea !== undefined &&
+				!hasHorizontalOverflow(pageArea)
+					? { pointerId: event.pointerId, start: point, startedAt: event.timeStamp }
+					: null;
+		} else {
+			swipeCandidate = null;
+		}
 		pointerActive = gestures.activePointerCount > 0;
 		event.preventDefault();
 		pageArea?.focus({ preventScroll: true });
@@ -96,6 +121,16 @@
 		event.target.closest(
 			'button, a[href], input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="button"], [tabindex]:not([tabindex="-1"])',
 		) !== null
+		);
+	}
+
+	function startsAtViewportEdge(event: PointerEvent): boolean {
+		const view = pageArea?.ownerDocument.defaultView;
+		return (
+			view !== null &&
+			view !== undefined &&
+			(event.clientX <= SYSTEM_EDGE_GESTURE_ZONE ||
+				event.clientX >= view.innerWidth - SYSTEM_EDGE_GESTURE_ZONE)
 		);
 	}
 
@@ -113,11 +148,32 @@
 	}
 
 	function onPointerEnd(event: PointerEvent): void {
+		const candidate = swipeCandidate;
+		const canNavigate =
+			event.type === "pointerup" &&
+			candidate?.pointerId === event.pointerId &&
+			gestures.activePointerCount === 1 &&
+			event.pointerType === "touch" &&
+			zoom <= 1 &&
+			pageArea !== undefined &&
+			!hasHorizontalOverflow(pageArea);
+		const direction = candidate !== null && canNavigate
+			? detectPageSwipeDirection(
+					candidate.start,
+					{ x: event.clientX, y: event.clientY },
+					event.timeStamp - candidate.startedAt,
+				)
+			: null;
+		if (event.type !== "pointerup" || candidate?.pointerId === event.pointerId) {
+			swipeCandidate = null;
+		}
 		gestures.pointerEnd(event.pointerId);
 		pointerActive = gestures.activePointerCount > 0;
 		if (event.isTrusted && pageArea?.hasPointerCapture(event.pointerId)) {
 			pageArea.releasePointerCapture(event.pointerId);
 		}
+		if (direction === "next") onNext();
+		else if (direction === "previous") onPrevious();
 	}
 
 	function onWheel(event: WheelEvent): void {
@@ -143,6 +199,10 @@
 			element.scrollWidth > element.clientWidth + 1 ||
 			element.scrollHeight > element.clientHeight + 1
 		);
+	}
+
+	function hasHorizontalOverflow(element: HTMLElement): boolean {
+		return element.scrollWidth > element.clientWidth + 1;
 	}
 
 	function hasScrollableContent(): boolean {

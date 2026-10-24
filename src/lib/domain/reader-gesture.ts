@@ -6,6 +6,8 @@ export interface GesturePoint {
 	y: number;
 }
 
+export type PageSwipeDirection = "previous" | "next";
+
 export interface ZoomAnchor {
 	pageIndex: number;
 	pageRatioX: number;
@@ -94,6 +96,26 @@ export class ReaderGestureController {
 export function clampReaderZoom(zoom: number): number {
 	if (!Number.isFinite(zoom)) return 1;
 	return Math.max(MIN_READER_ZOOM, Math.min(MAX_READER_ZOOM, zoom));
+}
+
+export function detectPageSwipeDirection(
+	start: GesturePoint,
+	end: GesturePoint,
+	durationMs: number,
+): PageSwipeDirection | null {
+	const deltaX = end.x - start.x;
+	const deltaY = end.y - start.y;
+	if (
+		!Number.isFinite(durationMs) ||
+		durationMs < 0 ||
+		durationMs > 700 ||
+		Math.abs(deltaX) < 48 ||
+		Math.abs(deltaX) < Math.abs(deltaY) * 1.5 ||
+		Math.abs(deltaX) / Math.max(durationMs, 1) < 0.2
+	) {
+		return null;
+	}
+	return deltaX < 0 ? "next" : "previous";
 }
 
 function distanceBetween(first: GesturePoint, second: GesturePoint): number {
