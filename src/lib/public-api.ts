@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { DocumentBackend, PageSource, PageVisual } from "./document/page-source";
 import type { FitMode, LayoutMode } from "./domain/layout";
 import type { ViewerFailure } from "./domain/viewer-controller.svelte";

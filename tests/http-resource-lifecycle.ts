@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { createReadStream } from "node:fs";
 import type { ReadStream } from "node:fs";
 import type { Server, ServerResponse } from "node:http";

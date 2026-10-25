@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 export const ZOOM_RENDER_DELAY_MS = 130;
 
 export class ZoomRenderScheduler {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 export const MIN_READER_ZOOM = 0.1;
 export const MAX_READER_ZOOM = 8;
 

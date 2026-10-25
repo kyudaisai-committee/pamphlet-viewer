@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 
 export function captureZoomAnchor(pageArea: HTMLElement, point: GesturePoint): ZoomAnchor | null {

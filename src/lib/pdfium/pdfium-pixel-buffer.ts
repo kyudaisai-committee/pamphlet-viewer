@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 const PIXEL_BYTES = 4;
 
 export function copyRgbaBitmapPixels(

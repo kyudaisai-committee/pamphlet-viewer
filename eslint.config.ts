@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import path from "node:path";
 
 import js from "@eslint/js";

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { afterEach, expect, test } from "vitest";
 
 import type { PageSource, PageVisual } from "../document/page-source";

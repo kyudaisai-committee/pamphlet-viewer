@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { Buffer } from "node:buffer";
 
 const PAGE_COUNT = 24;

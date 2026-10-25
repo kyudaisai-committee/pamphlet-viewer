@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 /** @param {{ filename: string }} options */
 function isPamphletViewer({ filename }) {
 	return filename.split(/[\\/]/).at(-1) === "PamphletViewer.svelte";

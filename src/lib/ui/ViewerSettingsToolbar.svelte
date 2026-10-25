@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 <script lang="ts">
 	import type { FitMode, LayoutMode } from "../domain/layout";
 	import ViewerViewControls from "./ViewerViewControls.svelte";

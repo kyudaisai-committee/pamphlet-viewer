@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { afterEach, expect, it, vi } from "vitest";
 

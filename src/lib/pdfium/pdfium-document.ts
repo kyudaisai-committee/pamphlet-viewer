@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
 import type { PageSize, PageVisual } from "../document/page-source";

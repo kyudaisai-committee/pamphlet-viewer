@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 type FullscreenMode = "none" | "native" | "popover" | "fixed";
 
 export class ReaderFullscreenController {

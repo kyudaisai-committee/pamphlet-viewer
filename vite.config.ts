@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { page as browserPage } from "vitest/browser";
 

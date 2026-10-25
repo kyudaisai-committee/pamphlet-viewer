@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
 

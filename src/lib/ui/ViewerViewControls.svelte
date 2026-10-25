@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 <script lang="ts">
 	import { Maximize2Icon, Minimize2Icon } from "@lucide/svelte";
 

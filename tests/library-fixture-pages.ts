@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 
 export function createLibraryTestHtml(requestUrl = "/"): string {

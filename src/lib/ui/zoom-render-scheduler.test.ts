@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ZOOM_RENDER_DELAY_MS, ZoomRenderScheduler } from "./zoom-render-scheduler";

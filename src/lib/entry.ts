@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import PamphletViewer from "./ui/PamphletViewer.svelte";
 
 export * from "./public-api";

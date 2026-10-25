@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PamphletViewerConfig } from "@/lib/public-api";
 
 type ConfigListener = (config: PamphletViewerConfig) => void;

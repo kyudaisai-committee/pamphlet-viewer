@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { expect, test } from "vitest";
 
 import type { PamphletViewerElement } from "../public-api";

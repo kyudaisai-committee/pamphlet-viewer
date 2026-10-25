@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 <script lang="ts">
 	import { XIcon } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";

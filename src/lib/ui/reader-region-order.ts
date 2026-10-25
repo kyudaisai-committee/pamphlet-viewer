@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 type ReaderRegion = "settings" | "body" | "status" | "navigation";
 
 const MOBILE_READER_REGION_ORDER = ["settings", "body", "status", "navigation"] as const;

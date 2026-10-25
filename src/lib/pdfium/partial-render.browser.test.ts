@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { expect, test } from "vitest";
 
 import { calculateFitScale, visiblePageIndexes } from "../domain/layout";

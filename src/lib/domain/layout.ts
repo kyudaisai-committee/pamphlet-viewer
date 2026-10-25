@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PageSize } from "../document/page-source";
 
 export const AUTO_SPREAD_MIN_WIDTH = 760;

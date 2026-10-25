@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { FitMode, LayoutMode } from "./layout";
 
 export function resolveDocumentSource(value: string, baseUri: string): string | null {

@@ -1,0 +1,8 @@
+Pamphlet Viewer includes third-party software in its distributable JavaScript
+and WebAssembly files. The corresponding license texts are included in the
+licenses/ directory:
+
+- @embedpdf/pdfium (MIT): licenses/LICENSE.embedpdf
+- PDFium WebAssembly (BSD-3-Clause and Apache-2.0): licenses/LICENSE.pdfium
+- @lucide/svelte (ISC and MIT for icons derived from Feather): licenses/LICENSE.lucide
+- Svelte (MIT): licenses/LICENSE.svelte.txt

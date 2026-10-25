@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { bookmarkStore } from "./bookmark-store";
 
 export class ViewerBookmarks {

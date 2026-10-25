@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PamphletChapter } from "../public-api";
 
 export function resolveChapters(config: unknown, pageCount: number): PamphletChapter[] {

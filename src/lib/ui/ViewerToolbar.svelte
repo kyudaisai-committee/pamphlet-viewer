@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+
 <script lang="ts">
 	import type { PamphletChapter } from "@/lib/public-api";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";

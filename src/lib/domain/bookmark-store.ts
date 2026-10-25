@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 interface BookmarkStorage {
 	getItem(key: string): string | null;
 	setItem(key: string, value: string): void;
