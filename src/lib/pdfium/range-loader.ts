@@ -172,21 +172,13 @@ export class PdfRangeLoader {
 			);
 			if (rejection !== undefined) {
 				if (cacheEvicted) this.#cacheEpoch += 1;
+				this.#forgetRetainedChunks(batches.slice(0, offset + wave.length));
 				throw rejection.reason;
 			}
 		}
 		if (cacheEvicted) this.#cacheEpoch += 1;
 
-		let retainedCount = 0;
-		for (const batch of batches) {
-			for (const index of batch.chunkIndexes) {
-				if (this.#cache.get(index) !== undefined) {
-					this.#missingChunks.delete(index);
-					this.#hintedChunks.delete(index);
-					retainedCount += 1;
-				}
-			}
-		}
+		const retainedCount = this.#forgetRetainedChunks(batches);
 		if (retainedCount !== batches.reduce((count, batch) => count + batch.chunkIndexes.length, 0)) {
 			throw new Error("The requested PDF byte ranges exceed the 64 MiB working cache.");
 		}
@@ -215,6 +207,19 @@ export class PdfRangeLoader {
 			{ length: lastIndex - firstIndex + 1 },
 			(_value, offset) => firstIndex + offset,
 		);
+	}
+
+	#forgetRetainedChunks(batches: readonly RangeBatch[]): number {
+		let retainedCount = 0;
+		for (const batch of batches) {
+			for (const index of batch.chunkIndexes) {
+				if (this.#cache.get(index) === undefined) continue;
+				this.#missingChunks.delete(index);
+				this.#hintedChunks.delete(index);
+				retainedCount += 1;
+			}
+		}
+		return retainedCount;
 	}
 
 	async #fetchBatch(batch: RangeBatch): Promise<boolean> {
