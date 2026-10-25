@@ -8,7 +8,7 @@ import type { Plugin } from "vite";
 
 import { disposeFixtureServer, streamFileResponse } from "./http-resource-lifecycle.js";
 import { createLibraryTestHtml, createRemoteLibraryTestHtml } from "./library-fixture-pages.js";
-import { createPdfFixture } from "./pdf-fixture.js";
+import { createAnnotatedPdfFixture, createPdfFixture } from "./pdf-fixture.js";
 
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 const METRICS_PATH = "/__pdfium-range-metrics";
@@ -27,6 +27,7 @@ const REDIRECT_METRICS_PATH = "/__pdfium-redirect-range-metrics";
 const CORS_ORIGIN_PATH = "/__pdfium-cors-origin";
 const CORS_CLOSE_PATH = "/__pdfium-cors-close";
 const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
+const ANNOTATED_FIXTURE_PATH = "/__annotated-range-fixture.pdf";
 const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 const LIBRARY_HTML_PATH = "/__built-library-test.html";
 const REMOTE_LIBRARY_HTML_PATH = "/__built-library-remote-test.html";
@@ -62,6 +63,10 @@ export function rangeFixturePlugin(): Plugin {
 		EVICTION_METRICS_PATH,
 	);
 	const redirectFixture = createFixtureRecord(Buffer.alloc(512 * 1024), REDIRECT_METRICS_PATH);
+	const annotatedFixture = createFixtureRecord(
+		createAnnotatedPdfFixture(),
+		"/__annotated-range-metrics",
+	);
 	let redirectRequests = 0;
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
@@ -70,6 +75,7 @@ export function rangeFixturePlugin(): Plugin {
 		[ROTATED_CROP_FIXTURE_PATH, rotatedCropFixture],
 		[EVICTION_FIXTURE_PATH, evictionFixture],
 		[REDIRECT_TARGET_PATH, redirectFixture],
+		[ANNOTATED_FIXTURE_PATH, annotatedFixture],
 	]);
 	const corsServers = new Map<number, ReturnType<typeof createServer>>();
 	const corsAssetRequests = new Map<number, string[]>();

@@ -9,8 +9,12 @@ import type { PdfiumRenderFlags } from "./pdfium-render-flags";
 import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
+const FPDF_ANNOT = 0x01;
 const FPDF_REVERSE_BYTE_ORDER = 0x10;
-export const PAGE_RENDER_FLAGS: PdfiumRenderFlags = { reverseByteOrder: FPDF_REVERSE_BYTE_ORDER };
+export const PAGE_RENDER_FLAGS: PdfiumRenderFlags = {
+	annotations: FPDF_ANNOT,
+	reverseByteOrder: FPDF_REVERSE_BYTE_ORDER,
+};
 
 export function getPageSizeByIndex(
 	pdfium: WrappedPdfiumModule,
