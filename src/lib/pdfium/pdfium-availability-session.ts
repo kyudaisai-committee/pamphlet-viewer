@@ -150,6 +150,11 @@ export class PdfiumAvailabilitySession {
 		if (fetched === 0) {
 			throw new Error("PDFium could not make progress loading the requested page metadata ranges.");
 		}
+		if (status === 1) {
+			await this.#rebuildNativeState();
+			this.#throwIfAborted();
+			await this.#openDocument();
+		}
 		this.#throwIfAborted();
 		return false;
 	}

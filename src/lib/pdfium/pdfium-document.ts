@@ -175,6 +175,7 @@ export class PdfiumDocumentSession {
 				availability.completePageOperation();
 				return value;
 			}
+			pageAvailabilityCacheEpoch = null;
 			await availability.recoverAfterReadMiss();
 		}
 

@@ -145,11 +145,12 @@ describe("PdfiumAvailabilitySession", () => {
 		);
 		try {
 			expect(await session.preparePageSizeFallback(12)).toBe(true);
-			pdfium.setPageAvailability(0);
+			pdfium.setPageAvailability(1);
 			missing = true;
 			expect(await session.preparePageSizeFallback(12)).toBe(false);
 			expect(fetchMissingChunks).toHaveBeenCalledOnce();
-			pdfium.setPageAvailability(1);
+			expect(pdfium.getAvailabilityCount()).toBe(2);
+			expect(pdfium.getDocumentCount()).toBe(2);
 			expect(await session.preparePageSizeFallback(12)).toBe(true);
 		} finally {
 			session.dispose();
