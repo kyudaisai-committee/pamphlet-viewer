@@ -59,7 +59,14 @@ export class PdfiumFileAccess {
 
 		const readBlock: BlockCallback = (_parameter, position, buffer, size): number => {
 			try {
-				return this.reader.readInto(position, this.runtime.getHeap(), buffer, size) ? 1 : 0;
+				return this.reader.readInto(
+					toUnsignedI32(position),
+					this.runtime.getHeap(),
+					toUnsignedI32(buffer),
+					toUnsignedI32(size),
+				)
+					? 1
+					: 0;
 			} catch (error) {
 				this.recordCallbackError(error);
 				return 0;
@@ -67,7 +74,7 @@ export class PdfiumFileAccess {
 		};
 		const isDataAvailable: AvailabilityCallback = (_fileAvail, offset, size): number => {
 			try {
-				return this.reader.isRangeAvailable(offset, size) ? 1 : 0;
+				return this.reader.isRangeAvailable(toUnsignedI32(offset), toUnsignedI32(size)) ? 1 : 0;
 			} catch (error) {
 				this.recordCallbackError(error);
 				return 0;
@@ -75,7 +82,7 @@ export class PdfiumFileAccess {
 		};
 		const addDownloadSegment: DownloadHintCallback = (_hints, offset, size): void => {
 			try {
-				this.reader.hintRange(offset, size);
+				this.reader.hintRange(toUnsignedI32(offset), toUnsignedI32(size));
 			} catch (error) {
 				this.recordCallbackError(error);
 			}
@@ -149,4 +156,8 @@ export class PdfiumFileAccess {
 			return false;
 		}
 	}
+}
+
+function toUnsignedI32(value: number): number {
+	return value >>> 0;
 }
