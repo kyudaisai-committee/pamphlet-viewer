@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.0-alpha.7
+
+### Patch Changes
+
+- 4a6d66c: 章一覧などの設定APIをsetConfig()に一本化し、従来のconfigプロパティと属性を削除します。
+
 ## 0.1.0-alpha.6
 
 ### Patch Changes
