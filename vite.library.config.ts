@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { dts } from "rolldown-plugin-dts";
 import { defineConfig } from "vite";
@@ -6,7 +8,11 @@ import { sourceAlias } from "./vite.source-alias.js";
 
 export default defineConfig({
 	base: "./",
-	plugins: [svelte(), ...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" })],
+	plugins: [
+		paraglideVitePlugin({ project: "./project.inlang", outdir: "./src/paraglide" }),
+		svelte(),
+		...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" }),
+	],
 	resolve: { alias: sourceAlias },
 	oxc: { exclude: [/\.js$/, /\.d\.[cm]?ts$/] },
 	build: {

@@ -25,16 +25,18 @@
 		"dev": "vite",
 		"build": "vite build && pnpm build:library",
 		"build:library": "vite build --config vite.library.config.ts",
+		"i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --emit-ts-declarations --strategy baseLocale",
 		"changeset": "changeset",
 		"changeset:version": "changeset version && pnpm install --lockfile-only && pnpm format",
 		"preview": "vite preview",
-		"check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+		"check": "pnpm i18n:compile && svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
 		"format": "oxfmt",
 		"fmt": "oxfmt",
 		"lint": "eslint . && cspell .",
 		"test": "pnpm build:library && vitest run",
 		"verify": "pnpm exec oxfmt --check && pnpm check && pnpm lint && pnpm test && pnpm build",
-		"prepare": "lefthook install"
+		"prepare": "lefthook install",
+		"prepack": "pnpm build:library"
 	},
 	"dependencies": {
 		"@embedpdf/pdfium": "2.15.1",
