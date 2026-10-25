@@ -80,6 +80,11 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	let lastRenderInput: RenderInput | null = null;
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
+	let canMoveNext = $derived.by(() => {
+		const visible = visiblePageIndexes(controller.pageCount, page, resolvedLayout);
+		const lastVisiblePage = visible.at(-1);
+		return lastVisiblePage !== undefined && lastVisiblePage < controller.pageCount - 1;
+	});
 	let chapters = $derived(resolveChapters(config, controller.pageCount));
 	let currentChapter = $derived(findCurrentChapter(chapters, page));
 	let resolvedSource = $derived(
@@ -357,6 +362,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	}
 
 	function nextPage(): void {
+		if (!canMoveNext) return;
 		clearZoomAnchor();
 		if (resolvedLayout === "single") {
 			page = Math.min(controller.pageCount, page + 1);
@@ -551,7 +557,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			bookmarkEnabled={bookmarksEnabled}
 			enabled={controller.pageCount > 0}
 			canPrevious={page > 1}
-			canNext={page < controller.pageCount}
+			canNext={canMoveNext}
 			thumbnailsOpen={thumbnailsOpen}
 			onPageChange={onPageChange}
 			onChapterChange={onChapterChange}
