@@ -3,9 +3,11 @@ import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize, PageVisual } from "../document/page-source";
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
+import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";
 import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
+const FPDF_REVERSE_BYTE_ORDER = 0x10;
 
 export function getPageSizeByIndex(
 	pdfium: WrappedPdfiumModule,
@@ -184,14 +186,20 @@ function renderLoadedPage(
 			pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff),
 		);
 		availability.runNative(() =>
-			pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0),
+			pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, FPDF_REVERSE_BYTE_ORDER),
 		);
 
 		const { stride, sourcePointer } = availability.runNative(() => ({
 			stride: pdfium.FPDFBitmap_GetStride(bitmap),
 			sourcePointer: pdfium.FPDFBitmap_GetBuffer(bitmap),
 		}));
-		const pixels = convertBgraToRgba(getPdfiumHeap(pdfium), sourcePointer, width, height, stride);
+		const pixels = copyRgbaBitmapPixels(
+			getPdfiumHeap(pdfium),
+			sourcePointer,
+			width,
+			height,
+			stride,
+		);
 		result = { type: "pixels", width, height, pixels };
 	} catch (error) {
 		renderError = error;
@@ -214,25 +222,4 @@ function renderLoadedPage(
 	if (hasRenderError) throw renderError;
 	if (result === null) throw new Error("PDFium did not complete the page render.");
 	return result;
-}
-
-function convertBgraToRgba(
-	heap: Uint8Array,
-	sourcePointer: number,
-	width: number,
-	height: number,
-	stride: number,
-): ArrayBuffer {
-	const pixels = new Uint8Array(width * height * 4);
-	for (let row = 0; row < height; row += 1) {
-		for (let column = 0; column < width; column += 1) {
-			const sourceOffset = sourcePointer + row * stride + column * 4;
-			const targetOffset = (row * width + column) * 4;
-			pixels[targetOffset] = heap[sourceOffset + 2];
-			pixels[targetOffset + 1] = heap[sourceOffset + 1];
-			pixels[targetOffset + 2] = heap[sourceOffset];
-			pixels[targetOffset + 3] = heap[sourceOffset + 3];
-		}
-	}
-	return pixels.buffer;
 }
