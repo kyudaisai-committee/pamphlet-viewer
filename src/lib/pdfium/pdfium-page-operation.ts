@@ -3,15 +3,25 @@ import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize, PageVisual } from "../document/page-source";
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
+import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";
+import { combinePdfiumRenderFlags } from "./pdfium-render-flags";
+import type { PdfiumRenderFlags } from "./pdfium-render-flags";
 import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
+const FPDF_ANNOT = 0x01;
+const FPDF_REVERSE_BYTE_ORDER = 0x10;
+export const PAGE_RENDER_FLAGS: PdfiumRenderFlags = {
+	annotations: FPDF_ANNOT,
+	reverseByteOrder: FPDF_REVERSE_BYTE_ORDER,
+};
 
 export function getPageSizeByIndex(
 	pdfium: WrappedPdfiumModule,
 	availability: PdfiumAvailabilitySession,
 	loader: PdfRangeLoader,
 	pageIndex: number,
+	allowPageLoadFallback = false,
 ): PageSize | null {
 	let sizePointer = 0;
 	let result: PageSize | null = null;
@@ -29,26 +39,12 @@ export function getPageSizeByIndex(
 		const gotSize = availability.runNative(() =>
 			pdfium.FPDF_GetPageSizeByIndexF(availability.documentHandle, pageIndex, sizePointer),
 		);
-		if (!loader.hasMissingChunks) {
-			if (!gotSize) throw new Error(`PDFium could not get the size for page ${pageIndex}.`);
-			const heap = getPdfiumHeap(pdfium);
-			if (sizePointer > heap.byteLength - PAGE_SIZE_BUFFER_SIZE) {
-				throw new Error("PDFium returned an invalid page-size output buffer.");
-			}
-			const view = new DataView(heap.buffer, heap.byteOffset + sizePointer, PAGE_SIZE_BUFFER_SIZE);
-			const size = {
-				width: view.getFloat32(0, true),
-				height: view.getFloat32(Float32Array.BYTES_PER_ELEMENT, true),
-			};
-			if (
-				!Number.isFinite(size.width) ||
-				!Number.isFinite(size.height) ||
-				size.width <= 0 ||
-				size.height <= 0
-			) {
-				throw new Error("PDFium returned invalid page dimensions.");
-			}
-			result = size;
+		if (gotSize && !loader.hasMissingChunks) {
+			result = readPageSizeBuffer(pdfium, sizePointer);
+		} else if (!loader.hasMissingChunks && allowPageLoadFallback) {
+			result = runPageOperation(pdfium, availability, loader, pageIndex, (page) =>
+				getLoadedPageSize(pdfium, availability, page),
+			);
 		}
 	} catch (error) {
 		operationError = error;
@@ -70,6 +66,42 @@ export function getPageSizeByIndex(
 
 	if (hasOperationError) throw operationError;
 	return result;
+}
+
+function readPageSizeBuffer(pdfium: WrappedPdfiumModule, pointer: number): PageSize {
+	const heap = getPdfiumHeap(pdfium);
+	if (pointer > heap.byteLength - PAGE_SIZE_BUFFER_SIZE) {
+		throw new Error("PDFium returned an invalid page-size output buffer.");
+	}
+	const view = new DataView(heap.buffer, heap.byteOffset + pointer, PAGE_SIZE_BUFFER_SIZE);
+	return validatePageSize({
+		width: view.getFloat32(0, true),
+		height: view.getFloat32(Float32Array.BYTES_PER_ELEMENT, true),
+	});
+}
+
+function getLoadedPageSize(
+	pdfium: WrappedPdfiumModule,
+	availability: PdfiumAvailabilitySession,
+	page: number,
+): PageSize {
+	const size = availability.runNative(() => ({
+		width: pdfium.FPDF_GetPageWidthF(page),
+		height: pdfium.FPDF_GetPageHeightF(page),
+	}));
+	return validatePageSize(size);
+}
+
+function validatePageSize(size: PageSize): PageSize {
+	if (
+		!Number.isFinite(size.width) ||
+		!Number.isFinite(size.height) ||
+		size.width <= 0 ||
+		size.height <= 0
+	) {
+		throw new Error("PDFium returned invalid page dimensions.");
+	}
+	return size;
 }
 
 export function renderPdfiumPage(
@@ -189,7 +221,16 @@ function renderLoadedPage(
 		}
 		if (!loader.hasMissingChunks) {
 			availability.runNative(() =>
-				pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0),
+				pdfium.FPDF_RenderPageBitmap(
+					bitmap,
+					page,
+					0,
+					0,
+					width,
+					height,
+					0,
+					combinePdfiumRenderFlags(PAGE_RENDER_FLAGS),
+				),
 			);
 		}
 		if (!loader.hasMissingChunks) {
@@ -198,7 +239,7 @@ function renderLoadedPage(
 				sourcePointer: pdfium.FPDFBitmap_GetBuffer(bitmap),
 			}));
 			if (!loader.hasMissingChunks) {
-				const pixels = convertBgraToRgba(
+				const pixels = copyRgbaBitmapPixels(
 					getPdfiumHeap(pdfium),
 					sourcePointer,
 					width,
@@ -231,25 +272,4 @@ function renderLoadedPage(
 		throw new Error("PDFium did not complete the page render.");
 	}
 	return result;
-}
-
-function convertBgraToRgba(
-	heap: Uint8Array,
-	sourcePointer: number,
-	width: number,
-	height: number,
-	stride: number,
-): ArrayBuffer {
-	const pixels = new Uint8Array(width * height * 4);
-	for (let row = 0; row < height; row += 1) {
-		for (let column = 0; column < width; column += 1) {
-			const sourceOffset = sourcePointer + row * stride + column * 4;
-			const targetOffset = (row * width + column) * 4;
-			pixels[targetOffset] = heap[sourceOffset + 2];
-			pixels[targetOffset + 1] = heap[sourceOffset + 1];
-			pixels[targetOffset + 2] = heap[sourceOffset];
-			pixels[targetOffset + 3] = heap[sourceOffset + 3];
-		}
-	}
-	return pixels.buffer;
 }

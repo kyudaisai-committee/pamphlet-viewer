@@ -127,6 +127,36 @@ function createFakePdfium(): FakePdfium {
 }
 
 describe("PdfiumAvailabilitySession", () => {
+	it("allows the page-load size fallback only after linearized page ranges are available", async () => {
+		let missing = false;
+		const fetchMissingChunks = vi.fn(async () => {
+			missing = false;
+			return 1;
+		});
+		const loader = createFakeLoader({
+			getMissing: () => missing,
+			fetchMissingChunks,
+		});
+		const pdfium = createFakePdfium();
+		const session = await PdfiumAvailabilitySession.open(
+			pdfium.api,
+			loader,
+			new AbortController().signal,
+		);
+		try {
+			expect(await session.preparePageSizeFallback(12)).toBe(true);
+			pdfium.setPageAvailability(1);
+			missing = true;
+			expect(await session.preparePageSizeFallback(12)).toBe(false);
+			expect(fetchMissingChunks).toHaveBeenCalledOnce();
+			expect(pdfium.getAvailabilityCount()).toBe(2);
+			expect(pdfium.getDocumentCount()).toBe(2);
+			expect(await session.preparePageSizeFallback(12)).toBe(true);
+		} finally {
+			session.dispose();
+		}
+	});
+
 	it("keeps one document across page operations and survives more than 128 cache epochs", async () => {
 		let cacheEpoch = 0;
 		const loader = createFakeLoader({ getCacheEpoch: () => cacheEpoch });

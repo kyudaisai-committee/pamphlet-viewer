@@ -115,9 +115,53 @@ export class PdfiumAvailabilitySession {
 		this.#markPoisoned(error);
 	}
 
-	async ensurePageAvailable(pageIndex: number): Promise<void> {
+	async ensureDocumentAvailable(): Promise<void> {
+		this.#throwIfAborted();
+		await this.#synchronizeCacheEpoch();
 		this.#throwIfAborted();
 		await this.#openDocument();
+		this.#throwIfAborted();
+	}
+
+	async preparePageSizeFallback(pageIndex: number): Promise<boolean> {
+		this.#throwIfAborted();
+		await this.ensureDocumentAvailable();
+		if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= this.pageCount) {
+			throw new RangeError(`Page index must be between 0 and ${this.pageCount - 1}.`);
+		}
+		if (this.#isLinearized !== true) {
+			throw new Error("PDFium could not resolve the requested page size from the open document.");
+		}
+
+		const status = this.runNative(() =>
+			this.pdfium.FPDFAvail_IsPageAvail(
+				this.#availability,
+				pageIndex,
+				this.#requireFileAccess().downloadHints,
+			),
+		);
+		if (status < 0) this.#throwPdfiumError("PDFium could not inspect the requested page");
+		if (status === 1 && !this.loader.hasMissingChunks) {
+			this.loader.clearRangeHints();
+			return true;
+		}
+
+		const fetched = await this.#fetchMissingChunks(true);
+		if (fetched === 0) {
+			throw new Error("PDFium could not make progress loading the requested page metadata ranges.");
+		}
+		if (status === 1) {
+			await this.#rebuildNativeState();
+			this.#throwIfAborted();
+			await this.#openDocument();
+		}
+		this.#throwIfAborted();
+		return false;
+	}
+
+	async ensurePageAvailable(pageIndex: number): Promise<void> {
+		this.#throwIfAborted();
+		await this.ensureDocumentAvailable();
 		this.#throwIfAborted();
 		if (!Number.isSafeInteger(pageIndex) || pageIndex < 0 || pageIndex >= this.pageCount) {
 			throw new RangeError(`Page index must be between 0 and ${this.pageCount - 1}.`);
@@ -125,10 +169,7 @@ export class PdfiumAvailabilitySession {
 
 		for (let attempt = 0; attempt < MAX_AVAILABILITY_ATTEMPTS; attempt += 1) {
 			this.#throwIfAborted();
-			await this.#synchronizeCacheEpoch();
-			this.#throwIfAborted();
-			await this.#openDocument();
-			this.#throwIfAborted();
+			await this.ensureDocumentAvailable();
 			if (this.#isLinearized !== true) return;
 			const status = this.runNative(() =>
 				this.pdfium.FPDFAvail_IsPageAvail(
