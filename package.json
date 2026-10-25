@@ -43,6 +43,7 @@
 	"devDependencies": {
 		"@changesets/cli": "^3.0.3",
 		"@eslint/js": "^10.0.1",
+		"@inlang/paraglide-js": "2.29.1",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tsconfig/svelte": "^5.0.8",
 		"@types/node": "^24.19.2",
