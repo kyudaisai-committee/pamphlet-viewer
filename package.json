@@ -1,13 +1,25 @@
 {
 	"name": "@kyudaisai/pamphlet-viewer",
 	"version": "0.1.0-alpha.6",
-	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/kyudaisai-committee/pamphlet-viewer.git"
+	},
+	"files": [
+		"dist/library"
+	],
 	"type": "module",
+	"main": "./dist/library/pamphlet-viewer.js",
+	"types": "./dist/library/pamphlet-viewer.d.ts",
 	"exports": {
 		".": {
 			"types": "./dist/library/pamphlet-viewer.d.ts",
 			"import": "./dist/library/pamphlet-viewer.js"
 		}
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org"
 	},
 	"scripts": {
 		"dev": "vite",
