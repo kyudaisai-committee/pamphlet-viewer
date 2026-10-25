@@ -112,7 +112,7 @@ export function renderPdfiumPage(
 	scale: number,
 ): PageVisual | null {
 	return runPageOperation(pdfium, availability, loader, pageIndex, (page) =>
-		renderLoadedPage(pdfium, availability, page, scale),
+		renderLoadedPage(pdfium, availability, loader, page, scale),
 	);
 }
 
@@ -126,7 +126,7 @@ function runPageOperation<T>(
 	availability: PdfiumAvailabilitySession,
 	loader: PdfRangeLoader,
 	pageIndex: number,
-	operation: (page: number) => T,
+	operation: (page: number) => T | null,
 ): T | null {
 	let page = 0;
 	let result: T | null = null;
@@ -144,9 +144,9 @@ function runPageOperation<T>(
 				const errorCode = availability.runNative(() => pdfium.FPDF_GetLastError());
 				throw new Error(`PDFium could not load page ${pageIndex} (error ${errorCode}).`);
 			}
-		} else {
+		} else if (!loader.hasMissingChunks) {
 			const value = operation(page);
-			if (!loader.hasMissingChunks) result = value;
+			if (!loader.hasMissingChunks && value !== null) result = value;
 		}
 	} catch (error) {
 		operationError = error;
@@ -176,13 +176,15 @@ function runPageOperation<T>(
 function renderLoadedPage(
 	pdfium: WrappedPdfiumModule,
 	availability: PdfiumAvailabilitySession,
+	loader: PdfRangeLoader,
 	page: number,
 	scale: number,
-): PageVisual {
+): PageVisual | null {
 	const pageSize = availability.runNative(() => ({
 		width: pdfium.FPDF_GetPageWidthF(page),
 		height: pdfium.FPDF_GetPageHeightF(page),
 	}));
+	if (loader.hasMissingChunks) return null;
 	if (
 		!Number.isFinite(pageSize.width) ||
 		!Number.isFinite(pageSize.height) ||
@@ -212,34 +214,41 @@ function renderLoadedPage(
 			},
 		);
 		if (bitmap === 0) throw new Error("PDFium could not allocate the page bitmap.");
-		availability.runNative(() =>
-			pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff),
-		);
-		availability.runNative(() =>
-			pdfium.FPDF_RenderPageBitmap(
-				bitmap,
-				page,
-				0,
-				0,
-				width,
-				height,
-				0,
-				combinePdfiumRenderFlags(PAGE_RENDER_FLAGS),
-			),
-		);
-
-		const { stride, sourcePointer } = availability.runNative(() => ({
-			stride: pdfium.FPDFBitmap_GetStride(bitmap),
-			sourcePointer: pdfium.FPDFBitmap_GetBuffer(bitmap),
-		}));
-		const pixels = copyRgbaBitmapPixels(
-			getPdfiumHeap(pdfium),
-			sourcePointer,
-			width,
-			height,
-			stride,
-		);
-		result = { type: "pixels", width, height, pixels };
+		if (!loader.hasMissingChunks) {
+			availability.runNative(() =>
+				pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff),
+			);
+		}
+		if (!loader.hasMissingChunks) {
+			availability.runNative(() =>
+				pdfium.FPDF_RenderPageBitmap(
+					bitmap,
+					page,
+					0,
+					0,
+					width,
+					height,
+					0,
+					combinePdfiumRenderFlags(PAGE_RENDER_FLAGS),
+				),
+			);
+		}
+		if (!loader.hasMissingChunks) {
+			const { stride, sourcePointer } = availability.runNative(() => ({
+				stride: pdfium.FPDFBitmap_GetStride(bitmap),
+				sourcePointer: pdfium.FPDFBitmap_GetBuffer(bitmap),
+			}));
+			if (!loader.hasMissingChunks) {
+				const pixels = copyRgbaBitmapPixels(
+					getPdfiumHeap(pdfium),
+					sourcePointer,
+					width,
+					height,
+					stride,
+				);
+				result = { type: "pixels", width, height, pixels };
+			}
+		}
 	} catch (error) {
 		renderError = error;
 		hasRenderError = true;
@@ -259,6 +268,8 @@ function renderLoadedPage(
 	}
 
 	if (hasRenderError) throw renderError;
-	if (result === null) throw new Error("PDFium did not complete the page render.");
+	if (result === null && !loader.hasMissingChunks) {
+		throw new Error("PDFium did not complete the page render.");
+	}
 	return result;
 }
