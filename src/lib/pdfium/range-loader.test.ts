@@ -57,6 +57,22 @@ describe("PdfRangeLoader", () => {
 		}
 	});
 
+	it("rejects negative offsets and sizes at the reader boundary", async () => {
+		stubRangeFetch(4);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			expect(() => loader.readInto(-1, new Uint8Array(1), 0, 1)).toThrow(RangeError);
+			expect(() => loader.isRangeAvailable(-1, 1)).toThrow(RangeError);
+			expect(() => loader.hintRange(0, -1)).toThrow(RangeError);
+		} finally {
+			loader.dispose();
+		}
+	});
+
 	it("allows a cached read while another range is pending", async () => {
 		const fileLength = RANGE_CHUNK_SIZE * 2;
 		stubRangeFetch(fileLength);
