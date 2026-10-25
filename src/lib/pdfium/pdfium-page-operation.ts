@@ -4,10 +4,13 @@ import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize, PageVisual } from "../document/page-source";
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
 import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";
+import { combinePdfiumRenderFlags } from "./pdfium-render-flags";
+import type { PdfiumRenderFlags } from "./pdfium-render-flags";
 import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
 const FPDF_REVERSE_BYTE_ORDER = 0x10;
+export const PAGE_RENDER_FLAGS: PdfiumRenderFlags = { reverseByteOrder: FPDF_REVERSE_BYTE_ORDER };
 
 export function getPageSizeByIndex(
 	pdfium: WrappedPdfiumModule,
@@ -186,7 +189,16 @@ function renderLoadedPage(
 			pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff),
 		);
 		availability.runNative(() =>
-			pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, FPDF_REVERSE_BYTE_ORDER),
+			pdfium.FPDF_RenderPageBitmap(
+				bitmap,
+				page,
+				0,
+				0,
+				width,
+				height,
+				0,
+				combinePdfiumRenderFlags(PAGE_RENDER_FLAGS),
+			),
 		);
 
 		const { stride, sourcePointer } = availability.runNative(() => ({
