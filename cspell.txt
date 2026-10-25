@@ -7,6 +7,8 @@ Annot
 Annots
 FILEACCESS
 BGRA
+BGRX
+PREMUL
 RGBA
 HEAPU8
 endobj
@@ -24,3 +26,4 @@ evenodd
 mdsvex
 vite
 kyudaisai
+unpremultiply
