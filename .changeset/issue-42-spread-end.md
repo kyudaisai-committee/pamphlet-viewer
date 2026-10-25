@@ -2,4 +2,4 @@
 "@kyudaisai/pamphlet-viewer": patch
 ---
 
-Disable next-page navigation when the last page is already visible in spread layout.
+最終ページを含む見開きでは、次のページへの不要な移動と再描画を行わないようにします。
