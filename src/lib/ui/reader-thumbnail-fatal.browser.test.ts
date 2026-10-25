@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { afterEach, expect, test, vi } from "vitest";
 
 import { PdfiumBackend } from "../document/pdfium-backend";
@@ -53,6 +55,12 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 		type: "page-size",
 		pageSize: { width: 300, height: 400 },
 	});
+	const unavailableThumbnail = await waitForWorkerRequest(
+		failedWorker,
+		"thumbnail",
+		thumbnailRequestStart,
+	);
+	failedWorker.reply({ id: unavailableThumbnail.id, type: "thumbnail", visual: null });
 	const thumbnailRender = await waitForWorkerRequest(failedWorker, "render", thumbnailRequestStart);
 	failedWorker.reply({
 		id: thumbnailRender.id,
@@ -104,6 +112,16 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 		id: recoveredPageSize.id,
 		type: "page-size",
 		pageSize: { width: 300, height: 400 },
+	});
+	const recoveredUnavailableThumbnail = await waitForWorkerRequest(
+		recoveredWorker,
+		"thumbnail",
+		recoveredThumbnailRequestStart,
+	);
+	recoveredWorker.reply({
+		id: recoveredUnavailableThumbnail.id,
+		type: "thumbnail",
+		visual: null,
 	});
 	const recoveredThumbnailRender = await waitForWorkerRequest(
 		recoveredWorker,
