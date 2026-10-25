@@ -229,12 +229,12 @@ test("page changes cancel a pending zoom render and unmount cancels its timer", 
 test("every navigation path resets zoom, including the page property and attribute", async () => {
 	await import("../entry");
 	const element = createViewer(createBackend(undefined, 8), 840);
-	element.config = {
+	element.setConfig({
 		chapters: [
 			{ title: "前半", page: 4 },
 			{ title: "後半", page: 8 },
 		],
-	};
+	});
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
 	await firstPage;

@@ -76,6 +76,7 @@ test("public declarations resolve for a consumer without the source alias", asyn
 			'if (error.name !== "PageSourceUnavailableError") throw error;',
 			"declare const viewer: PamphletViewerElement;",
 			"viewer.page = 2;",
+			'viewer.setConfig({ chapters: [{ title: "Introduction", page: 1 }] });',
 			'viewer.addEventListener("pagechange", (event) => event.detail.visiblePages);',
 		].join("\n"),
 	);

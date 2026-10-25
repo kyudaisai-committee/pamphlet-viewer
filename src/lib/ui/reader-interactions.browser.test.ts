@@ -53,13 +53,13 @@ test("keeps the thumbnail list virtual and selects a distant page", async () => 
 test("navigates to validated configured chapters", async () => {
 	await import("../entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(12));
-	element.config = {
+	element.setConfig({
 		chapters: [
 			{ title: "後半", page: 7 },
 			{ title: "前半", page: 2 },
 			{ title: "無効", page: 20 },
 		],
-	};
+	});
 	element.layout = "single";
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -125,7 +125,7 @@ test("applies shared design tokens to desktop controls", async () => {
 	await import("../entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
 	element.layout = "single";
-	element.config = { chapters: [{ title: "前半", page: 1 }] };
+	element.setConfig({ chapters: [{ title: "前半", page: 1 }] });
 	element.style.setProperty("--pamphlet-viewer-border-width", "3px");
 	element.style.setProperty("--pamphlet-viewer-control-height", "38px");
 	element.style.setProperty("--pamphlet-viewer-control-radius", "9px");
@@ -207,7 +207,7 @@ test("shares touch target and compact toolbar tokens across mobile bars", async 
 	await import("../entry");
 	const element = createViewer({ width: 390, height: 620 }, createBackend(5));
 	element.layout = "single";
-	element.config = { chapters: [{ title: "前半", page: 1 }] };
+	element.setConfig({ chapters: [{ title: "前半", page: 1 }] });
 	element.style.setProperty("--pamphlet-viewer-touch-target-size", "48px");
 	element.style.setProperty("--pamphlet-viewer-compact-toolbar-height", "60px");
 	element.style.setProperty("--pamphlet-viewer-compact-toolbar-padding", "8px");
@@ -386,12 +386,12 @@ test.each([320, 390])(
 		await import("../entry");
 		const element = createViewer({ width, height: 620 }, createBackend(12));
 		element.layout = "auto";
-		element.config = {
+		element.setConfig({
 			chapters: [
 				{ title: "前半", page: 1 },
 				{ title: "後半", page: 7 },
 			],
-		};
+		});
 		const firstPage = waitForPageChange(element);
 		document.body.append(element);
 		await firstPage;
@@ -586,12 +586,12 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3] }));
 	await import("../entry");
 	const element = createViewer({ width, height: 620 }, createBackend(12));
-	element.config = {
+	element.setConfig({
 		chapters: [
 			{ title: "前半", page: 1 },
 			{ title: "長い章タイトル", page: 7 },
 		],
-	};
+	});
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
 	await firstPage;

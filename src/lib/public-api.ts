@@ -27,7 +27,7 @@ export interface PamphletViewerElement extends HTMLElement {
 	layout: LayoutMode;
 	fit: FitMode;
 	backend?: DocumentBackend;
-	config?: PamphletViewerConfig;
+	setConfig(config: PamphletViewerConfig): void;
 	addEventListener<K extends keyof PamphletViewerEventMap>(
 		type: K,
 		listener: (this: PamphletViewerElement, event: PamphletViewerEventMap[K]) => void,
