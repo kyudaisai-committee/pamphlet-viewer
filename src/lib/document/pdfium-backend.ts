@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
 import {
 	PageSourceUnavailableError,
@@ -45,6 +47,11 @@ class PdfiumPageSource implements PageSource {
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
 		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);
+	}
+
+	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		this.#assertActive();
+		return this.client.renderThumbnail(pageIndex).catch(mapSourceFailure);
 	}
 
 	dispose(): void {

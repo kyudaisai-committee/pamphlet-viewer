@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PageSource, PageVisual } from "../document/page-source";
+import { PageSourceUnavailableError } from "../document/page-source";
 
 export type PageRenderPriority = "visible" | "thumbnail";
 
@@ -55,6 +58,17 @@ export class PageRenderQueue {
 				const task = this.#tasks.shift();
 				if (task === undefined) continue;
 				try {
+					if (task.priority === "thumbnail" && this.source.renderThumbnail !== undefined) {
+						try {
+							const thumbnail = await this.source.renderThumbnail(task.pageIndex);
+							if (thumbnail !== null) {
+								task.resolve(thumbnail);
+								continue;
+							}
+						} catch (error) {
+							if (isUnrecoverableThumbnailError(error)) throw error;
+						}
+					}
 					task.resolve(await this.source.renderPage(task.pageIndex, task.scale));
 				} catch (error) {
 					task.reject(error);
@@ -65,6 +79,13 @@ export class PageRenderQueue {
 			if (!this.#disposed && this.#tasks.length > 0) void this.#drain();
 		}
 	}
+}
+
+function isUnrecoverableThumbnailError(error: unknown): boolean {
+	return (
+		error instanceof PageSourceUnavailableError ||
+		(error instanceof Error && error.name === "AbortError")
+	);
 }
 
 function getPriorityRank(priority: PageRenderPriority): number {

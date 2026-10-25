@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
 
@@ -21,7 +23,13 @@ interface RenderRequest {
 	scale: number;
 }
 
-type WorkerRequest = OpenRequest | PageSizeRequest | RenderRequest;
+interface ThumbnailRequest {
+	id: number;
+	type: "thumbnail";
+	pageIndex: number;
+}
+
+type WorkerRequest = OpenRequest | PageSizeRequest | RenderRequest | ThumbnailRequest;
 
 interface OpenedResponse {
 	id: number;
@@ -42,6 +50,12 @@ interface RenderedResponse {
 	visual: PageVisual;
 }
 
+interface ThumbnailResponse {
+	id: number;
+	type: "thumbnail";
+	visual: PageVisual | null;
+}
+
 interface ErrorResponse {
 	id: number;
 	type: "error";
@@ -49,7 +63,12 @@ interface ErrorResponse {
 	fatal?: boolean;
 }
 
-type WorkerResponse = OpenedResponse | PageSizeResponse | RenderedResponse | ErrorResponse;
+type WorkerResponse =
+	| OpenedResponse
+	| PageSizeResponse
+	| RenderedResponse
+	| ThumbnailResponse
+	| ErrorResponse;
 
 interface WorkerScope {
 	addEventListener(type: "message", listener: (event: MessageEvent<WorkerRequest>) => void): void;
@@ -102,6 +121,13 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 			const pageSize = await session.getPageSize(request.pageIndex);
 			const response: PageSizeResponse = { id: request.id, type: "page-size", pageSize };
 			workerScope.postMessage(response);
+			return;
+		}
+		if (request.type === "thumbnail") {
+			const visual = await session.renderThumbnail(request.pageIndex);
+			const response: ThumbnailResponse = { id: request.id, type: "thumbnail", visual };
+			const transfer = visual?.type === "pixels" ? [visual.pixels] : [];
+			workerScope.postMessage(response, transfer);
 			return;
 		}
 

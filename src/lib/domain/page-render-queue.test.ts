@@ -1,6 +1,12 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { describe, expect, it, vi } from "vitest";
 
-import type { PageSource, PageVisual } from "@/lib/document/page-source";
+import {
+	PageSourceUnavailableError,
+	type PageSource,
+	type PageVisual,
+} from "@/lib/document/page-source";
 
 import { PageRenderQueue } from "./page-render-queue";
 
@@ -50,6 +56,56 @@ describe("PageRenderQueue", () => {
 		await vi.waitFor(() => expect(requests).toEqual([1, 3]));
 		pending[1]?.(pixelVisual());
 		await visible;
+		queue.dispose();
+	});
+
+	it("uses embedded thumbnails without rendering the whole page", async () => {
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderThumbnail = vi.fn(async () => pixelVisual());
+		const source = createPageSource(renderPage);
+		source.renderThumbnail = renderThumbnail;
+		const queue = new PageRenderQueue(source);
+
+		await queue.render(2, 0.3, "thumbnail");
+
+		expect(renderThumbnail).toHaveBeenCalledWith(2);
+		expect(renderPage).not.toHaveBeenCalled();
+		queue.dispose();
+	});
+
+	it.each(["missing", "invalid"] as const)(
+		"falls back to a reduced page render when the embedded thumbnail is %s",
+		async (thumbnailResult) => {
+			const renderPage = vi.fn(async () => pixelVisual());
+			const renderThumbnail =
+				thumbnailResult === "missing"
+					? vi.fn(async () => null)
+					: vi.fn(async () => {
+							throw new Error("The embedded image could not be decoded.");
+						});
+			const source = createPageSource(renderPage);
+			source.renderThumbnail = renderThumbnail;
+			const queue = new PageRenderQueue(source);
+
+			await queue.render(4, 0.3, "thumbnail");
+
+			expect(renderThumbnail).toHaveBeenCalledWith(4);
+			expect(renderPage).toHaveBeenCalledWith(4, 0.3);
+			queue.dispose();
+		},
+	);
+
+	it.each([
+		new DOMException("cancelled", "AbortError"),
+		new PageSourceUnavailableError("The PDF worker stopped."),
+	])("does not hide abort or fatal thumbnail errors", async (error) => {
+		const source = createPageSource(vi.fn(async () => pixelVisual()));
+		source.renderThumbnail = vi.fn(async () => {
+			throw error;
+		});
+		const queue = new PageRenderQueue(source);
+
+		await expect(queue.render(4, 0.3, "thumbnail")).rejects.toBe(error);
 		queue.dispose();
 	});
 });

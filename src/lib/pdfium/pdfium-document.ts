@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
 import type { PageSize, PageVisual } from "../document/page-source";
@@ -7,6 +9,7 @@ import {
 	type PdfiumAvailabilityApi,
 } from "./pdfium-availability-session";
 import { getPageSizeByIndex, getPdfiumHeap, renderPdfiumPage } from "./pdfium-page-operation";
+import { getPdfiumThumbnailByIndex } from "./pdfium-thumbnail-operation";
 import { PdfRangeLoader, RANGE_CACHE_LIMIT } from "./range-loader";
 
 const MAX_OPERATION_ATTEMPTS = 128;
@@ -94,6 +97,19 @@ export class PdfiumDocumentSession {
 				renderPdfiumPage(pdfium, availability, this.loader, pageIndex, scale),
 			"page",
 		);
+	}
+
+	async renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		this.#assertPageIndex(pageIndex);
+		const result = await this.#runDocumentOperation(
+			pageIndex,
+			(pdfium, availability) => {
+				const thumbnail = getPdfiumThumbnailByIndex(pdfium, availability, this.loader, pageIndex);
+				return thumbnail === null ? null : { thumbnail };
+			},
+			"page",
+		);
+		return result.thumbnail.type === "visual" ? result.thumbnail.visual : null;
 	}
 
 	dispose(): void {
