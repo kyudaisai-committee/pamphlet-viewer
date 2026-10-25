@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: MPL-2.0
 import {
 	PageSourceUnavailableError,
 	type DocumentBackend,
 	type PageSource,
 	type PageVisual,
 } from "../document/page-source";
+import { createViewerMessages } from "../i18n/viewer-messages";
+import type { ViewerMessages } from "../i18n/viewer-messages";
 import { calculateFitScale, resolveLayout, visiblePageIndexes } from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
 import { PageRenderQueue } from "./page-render-queue";
@@ -69,12 +72,15 @@ export class ViewerController {
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
 	#reportCleanupError: (error: unknown) => void;
+	#messages: ViewerMessages;
 
 	constructor(
 		private readonly dispatch: (event: ViewerEvent) => void,
 		reportCleanupError: (error: unknown) => void = reportSourceDisposalFailure,
+		messages: ViewerMessages = createViewerMessages("ja"),
 	) {
 		this.#reportCleanupError = reportCleanupError;
+		this.#messages = messages;
 		this.#thumbnailScheduler = new ThumbnailScheduler(
 			(pageIndex, scale) => {
 				const queue = this.#renderQueue;
@@ -139,7 +145,7 @@ export class ViewerController {
 			if (abortController.signal.aborted || loadId !== this.#loadId) return;
 			this.#setFailure({
 				code: "load-failed",
-				message: "PDFを読み込めませんでした。URLとサーバーのRange対応を確認してください。",
+				message: this.#messages.errorLoadFailed,
 				retryable: true,
 			});
 		}
@@ -151,14 +157,18 @@ export class ViewerController {
 		this.pageVisuals = {};
 		this.#setFailure({
 			code: "invalid-source",
-			message: "PDFのURLを解決できませんでした。",
+			message: this.#messages.errorInvalidSource,
 			retryable: false,
 		});
 	}
 
-	failInvalidOption(message: string): void {
+	failInvalidOption(): void {
 		this.#invalidateRenderRequests();
-		this.#setFailure({ code: "invalid-option", message, retryable: false });
+		this.#setFailure({
+			code: "invalid-option",
+			message: this.#messages.errorInvalidOption,
+			retryable: false,
+		});
 	}
 
 	requestRender(input: RenderInput): number | null {
@@ -168,7 +178,7 @@ export class ViewerController {
 			this.#invalidateRenderRequests();
 			this.#setFailure({
 				code: "invalid-page",
-				message: `ページ番号は1から${this.pageCount}の範囲で指定してください。`,
+				message: this.#messages.errorInvalidPage(this.pageCount),
 				retryable: false,
 			});
 			return null;
@@ -335,7 +345,7 @@ export class ViewerController {
 				].join(":");
 				this.#setFailure({
 					code: "render-failed",
-					message: "ページを表示できませんでした。もう一度お試しください。",
+					message: this.#messages.errorRenderFailed,
 					retryable: true,
 				});
 			}
@@ -389,7 +399,7 @@ export class ViewerController {
 		this.#invalidateRenderRequests();
 		this.#setFailure({
 			code: "render-failed",
-			message: "ページを表示できませんでした。もう一度お試しください。",
+			message: this.#messages.errorRenderFailed,
 			retryable: true,
 		});
 	}

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <svelte:options
 	customElement={{
 		props: {
@@ -29,7 +30,10 @@ import { ViewerBookmarks } from "../domain/viewer-bookmarks.svelte";
 import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
 	import type { PageRenderPlan } from "../domain/render-plan";
-import type { PamphletViewerConfig } from "@/lib/public-api";
+	import type { PamphletViewerConfig } from "@/lib/public-api";
+	import { resolveViewerLocale } from "../i18n/locale";
+	import { createViewerMessages } from "../i18n/viewer-messages";
+	import { provideViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
@@ -59,13 +63,16 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		backend,
 	}: Props = $props();
 
+	const messages = $state(createViewerMessages("ja"));
+	provideViewerMessages(messages);
 	const defaultBackend = new PdfiumBackend();
-	const controller = new ViewerController(dispatchControllerEvent);
+	const controller = new ViewerController(dispatchControllerEvent, undefined, messages);
 	const fullscreenController = new ReaderFullscreenController();
 	const zoomRenderScheduler = new ZoomRenderScheduler();
 	let config = $state<PamphletViewerConfig>({});
 	let shellElement = $state<HTMLElement>();
 	let pageArea = $state<HTMLElement>();
+	let localeInitialized = $state(false);
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
 	let zoom = $state(1);
 	let thumbnailsOpen = $state(false);
@@ -118,6 +125,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	);
 
 	$effect(() => {
+		if (!localeInitialized) return;
 		const source = src;
 		const activeBackend = backend ?? defaultBackend;
 		if (source !== previousSource) {
@@ -190,7 +198,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 			untrack(() => {
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
-				controller.failInvalidOption("ページ配置またはフィット方法の値が正しくありません。");
+				controller.failInvalidOption();
 			});
 			return;
 		}
@@ -268,9 +276,21 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	});
 
 	onMount(() => {
+		const host = getViewerHost();
+		if (host !== null) {
+			Object.assign(
+				messages,
+				createViewerMessages(
+					resolveViewerLocale(
+						host.getAttribute("lang"),
+						host.ownerDocument.documentElement.getAttribute("lang"),
+					),
+				),
+			);
+		}
+		localeInitialized = true;
 		if (pageArea === undefined || shellElement === undefined) return;
 		const detachResponsiveOrder = observeResponsiveReaderOrder(shellElement);
-		const host = getViewerHost();
 		const detachConfig =
 			host === null
 				? () => undefined

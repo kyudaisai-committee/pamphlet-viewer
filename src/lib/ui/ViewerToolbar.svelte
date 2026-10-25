@@ -1,5 +1,7 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <script lang="ts">
 	import type { PamphletChapter } from "@/lib/public-api";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";
 
 	interface Props {
@@ -43,6 +45,7 @@
 		onNext,
 		onToggleThumbnails,
 	}: Props = $props();
+	const messages = useViewerMessages();
 
 	function onToolbarKeydown(event: KeyboardEvent): void {
 		if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
@@ -60,7 +63,7 @@
 	<div
 		class="toolbar"
 		role="toolbar"
-		aria-label="パンフレット操作"
+		aria-label={messages.toolbarLabel}
 		tabindex="0"
 		onkeydown={onToolbarKeydown}
 	>

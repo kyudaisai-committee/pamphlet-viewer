@@ -1,8 +1,10 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <script lang="ts">
 	import { XIcon } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";
 
 	import type { PageVisual } from "../document/page-source";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 
 	const THUMBNAIL_ROW_HEIGHT = 160;
@@ -25,6 +27,7 @@
 		onSelectPage,
 		onClose,
 	}: Props = $props();
+	const messages = useViewerMessages();
 	let scrollContainer = $state<HTMLElement>();
 	let visibleStart = $state(0);
 	let visibleEnd = $state(0);
@@ -80,17 +83,17 @@
 	}
 </script>
 
-<aside class="thumbnail-panel" aria-label="ページ一覧">
+<aside class="thumbnail-panel" aria-label={messages.pageList}>
 	<header class="panel-heading">
-		<h2>ページ一覧</h2>
-		<button type="button" aria-label="ページ一覧を閉じる" onclick={onClose}>
+		<h2>{messages.pageList}</h2>
+		<button type="button" aria-label={messages.hidePages} onclick={onClose}>
 			<XIcon size={18} aria-hidden="true" />
 		</button>
 	</header>
 	<div
 		class="thumbnail-scroll"
 		role="list"
-		aria-label="ページサムネイル"
+		aria-label={messages.pageThumbnails}
 		bind:this={scrollContainer}
 		onscroll={updateVisiblePages}
 	>
@@ -105,13 +108,13 @@
 					class:current-cover={pageIndex === 0 && currentPages.includes(pageIndex)}
 					data-page-index={pageIndex}
 					aria-current={currentPages.includes(pageIndex) ? "page" : undefined}
-					aria-label={`${pageIndex + 1}ページを表示`}
+					aria-label={messages.showThumbnailPage(pageIndex + 1)}
 					type="button"
 					onclick={() => onSelectPage(pageIndex + 1)}
 				>
 					<span class="thumbnail-preview" aria-hidden="true">
 						{#if visual !== undefined}
-							<PageCanvas visual={visual} label={`${pageIndex + 1}ページ`} decorative />
+							<PageCanvas visual={visual} label={messages.pageLabel(pageIndex + 1)} decorative />
 						{:else}
 							<span class="thumbnail-placeholder"></span>
 						{/if}

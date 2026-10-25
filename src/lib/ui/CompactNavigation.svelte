@@ -1,7 +1,9 @@
+<!-- SPDX-License-Identifier: MPL-2.0 -->
 <script lang="ts">
 	import { BookmarkCheckIcon, BookmarkIcon } from "@lucide/svelte";
 
 	import type { PamphletChapter } from "@/lib/public-api";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		chapters: readonly PamphletChapter[];
@@ -26,18 +28,19 @@
 		onToggleBookmark,
 		onSelectBookmark,
 	}: Props = $props();
+	const messages = useViewerMessages();
 </script>
 
 <details class="compact-navigation">
-	<summary aria-label="章とブックマークを開く" title="章とブックマーク">
+	<summary aria-label={messages.compactNavigationLabel} title={messages.compactNavigationLabel}>
 		<BookmarkIcon size={18} aria-hidden="true" />
 	</summary>
 	<div class="compact-navigation-panel">
 		{#if chapters.length > 0}
 			<label class="chapter-control">
-				<span>章</span>
+				<span>{messages.chapter}</span>
 				<select
-					aria-label="章へ移動"
+					aria-label={messages.goToChapter}
 					value={currentChapterPage ?? ""}
 					disabled={!enabled}
 					onchange={(event) => {
@@ -45,7 +48,7 @@
 						event.currentTarget.closest("details")?.removeAttribute("open");
 					}}
 				>
-					<option value="">章を選択</option>
+					<option value="">{messages.selectChapter}</option>
 					{#each chapters as chapter (chapter.page)}
 						<option value={chapter.page}>{chapter.title}</option>
 					{/each}
@@ -55,7 +58,7 @@
 		<button
 			class="bookmark-toggle"
 			type="button"
-			aria-label={bookmarked ? "このページのブックマークを解除" : "このページをブックマーク"}
+			aria-label={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
 			aria-pressed={bookmarked}
 			disabled={!bookmarkEnabled}
 			onclick={(event) => {
@@ -65,17 +68,17 @@
 		>
 			{#if bookmarked}
 				<BookmarkCheckIcon size={18} aria-hidden="true" />
-				ブックマークを解除
+				{messages.bookmarkRemoved}
 			{:else}
 				<BookmarkIcon size={18} aria-hidden="true" />
-				このページをブックマーク
+				{messages.bookmarkAdded}
 			{/if}
 		</button>
 		{#if bookmarkPages.length > 0}
 			<label class="bookmark-list-control">
-				<span>保存ページ</span>
+				<span>{messages.savedPages}</span>
 				<select
-					aria-label="ブックマーク一覧"
+					aria-label={messages.bookmarkList}
 					value=""
 					disabled={!bookmarkEnabled}
 					onchange={(event) => {
@@ -84,9 +87,9 @@
 						event.currentTarget.closest("details")?.removeAttribute("open");
 					}}
 				>
-					<option value="">移動</option>
+					<option value="">{messages.go}</option>
 					{#each bookmarkPages as savedPage (savedPage)}
-						<option value={savedPage}>{savedPage}ページ</option>
+						<option value={savedPage}>{messages.savedPage(savedPage)}</option>
 					{/each}
 				</select>
 			</label>

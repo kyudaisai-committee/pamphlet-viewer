@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
@@ -25,6 +26,7 @@ export default defineConfig({
 				test: {
 					name: "browser",
 					include: ["src/**/*.browser.test.ts"],
+					setupFiles: ["./src/browser-test-setup.ts"],
 					fileParallelism: false,
 					browser: {
 						enabled: true,
