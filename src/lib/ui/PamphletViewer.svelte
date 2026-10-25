@@ -347,6 +347,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	}
 
 	function previousPage(): void {
+		if (!canNavigatePages()) return;
 		clearZoomAnchor();
 		if (resolvedLayout === "single") {
 			page = Math.max(1, page - 1);
@@ -357,6 +358,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 	}
 
 	function nextPage(): void {
+		if (!canNavigatePages()) return;
 		clearZoomAnchor();
 		if (resolvedLayout === "single") {
 			page = Math.min(controller.pageCount, page + 1);
@@ -368,6 +370,10 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 
 	function onZoomChange(value: number): void {
 		setZoomAt(value, getPageAreaCenter());
+	}
+
+	function canNavigatePages(): boolean {
+		return controller.pageSource !== null && controller.pageCount > 0;
 	}
 
 	function onResetZoom(): void {
