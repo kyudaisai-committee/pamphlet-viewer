@@ -8,7 +8,11 @@ import { sourceAlias } from "./vite.source-alias.js";
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [
-		paraglideVitePlugin({ project: "./project.inlang", outdir: "./src/paraglide" }),
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/paraglide",
+			emitTsDeclarations: true,
+		}),
 		svelte(),
 	],
 	resolve: { alias: sourceAlias },

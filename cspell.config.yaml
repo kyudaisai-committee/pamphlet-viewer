@@ -12,3 +12,6 @@ ignorePaths:
   - dist/**
   - pnpm-lock.yaml
   - src/assets/**
+  - src/paraglide/**
+  - project.inlang/cache/**
+  - project.inlang/README.md

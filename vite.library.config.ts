@@ -9,7 +9,11 @@ import { sourceAlias } from "./vite.source-alias.js";
 export default defineConfig({
 	base: "./",
 	plugins: [
-		paraglideVitePlugin({ project: "./project.inlang", outdir: "./src/paraglide" }),
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/paraglide",
+			emitTsDeclarations: true,
+		}),
 		svelte(),
 		...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" }),
 	],
