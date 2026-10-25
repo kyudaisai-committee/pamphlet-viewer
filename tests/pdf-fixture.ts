@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 import { Buffer } from "node:buffer";
 
 const PAGE_COUNT = 24;
@@ -10,11 +12,16 @@ export interface PdfFixtureOptions {
 	contentGapBytes?: number;
 	midDocumentFillerBytes?: number;
 	rotatedCropPageNumber?: number;
+	thumbnailPageNumbers?: readonly number[];
 }
 
 export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	const chunks: Buffer[] = [Buffer.from("%PDF-1.7\n", "ascii")];
 	const offsets: number[] = [0];
+	const thumbnailPageNumbers = getThumbnailPageNumbers(options.thumbnailPageNumbers);
+	const thumbnailObjectByPageNumber = new Map(
+		thumbnailPageNumbers.map((pageNumber, index) => [pageNumber, 3 + PAGE_COUNT * 2 + index]),
+	);
 	let position = chunks[0].byteLength;
 
 	appendObject(chunks, offsets, 1, "<< /Type /Catalog /Pages 2 0 R >>", position);
@@ -41,7 +48,10 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 			: options.rotatedCropPageNumber === undefined
 				? `/MediaBox [${mediaBox}]`
 				: "/MediaBox [0 0 300 400]";
-		const pageBody = `<< /Type /Page /Parent 2 0 R ${pageGeometry} /Resources << >> /Contents ${contentObject} 0 R >>`;
+		const thumbnailObject = thumbnailObjectByPageNumber.get(index + 1);
+		const thumbnailReference =
+			thumbnailObject === undefined ? "" : ` /Thumb ${thumbnailObject} 0 R`;
+		const pageBody = `<< /Type /Page /Parent 2 0 R ${pageGeometry} /Resources << >> /Contents ${contentObject} 0 R${thumbnailReference} >>`;
 		appendObject(chunks, offsets, pageObject, pageBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}
@@ -70,6 +80,21 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		appendObject(chunks, offsets, contentObject, contentBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}
+	for (const pageNumber of thumbnailPageNumbers) {
+		const thumbnailObject = thumbnailObjectByPageNumber.get(pageNumber);
+		if (thumbnailObject === undefined) continue;
+		const imageData = "00FF00".repeat(12);
+		const stream = `${imageData}>\n`;
+		const thumbnailBody = [
+			"<< /Type /XObject /Subtype /Image /Width 3 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8",
+			`/Filter /ASCIIHexDecode /Length ${Buffer.byteLength(stream, "ascii")} >>`,
+			"stream",
+			stream.trimEnd(),
+			"endstream",
+		].join("\n");
+		appendObject(chunks, offsets, thumbnailObject, thumbnailBody, position);
+		position += chunks.at(-1)?.byteLength ?? 0;
+	}
 	appendFiller(chunks, TRAILING_FILLER_BYTES);
 	position += TRAILING_FILLER_BYTES;
 
@@ -90,6 +115,13 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	chunks.push(Buffer.from(`${xrefLines.join("\n")}\n${trailer}`, "ascii"));
 
 	return Buffer.concat(chunks);
+}
+
+function getThumbnailPageNumbers(pageNumbers: readonly number[] | undefined): number[] {
+	if (pageNumbers === undefined) return [];
+	return [...new Set(pageNumbers)].filter(
+		(pageNumber) => Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
+	);
 }
 
 export function createAnnotatedPdfFixture(): Buffer {
