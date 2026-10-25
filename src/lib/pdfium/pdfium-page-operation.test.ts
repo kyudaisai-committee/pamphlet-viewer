@@ -41,13 +41,32 @@ describe("PDFium page-size lookup", () => {
 		expect(fixture.free).toHaveBeenCalledWith(16);
 	});
 
-	it("rejects an unsuccessful size response when no range is missing", () => {
+	it("returns a read miss when the indexed size API cannot resolve the page dictionary", () => {
 		const fixture = createFixture({ getSizeResult: false });
 
-		expect(() =>
-			getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0),
-		).toThrow("could not get the size");
+		expect(getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0)).toBeNull();
+		expect(fixture.loadPage).not.toHaveBeenCalled();
 		expect(fixture.free).toHaveBeenCalledWith(16);
+	});
+
+	it("loads a page for dimensions only after page availability is confirmed", () => {
+		const fixture = createFixture({ getSizeResult: false });
+
+		expect(
+			getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0, true),
+		).toEqual({ width: 300, height: 400 });
+		expect(fixture.loadPage).toHaveBeenCalledWith(1, 0);
+		expect(fixture.pdfium.FPDF_ClosePage).toHaveBeenCalledWith(2);
+		expect(fixture.createBitmap).not.toHaveBeenCalled();
+	});
+
+	it("does not load a page while the indexed size lookup has a missing range", () => {
+		const fixture = createFixture({ getSizeResult: false, missingRange: true });
+
+		expect(
+			getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0, true),
+		).toBeNull();
+		expect(fixture.loadPage).not.toHaveBeenCalled();
 	});
 
 	it("discards an unsuccessful size response while a range is missing", () => {
@@ -82,7 +101,9 @@ function createFixture(options: FixtureOptions = {}): {
 	pdfium: WrappedPdfiumModule;
 	availability: PdfiumAvailabilitySession;
 	loader: PdfRangeLoader;
+	loadPage: ReturnType<typeof vi.fn>;
 	getPageSize: ReturnType<typeof vi.fn>;
+	createBitmap: ReturnType<typeof vi.fn>;
 	malloc: ReturnType<typeof vi.fn>;
 	free: ReturnType<typeof vi.fn>;
 	isPoisoned: () => boolean;
@@ -92,6 +113,7 @@ function createFixture(options: FixtureOptions = {}): {
 	let missing = options.missingRange ?? false;
 	const malloc = vi.fn(() => options.allocation ?? 16);
 	const free = vi.fn();
+	const loadPage = vi.fn(() => 2);
 	const getPageSize = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
 		if (options.trap === true) throw new WebAssembly.RuntimeError("page-size trap");
 		if (options.missingRange === true) missing = true;
@@ -103,6 +125,7 @@ function createFixture(options: FixtureOptions = {}): {
 		);
 		return options.getSizeResult ?? true;
 	});
+	const createBitmap = vi.fn(() => 3);
 	const availability = {
 		documentHandle: 1,
 		get isPoisoned() {
@@ -126,10 +149,25 @@ function createFixture(options: FixtureOptions = {}): {
 		},
 	} as unknown as PdfRangeLoader;
 	const pdfium = {
-		FPDF_LoadPage: vi.fn(() => 2),
+		FPDF_LoadPage: loadPage,
+		FPDF_GetLastError: vi.fn(() => 0),
+		FPDF_ClosePage: vi.fn(),
 		FPDF_GetPageSizeByIndexF: getPageSize,
+		FPDF_GetPageWidthF: vi.fn(() => 300),
+		FPDF_GetPageHeightF: vi.fn(() => 400),
+		FPDFBitmap_Create: createBitmap,
 		pdfium: { wasmExports: { malloc, free }, HEAPU8: heap },
 	} as unknown as WrappedPdfiumModule;
 
-	return { pdfium, availability, loader, getPageSize, malloc, free, isPoisoned: () => poisoned };
+	return {
+		pdfium,
+		availability,
+		loader,
+		loadPage,
+		getPageSize,
+		createBitmap,
+		malloc,
+		free,
+		isPoisoned: () => poisoned,
+	};
 }

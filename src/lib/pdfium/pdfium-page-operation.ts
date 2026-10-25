@@ -21,6 +21,7 @@ export function getPageSizeByIndex(
 	availability: PdfiumAvailabilitySession,
 	loader: PdfRangeLoader,
 	pageIndex: number,
+	allowPageLoadFallback = false,
 ): PageSize | null {
 	let sizePointer = 0;
 	let result: PageSize | null = null;
@@ -38,26 +39,12 @@ export function getPageSizeByIndex(
 		const gotSize = availability.runNative(() =>
 			pdfium.FPDF_GetPageSizeByIndexF(availability.documentHandle, pageIndex, sizePointer),
 		);
-		if (!loader.hasMissingChunks) {
-			if (!gotSize) throw new Error(`PDFium could not get the size for page ${pageIndex}.`);
-			const heap = getPdfiumHeap(pdfium);
-			if (sizePointer > heap.byteLength - PAGE_SIZE_BUFFER_SIZE) {
-				throw new Error("PDFium returned an invalid page-size output buffer.");
-			}
-			const view = new DataView(heap.buffer, heap.byteOffset + sizePointer, PAGE_SIZE_BUFFER_SIZE);
-			const size = {
-				width: view.getFloat32(0, true),
-				height: view.getFloat32(Float32Array.BYTES_PER_ELEMENT, true),
-			};
-			if (
-				!Number.isFinite(size.width) ||
-				!Number.isFinite(size.height) ||
-				size.width <= 0 ||
-				size.height <= 0
-			) {
-				throw new Error("PDFium returned invalid page dimensions.");
-			}
-			result = size;
+		if (gotSize && !loader.hasMissingChunks) {
+			result = readPageSizeBuffer(pdfium, sizePointer);
+		} else if (!loader.hasMissingChunks && allowPageLoadFallback) {
+			result = runPageOperation(pdfium, availability, loader, pageIndex, (page) =>
+				getLoadedPageSize(pdfium, availability, page),
+			);
 		}
 	} catch (error) {
 		operationError = error;
@@ -79,6 +66,42 @@ export function getPageSizeByIndex(
 
 	if (hasOperationError) throw operationError;
 	return result;
+}
+
+function readPageSizeBuffer(pdfium: WrappedPdfiumModule, pointer: number): PageSize {
+	const heap = getPdfiumHeap(pdfium);
+	if (pointer > heap.byteLength - PAGE_SIZE_BUFFER_SIZE) {
+		throw new Error("PDFium returned an invalid page-size output buffer.");
+	}
+	const view = new DataView(heap.buffer, heap.byteOffset + pointer, PAGE_SIZE_BUFFER_SIZE);
+	return validatePageSize({
+		width: view.getFloat32(0, true),
+		height: view.getFloat32(Float32Array.BYTES_PER_ELEMENT, true),
+	});
+}
+
+function getLoadedPageSize(
+	pdfium: WrappedPdfiumModule,
+	availability: PdfiumAvailabilitySession,
+	page: number,
+): PageSize {
+	const size = availability.runNative(() => ({
+		width: pdfium.FPDF_GetPageWidthF(page),
+		height: pdfium.FPDF_GetPageHeightF(page),
+	}));
+	return validatePageSize(size);
+}
+
+function validatePageSize(size: PageSize): PageSize {
+	if (
+		!Number.isFinite(size.width) ||
+		!Number.isFinite(size.height) ||
+		size.width <= 0 ||
+		size.height <= 0
+	) {
+		throw new Error("PDFium returned invalid page dimensions.");
+	}
+	return size;
 }
 
 export function renderPdfiumPage(

@@ -137,6 +137,7 @@ describe("PdfiumDocumentSession", () => {
 		});
 		const free = vi.fn();
 		const loadPage = vi.fn(() => 3);
+		const isPageAvailable = vi.fn(() => 1);
 		let missFirstSizeRead = true;
 		const getPageSizeByIndex = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
 			if (missFirstSizeRead) {
@@ -169,9 +170,7 @@ describe("PdfiumDocumentSession", () => {
 			FPDFAvail_GetDocument() {
 				return 2;
 			},
-			FPDFAvail_IsPageAvail() {
-				return 1;
-			},
+			FPDFAvail_IsPageAvail: isPageAvailable,
 			FPDF_CloseDocument() {},
 			FPDF_ClosePage() {},
 			FPDF_GetLastError() {
@@ -227,6 +226,7 @@ describe("PdfiumDocumentSession", () => {
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
 		expect(await session.getPageSize(0)).toEqual({ width: 1, height: 1 });
 		expect(loadPage).not.toHaveBeenCalled();
+		expect(isPageAvailable).not.toHaveBeenCalled();
 		expect(getPageSizeByIndex).toHaveBeenCalledTimes(2);
 		expect(free).toHaveBeenCalledWith(getPageSizeByIndex.mock.calls[0]?.[2]);
 		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledOnce();
@@ -238,7 +238,7 @@ describe("PdfiumDocumentSession", () => {
 		);
 		await expect(session.getPageSize(0)).rejects.toThrow("HTTP 503");
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
-		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledWith(true);
+		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledWith(false);
 
 		rangeLoaderMocks.hasMissingChunks = false;
 		expect(await session.getPageSize(0)).toEqual({ width: 1, height: 1 });
@@ -248,6 +248,7 @@ describe("PdfiumDocumentSession", () => {
 			width: 1,
 			height: 1,
 		});
+		expect(isPageAvailable).toHaveBeenCalledOnce();
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
 		session.dispose();
 	});
