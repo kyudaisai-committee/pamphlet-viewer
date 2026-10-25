@@ -29,7 +29,6 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	element.page = 1;
 	element.layout = "single";
 	element.fit = "page";
-	element.config = { chapters: [{ title: "はじめに", page: 1 }] };
 
 	const pageChanged = new Promise<void>((resolve) => {
 		container.addEventListener(
@@ -45,6 +44,7 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	});
 
 	await import("../entry");
+	element.setConfig({ chapters: [{ title: "はじめに", page: 1 }] });
 	await expect.poll(() => openCalls.length).toBe(1);
 	await new Promise<void>((resolve) =>
 		requestAnimationFrame(() => requestAnimationFrame(() => resolve())),

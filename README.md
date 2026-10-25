@@ -24,13 +24,14 @@
 
 ## 属性とプロパティ
 
-| 名前     | 初期値 | 説明                                                   |
-| -------- | ------ | ------------------------------------------------------ |
-| `src`    | 空     | PDFのURL。空でない値を指定すると読み込みます。         |
-| `page`   | `1`    | 現在ページ。UIとプロパティは1始まりです。              |
-| `layout` | `auto` | `single`、`spread`、`auto`のいずれかです。             |
-| `fit`    | `page` | `page`または`width`で表示サイズを合わせます。          |
-| `config` | なし   | 章一覧などの設定オブジェクト。プロパティで指定します。 |
+| 名前     | 初期値 | 説明                                           |
+| -------- | ------ | ---------------------------------------------- |
+| `src`    | 空     | PDFのURL。空でない値を指定すると読み込みます。 |
+| `page`   | `1`    | 現在ページ。UIとプロパティは1始まりです。      |
+| `layout` | `auto` | `single`、`spread`、`auto`のいずれかです。     |
+| `fit`    | `page` | `page`または`width`で表示サイズを合わせます。  |
+
+章一覧などの設定は属性ではなく、要素の登録後に`setConfig`メソッドから渡します。
 
 `src`の相対URLは、要素の`ownerDocument.baseURI`（`<base>`を含む）を基準に解決します。`getAttribute("src")`は指定された文字列を返し、`element.src`は絶対URLを返します。`element.src = "./catalog.pdf"`と`setAttribute("src", "./catalog.pdf")`は、どちらも読み込む文書を切り替えます。`src`を省略した場合、空属性は自動で追加されません。
 
@@ -40,10 +41,14 @@
 
 ## 章とブックマーク
 
-`config`プロパティへ型付き設定オブジェクトを渡すと、章の一覧を表示して開始ページへ移動できます。`chapters`のページ番号は1始まりです。章の設定順にかかわらずページ順に並び、文書のページ数を外れる項目や不正な項目は表示しません。
+登録済みの要素へ型付き設定オブジェクトを`setConfig`で渡すと、章の一覧を表示して開始ページへ移動できます。`chapters`のページ番号は1始まりです。章の設定順にかかわらずページ順に並び、文書のページ数を外れる項目や不正な項目は表示しません。
 
 ```ts
+import { registerPamphletViewer } from "/assets/pamphlet-viewer.js";
 import type { PamphletViewerConfig, PamphletViewerElement } from "/assets/pamphlet-viewer.js";
+
+registerPamphletViewer();
+await customElements.whenDefined("pamphlet-viewer");
 
 const viewer = document.querySelector("pamphlet-viewer") as PamphletViewerElement | null;
 const config: PamphletViewerConfig = {
@@ -53,7 +58,7 @@ const config: PamphletViewerConfig = {
     ],
 };
 
-if (viewer) viewer.config = config;
+if (viewer) viewer.setConfig(config);
 ```
 
 ブックマークボタンで現在のページを追加・解除でき、保存済みページの一覧から移動できます。ブックマークは文書の解決済みURLごとに`localStorage`へ保存され、同じブラウザーで再度開いたときにも復元します。保存領域を利用できない場合は、その閲覧中はメモリ上で操作できます。

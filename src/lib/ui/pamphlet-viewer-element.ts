@@ -1,3 +1,7 @@
+import type { PamphletViewerConfig } from "@/lib/public-api";
+
+import { setViewerElementConfig } from "./viewer-element-config";
+
 export function extendViewerElement(Base: typeof HTMLElement): typeof HTMLElement {
 	return class PamphletViewerHost extends Base {
 		constructor() {
@@ -7,7 +11,6 @@ export function extendViewerElement(Base: typeof HTMLElement): typeof HTMLElemen
 			upgradeProperty(this, "layout");
 			upgradeProperty(this, "fit");
 			upgradeProperty(this, "backend");
-			upgradeProperty(this, "config");
 		}
 
 		get src(): string {
@@ -22,6 +25,10 @@ export function extendViewerElement(Base: typeof HTMLElement): typeof HTMLElemen
 
 		set src(value: string) {
 			this.setAttribute("src", value);
+		}
+
+		setConfig(config: PamphletViewerConfig): void {
+			setViewerElementConfig(this, config);
 		}
 	};
 }

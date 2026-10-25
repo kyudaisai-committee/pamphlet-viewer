@@ -6,7 +6,6 @@
 			layout: { type: "String", reflect: true },
 			fit: { type: "String", reflect: true },
 			backend: { attribute: "data-backend", type: "Object" },
-			config: { type: "Object" },
 		},
 		extend: extendViewerElement,
 	}}
@@ -31,6 +30,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
 	import type { PageRenderPlan } from "../domain/render-plan";
 import type { PamphletViewerConfig } from "@/lib/public-api";
+	import { subscribeViewerElementConfig } from "./viewer-element-config";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";
 	import ViewerStage from "./ViewerStage.svelte";
 	import ViewerSettingsToolbar from "./ViewerSettingsToolbar.svelte";
@@ -47,7 +47,6 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		layout?: LayoutMode;
 		fit?: FitMode;
 		backend?: DocumentBackend;
-		config?: PamphletViewerConfig;
 	}
 
 	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
@@ -58,13 +57,13 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		layout = $bindable<LayoutMode>("auto"),
 		fit = $bindable<FitMode>("page"),
 		backend,
-		config,
 	}: Props = $props();
 
 	const defaultBackend = new PdfiumBackend();
 	const controller = new ViewerController(dispatchControllerEvent);
 	const fullscreenController = new ReaderFullscreenController();
 	const zoomRenderScheduler = new ZoomRenderScheduler();
+	let config = $state<PamphletViewerConfig>({});
 	let shellElement = $state<HTMLElement>();
 	let pageArea = $state<HTMLElement>();
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
@@ -272,6 +271,12 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 		if (pageArea === undefined || shellElement === undefined) return;
 		const detachResponsiveOrder = observeResponsiveReaderOrder(shellElement);
 		const host = getViewerHost();
+		const detachConfig =
+			host === null
+				? () => undefined
+				: subscribeViewerElementConfig(host, (nextConfig) => {
+						config = nextConfig;
+					});
 		const fullscreenButton = shellElement.querySelector<HTMLElement>("[data-control='fullscreen']");
 		const detachFullscreen =
 			host !== null && fullscreenButton !== null
@@ -279,6 +284,7 @@ import type { PamphletViewerConfig } from "@/lib/public-api";
 				: () => undefined;
 		host?.dispatchEvent(new CustomEvent("ready", { detail: undefined, bubbles: true, composed: true }));
 		return () => {
+			detachConfig();
 			detachResponsiveOrder();
 			detachFullscreen();
 			zoomRenderScheduler.cancel();

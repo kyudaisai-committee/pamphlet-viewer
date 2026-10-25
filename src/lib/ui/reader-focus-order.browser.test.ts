@@ -212,12 +212,12 @@ async function createLoadedViewer(width: number): Promise<PamphletViewerElement>
 	element.backend = createBackend();
 	element.src = "./reader-test.pdf";
 	element.layout = "single";
-	element.config = {
+	element.setConfig({
 		chapters: [
 			{ title: "前半", page: 1 },
 			{ title: "後半", page: 2 },
 		],
-	};
+	});
 	const ready = new Promise<void>((resolve) => {
 		element.addEventListener("pagechange", () => resolve(), { once: true });
 	});

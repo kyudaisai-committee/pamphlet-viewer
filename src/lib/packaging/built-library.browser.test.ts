@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
 
+import type { PamphletViewerElement } from "../public-api";
+
 interface LibraryTestMessage {
 	type: "pagechange" | "error";
 	detail?: unknown;
@@ -51,6 +53,26 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 			1,
 		).data;
 		expect(pixel[2]).toBeGreaterThan(100);
+
+		const viewer = element as PamphletViewerElement;
+		viewer.setConfig({ chapters: [{ title: "配布版の章", page: 1 }] });
+		await expect
+			.poll(
+				() =>
+					viewer.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="章へ移動"]')
+						?.options.length ?? 0,
+			)
+			.toBe(2);
+		const chapterSelect = viewer.shadowRoot?.querySelector<HTMLSelectElement>(
+			'select[aria-label="章へ移動"]',
+		);
+		if (chapterSelect === null || chapterSelect === undefined) {
+			throw new Error("The built custom element did not render the configured chapters.");
+		}
+		expect(Array.from(chapterSelect.options, (option) => option.textContent)).toEqual([
+			"章を選択",
+			"配布版の章",
+		]);
 
 		const response = await fetch("/__pdfium-range-metrics");
 		if (!response.ok) throw new Error("The PDF Range metrics endpoint did not respond.");
