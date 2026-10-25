@@ -8,7 +8,18 @@ import { expect, test } from "vitest";
 const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 
 interface PackageManifest {
-	private: boolean;
+	private?: boolean;
+	files: string[];
+	main: string;
+	types: string;
+	publishConfig: {
+		access: string;
+		registry: string;
+	};
+	repository: {
+		type: string;
+		url: string;
+	};
 	exports: {
 		".": {
 			types: string;
@@ -43,7 +54,18 @@ test("emits a self-hosted worker, external WASM asset, and public declarations",
 	expect(entry).not.toContain("https://unpkg.com");
 	expect(files.map((file) => relative(LIBRARY_DIRECTORY, file))).toContain("pamphlet-viewer.d.ts");
 	expect(files.some((file) => file.includes("pdfium.worker-") && file.endsWith(".ts"))).toBe(false);
-	expect(packageManifest.private).toBe(true);
+	expect(packageManifest.private).toBeUndefined();
+	expect(packageManifest.files).toEqual(["dist/library"]);
+	expect(packageManifest.main).toBe("./dist/library/pamphlet-viewer.js");
+	expect(packageManifest.types).toBe("./dist/library/pamphlet-viewer.d.ts");
+	expect(packageManifest.publishConfig).toEqual({
+		access: "public",
+		registry: "https://registry.npmjs.org",
+	});
+	expect(packageManifest.repository).toEqual({
+		type: "git",
+		url: "git+https://github.com/kyudaisai-committee/pamphlet-viewer.git",
+	});
 	expect(packageManifest.exports["."]).toEqual({
 		types: "./dist/library/pamphlet-viewer.d.ts",
 		import: "./dist/library/pamphlet-viewer.js",
