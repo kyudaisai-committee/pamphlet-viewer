@@ -2,6 +2,9 @@ EmbedPDF
 PDFium
 linearization
 FPDF
+ANNOT
+Annot
+Annots
 FILEACCESS
 BGRA
 RGBA

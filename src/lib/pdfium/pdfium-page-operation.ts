@@ -6,6 +6,7 @@ import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
 import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
+const FPDF_ANNOT = 0x01;
 
 export function getPageSizeByIndex(
 	pdfium: WrappedPdfiumModule,
@@ -184,7 +185,7 @@ function renderLoadedPage(
 			pdfium.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff),
 		);
 		availability.runNative(() =>
-			pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, 0),
+			pdfium.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, FPDF_ANNOT),
 		);
 
 		const { stride, sourcePointer } = availability.runNative(() => ({
