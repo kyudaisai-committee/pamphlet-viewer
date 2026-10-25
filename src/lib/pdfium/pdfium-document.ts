@@ -74,8 +74,11 @@ export class PdfiumDocumentSession {
 
 	async getPageSize(pageIndex: number): Promise<PageSize> {
 		this.#assertPageIndex(pageIndex);
-		return this.#runDocumentOperation(pageIndex, (pdfium, availability) =>
-			getPageSizeByIndex(pdfium, availability, this.loader, pageIndex),
+		return this.#runDocumentOperation(
+			pageIndex,
+			(pdfium, availability, allowPageLoadFallback) =>
+				getPageSizeByIndex(pdfium, availability, this.loader, pageIndex, allowPageLoadFallback),
+			"document",
 		);
 	}
 
@@ -85,8 +88,11 @@ export class PdfiumDocumentSession {
 			throw new RangeError("PDF page scale must be a finite number greater than 0.");
 		}
 
-		return this.#runDocumentOperation(pageIndex, (pdfium, availability) =>
-			renderPdfiumPage(pdfium, availability, this.loader, pageIndex, scale),
+		return this.#runDocumentOperation(
+			pageIndex,
+			(pdfium, availability) =>
+				renderPdfiumPage(pdfium, availability, this.loader, pageIndex, scale),
+			"page",
 		);
 	}
 
@@ -121,7 +127,12 @@ export class PdfiumDocumentSession {
 
 	async #runDocumentOperation<T>(
 		pageIndex: number,
-		operation: (pdfium: WrappedPdfiumModule, availability: PdfiumAvailabilitySession) => T | null,
+		operation: (
+			pdfium: WrappedPdfiumModule,
+			availability: PdfiumAvailabilitySession,
+			allowPageLoadFallback: boolean,
+		) => T | null,
+		availabilityRequirement: "document" | "page",
 	): Promise<T> {
 		const pdfium = this.#pdfium;
 		const availability = this.#availability;
@@ -130,20 +141,34 @@ export class PdfiumDocumentSession {
 		}
 
 		availability.beginPageOperation();
+		let pageAvailabilityCacheEpoch: number | null = null;
 		for (let attempt = 0; attempt < MAX_OPERATION_ATTEMPTS; attempt += 1) {
 			if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-			await availability.ensurePageAvailable(pageIndex);
+			if (availabilityRequirement === "page") await availability.ensurePageAvailable(pageIndex);
+			else await availability.ensureDocumentAvailable();
 			if (this.#disposed) {
 				throw new DOMException("PDF loading was cancelled.", "AbortError");
 			}
+			if (pageAvailabilityCacheEpoch !== this.loader.cacheEpoch) {
+				pageAvailabilityCacheEpoch = null;
+			}
 			let value: T | null;
 			try {
-				value = operation(pdfium, availability);
+				value = operation(
+					pdfium,
+					availability,
+					pageAvailabilityCacheEpoch === this.loader.cacheEpoch,
+				);
 			} catch (error) {
 				availability.markNativeFailure(error);
 				throw error;
 			}
 			if (value === null && !this.loader.hasMissingChunks) {
+				if (availabilityRequirement === "document") {
+					const pageAvailable = await availability.preparePageSizeFallback(pageIndex);
+					pageAvailabilityCacheEpoch = pageAvailable ? this.loader.cacheEpoch : null;
+					continue;
+				}
 				throw new Error("PDFium did not complete the document operation.");
 			}
 			if (!this.loader.hasMissingChunks && value !== null) {
