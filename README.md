@@ -126,4 +126,4 @@ pnpm verify
 
 ## ライセンス
 
-このプロジェクトのソースコードはMPL-2.0で公開します。ライセンス本文は[LICENSE](LICENSE)を参照してください。npm配布物には[NOTICE](NOTICE)と第三者ライセンスの表示も含まれます。
+このプロジェクトのソースコードは[MPL-2.0](LICENSE)で公開します。[GitHubでソースコードを入手できます](https://github.com/kyudaisai-committee/pamphlet-viewer)。npm配布物には[NOTICE](NOTICE)と第三者ライセンスの表示も含まれます。
