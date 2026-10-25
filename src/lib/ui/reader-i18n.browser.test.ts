@@ -20,6 +20,18 @@ test("keeps explicit English and Japanese locales independent across instances",
 
 	await expect.poll(() => getToolbarLabel(englishViewer)).toBe("Pamphlet controls");
 	await expect.poll(() => getToolbarLabel(japaneseViewer)).toBe("パンフレット操作");
+	await expect
+		.poll(() => getViewOptions(englishViewer))
+		.toEqual([
+			"Automatic · fit page",
+			"Automatic · fit width",
+			"Single page · fit page",
+			"Single page · fit width",
+			"Spread · fit page",
+			"Spread · fit width",
+		]);
+	expect(getViewerLanguage(englishViewer)).toBe("en");
+	expect(getViewerLanguage(japaneseViewer)).toBe("ja");
 	await expect.poll(() => getErrorMessage(englishViewer)).toBe("Could not resolve the PDF URL.");
 	await expect.poll(() => getErrorMessage(japaneseViewer)).toBe("PDFのURLを解決できませんでした。");
 	expect(document.documentElement.lang).toBe("fr");
@@ -36,6 +48,9 @@ test("uses document language for missing or blank element lang and Japanese for 
 	await expect.poll(() => getToolbarLabel(missingLanguageViewer)).toBe("Pamphlet controls");
 	await expect.poll(() => getToolbarLabel(blankLanguageViewer)).toBe("Pamphlet controls");
 	await expect.poll(() => getToolbarLabel(unsupportedLanguageViewer)).toBe("パンフレット操作");
+	expect(getViewerLanguage(missingLanguageViewer)).toBe("en");
+	expect(getViewerLanguage(blankLanguageViewer)).toBe("en");
+	expect(getViewerLanguage(unsupportedLanguageViewer)).toBe("ja");
 	expect(document.documentElement.lang).toBe("en-GB");
 });
 
@@ -52,4 +67,17 @@ function getToolbarLabel(viewer: PamphletViewerElement): string | null | undefin
 
 function getErrorMessage(viewer: PamphletViewerElement): string | undefined {
 	return viewer.shadowRoot?.querySelector<HTMLElement>("[role='alert'] p")?.textContent?.trim();
+}
+
+function getViewOptions(viewer: PamphletViewerElement): string[] | undefined {
+	const options = viewer.shadowRoot?.querySelectorAll<HTMLOptionElement>(
+		".view-mode-control option",
+	);
+	return options === undefined
+		? undefined
+		: Array.from(options, (option) => option.textContent ?? "");
+}
+
+function getViewerLanguage(viewer: PamphletViewerElement): string | null | undefined {
+	return viewer.shadowRoot?.querySelector<HTMLElement>(".viewer-shell")?.getAttribute("lang");
 }

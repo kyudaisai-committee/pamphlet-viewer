@@ -32,14 +32,14 @@
 		onToggleFullscreen,
 	}: Props = $props();
 	const messages = useViewerMessages();
-	const viewOptions: readonly ViewOption[] = [
+	const viewOptions: readonly ViewOption[] = $derived.by(() => [
 		{ value: "auto-page", layout: "auto", fit: "page", label: messages.viewAutoPage },
 		{ value: "auto-width", layout: "auto", fit: "width", label: messages.viewAutoWidth },
 		{ value: "single-page", layout: "single", fit: "page", label: messages.viewSinglePage },
 		{ value: "single-width", layout: "single", fit: "width", label: messages.viewSingleWidth },
 		{ value: "spread-page", layout: "spread", fit: "page", label: messages.viewSpreadPage },
 		{ value: "spread-width", layout: "spread", fit: "width", label: messages.viewSpreadWidth },
-	];
+	]);
 
 	let selectedView = $derived(
 		viewOptions.find((option) => option.fit === fit && option.layout === layout)?.value ??

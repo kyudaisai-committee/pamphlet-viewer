@@ -32,6 +32,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	import type { PageRenderPlan } from "../domain/render-plan";
 	import type { PamphletViewerConfig } from "@/lib/public-api";
 	import { resolveViewerLocale } from "../i18n/locale";
+	import type { ViewerLocale } from "../i18n/locale";
 	import { createViewerMessages } from "../i18n/viewer-messages";
 	import { provideViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
@@ -64,6 +65,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	}: Props = $props();
 
 	const messages = $state(createViewerMessages("ja"));
+	let locale = $state<ViewerLocale>("ja");
 	provideViewerMessages(messages);
 	const defaultBackend = new PdfiumBackend();
 	const controller = new ViewerController(dispatchControllerEvent, undefined, messages);
@@ -278,14 +280,13 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	onMount(() => {
 		const host = getViewerHost();
 		if (host !== null) {
+			locale = resolveViewerLocale(
+				host.getAttribute("lang"),
+				host.ownerDocument.documentElement.getAttribute("lang"),
+			);
 			Object.assign(
 				messages,
-				createViewerMessages(
-					resolveViewerLocale(
-						host.getAttribute("lang"),
-						host.ownerDocument.documentElement.getAttribute("lang"),
-					),
-				),
+				createViewerMessages(locale),
 			);
 		}
 		localeInitialized = true;
@@ -529,7 +530,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	}
 </script>
 
-<div class="viewer-shell" bind:this={shellElement}>
+<div class="viewer-shell" lang={locale} bind:this={shellElement}>
 	<div class="settings-region" data-reader-region="settings">
 		<ViewerSettingsToolbar
 		layout={parseLayout(layout) ?? "auto"}
