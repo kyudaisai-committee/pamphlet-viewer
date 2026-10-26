@@ -32,7 +32,10 @@ export class PdfiumBackend implements DocumentBackend {
 					thumbnailClient ??= new PdfiumWorkerClient();
 					return thumbnailClient;
 				},
-				() => thumbnailClient?.terminate(),
+				() => {
+					thumbnailClient?.terminate();
+					thumbnailClient = null;
+				},
 			);
 		} catch (error) {
 			signal.removeEventListener("abort", abort);
@@ -123,7 +126,7 @@ class PdfiumPageSource implements PageSource {
 					return client;
 				})
 				.catch((error: unknown) => {
-					client.terminate();
+					this.terminateThumbnailClient();
 					this.#thumbnailOpen = null;
 					throw error;
 				});

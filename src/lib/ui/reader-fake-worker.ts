@@ -25,6 +25,11 @@ export class ControlledWorker extends EventTarget {
 		if (message.type === "page-prefetch") {
 			queueMicrotask(() => this.reply({ id: message.id, type: "page-prefetch" }));
 		}
+		if (message.type === "thumbnail-prefetch") {
+			queueMicrotask(() =>
+				this.reply({ id: message.id, type: "thumbnail-prefetch", visual: null }),
+			);
+		}
 	}
 
 	terminate(): void {

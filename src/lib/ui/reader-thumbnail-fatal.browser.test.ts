@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 
+import type { PageSource } from "../document/page-source";
 import { PdfiumBackend } from "../document/pdfium-backend";
 import type { PamphletViewerElement } from "../public-api";
 import {
@@ -44,24 +45,20 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
 	await expect.poll(() => shadowRoot.querySelector(".page-frame")).not.toBeNull();
-	const thumbnailRequestStart = failedWorker.requests.length;
 	shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle")?.click();
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).not.toBeNull();
-	const pageSize = await waitForWorkerRequest(failedWorker, "page-size", thumbnailRequestStart);
-	failedWorker.reply({
-		id: pageSize.id,
-		type: "page-size",
-		pageSize: { width: 300, height: 400 },
+	await expect.poll(() => ControlledWorker.instances.length).toBe(2);
+	const failedThumbnailWorker = getControlledWorker(1);
+	const failedThumbnailOpen = await waitForWorkerRequest(failedThumbnailWorker, "open");
+	failedThumbnailWorker.reply({
+		id: failedThumbnailOpen.id,
+		type: "opened",
+		pageCount: 4,
+		fileLength: 8192,
 	});
-	const unavailableThumbnail = await waitForWorkerRequest(
-		failedWorker,
-		"thumbnail",
-		thumbnailRequestStart,
-	);
-	failedWorker.reply({ id: unavailableThumbnail.id, type: "thumbnail", visual: null });
-	const thumbnailRender = await waitForWorkerRequest(failedWorker, "render", thumbnailRequestStart);
-	failedWorker.reply({
-		id: thumbnailRender.id,
+	const unavailableThumbnail = await waitForWorkerRequest(failedThumbnailWorker, "thumbnail");
+	failedThumbnailWorker.reply({
+		id: unavailableThumbnail.id,
 		type: "error",
 		message: "The thumbnail worker trapped.",
 		fatal: true,
@@ -74,13 +71,13 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 		?.getBoundingClientRect();
 	expect(retryButtonBounds?.width).toBeGreaterThan(0);
 	expect(retryButtonBounds?.height).toBeGreaterThan(0);
-	const failedRequestCount = failedWorker.requests.length;
+	const failedRequestCount = failedThumbnailWorker.requests.length;
 	await Promise.resolve();
-	expect(failedWorker.requests).toHaveLength(failedRequestCount);
+	expect(failedThumbnailWorker.requests).toHaveLength(failedRequestCount);
 	const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button');
 	retryButton?.click();
-	await expect.poll(() => ControlledWorker.instances.length).toBe(2);
-	const recoveredWorker = getControlledWorker(1);
+	await expect.poll(() => ControlledWorker.instances.length).toBe(3);
+	const recoveredWorker = getControlledWorker(2);
 	const recoveredOpen = await waitForWorkerRequest(recoveredWorker, "open");
 	expect(recoveredOpen.url).toBe(firstOpen.url);
 	recoveredWorker.reply({
@@ -98,42 +95,64 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	await expect.poll(() => shadowRoot.querySelector(".page-frame")).not.toBeNull();
 	await expect.poll(() => shadowRoot.querySelector('[role="alert"]')).toBeNull();
 
-	const recoveredThumbnailRequestStart = recoveredWorker.requests.length;
-	shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle")?.click();
-	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).not.toBeNull();
-	const recoveredPageSize = await waitForWorkerRequest(
-		recoveredWorker,
-		"page-size",
-		recoveredThumbnailRequestStart,
-	);
-	recoveredWorker.reply({
-		id: recoveredPageSize.id,
-		type: "page-size",
-		pageSize: { width: 300, height: 400 },
-	});
-	const recoveredUnavailableThumbnail = await waitForWorkerRequest(
-		recoveredWorker,
-		"thumbnail",
-		recoveredThumbnailRequestStart,
-	);
-	recoveredWorker.reply({
-		id: recoveredUnavailableThumbnail.id,
-		type: "thumbnail",
-		visual: null,
-	});
-	const recoveredThumbnailRender = await waitForWorkerRequest(
-		recoveredWorker,
-		"render",
-		recoveredThumbnailRequestStart,
-	);
-	recoveredWorker.reply({
-		id: recoveredThumbnailRender.id,
-		type: "rendered",
-		visual: { type: "pixels", width: 1, height: 1, pixels: new Uint8Array([7, 8, 9, 255]).buffer },
-	});
-	await expect
-		.poll(() => shadowRoot.querySelector('.thumbnail-entry[data-page-index="0"] canvas'))
-		.not.toBeNull();
-	expect(failedWorker.terminateCalls).toBe(1);
+	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
+	await expect.poll(() => shadowRoot.querySelector('[role="alert"]')).toBeNull();
+	expect(failedThumbnailWorker.terminateCalls).toBe(1);
 	expect(recoveredWorker.terminateCalls).toBe(0);
+});
+
+test("recreates the thumbnail worker after a transient open failure", async () => {
+	vi.stubGlobal("Worker", ControlledWorker);
+	const abortController = new AbortController();
+	let source: PageSource | null = null;
+	try {
+		const opening = new PdfiumBackend().open(
+			new URL("./thumbnail-open-retry.pdf", window.location.href).href,
+			abortController.signal,
+		);
+		const documentWorker = getControlledWorker(0);
+		const documentOpen = await waitForWorkerRequest(documentWorker, "open");
+		documentWorker.reply({
+			id: documentOpen.id,
+			type: "opened",
+			pageCount: 1,
+			fileLength: 4096,
+		});
+		source = await opening;
+		if (source.prefetchThumbnail === undefined) {
+			throw new Error("The PDF source does not support embedded thumbnail prefetch.");
+		}
+
+		const failedPrefetch = source.prefetchThumbnail(0);
+		const failedThumbnailWorker = getControlledWorker(1);
+		const failedOpen = await waitForWorkerRequest(failedThumbnailWorker, "open");
+		failedThumbnailWorker.reply({
+			id: failedOpen.id,
+			type: "error",
+			message: "The thumbnail source is temporarily unavailable.",
+		});
+		await expect(failedPrefetch).rejects.toThrow("temporarily unavailable");
+
+		const retriedPrefetch = source.prefetchThumbnail(0);
+		const recoveredThumbnailWorker = getControlledWorker(2);
+		const recoveredOpen = await waitForWorkerRequest(recoveredThumbnailWorker, "open");
+		recoveredThumbnailWorker.reply({
+			id: recoveredOpen.id,
+			type: "opened",
+			pageCount: 1,
+			fileLength: 4096,
+		});
+		const prefetch = await waitForWorkerRequest(recoveredThumbnailWorker, "thumbnail-prefetch");
+		recoveredThumbnailWorker.reply({
+			id: prefetch.id,
+			type: "thumbnail-prefetch",
+			visual: null,
+		});
+		await expect(retriedPrefetch).resolves.toBeNull();
+		expect(failedThumbnailWorker.terminateCalls).toBe(1);
+		expect(recoveredThumbnailWorker.terminateCalls).toBe(0);
+	} finally {
+		source?.dispose();
+		abortController.abort();
+	}
 });
