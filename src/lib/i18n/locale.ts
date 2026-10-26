@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 export type ViewerLocale = "en" | "ja";
 
 export function resolveViewerLocale(

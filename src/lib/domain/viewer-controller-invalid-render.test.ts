@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 import { describe, expect, test, vi } from "vitest";
 
 import type { PageSource, PageVisual } from "../document/page-source";

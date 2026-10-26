@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- SPDX-License-Identifier: MIT -->
 <script lang="ts">
 	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";

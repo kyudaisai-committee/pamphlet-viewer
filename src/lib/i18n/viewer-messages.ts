@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 import * as m from "@/paraglide/messages.js";
 
 import type { ViewerLocale } from "./locale";
