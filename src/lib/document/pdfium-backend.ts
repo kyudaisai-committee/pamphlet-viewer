@@ -51,7 +51,6 @@ export class PdfiumBackend implements DocumentBackend {
 class PdfiumPageSource implements PageSource {
 	#disposed = false;
 	#foregroundPool: PdfiumWorkerPool;
-	#pagePrefetchPool: PdfiumWorkerPool;
 	#prerenderPool: PdfiumWorkerPool;
 	readonly propagateThumbnailErrors = true;
 
@@ -65,7 +64,6 @@ class PdfiumPageSource implements PageSource {
 		private readonly terminateThumbnailClient: () => void,
 	) {
 		this.#foregroundPool = new PdfiumWorkerPool(source, pageCount, client);
-		this.#pagePrefetchPool = new PdfiumWorkerPool(source, pageCount, null, 1);
 		this.#prerenderPool = new PdfiumWorkerPool(source, pageCount, null, 1);
 	}
 
@@ -92,11 +90,11 @@ class PdfiumPageSource implements PageSource {
 
 	prefetchPage(pageIndex: number): Promise<void> {
 		this.#assertActive();
-		return this.#pagePrefetchPool.prefetchPage(pageIndex).catch(mapSourceFailure);
+		return this.#foregroundPool.prefetchPage(pageIndex).catch(mapSourceFailure);
 	}
 
 	cancelPrefetchPageRequests(): void {
-		this.#pagePrefetchPool.interrupt();
+		this.#foregroundPool.interruptPrefetch();
 	}
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
@@ -124,7 +122,6 @@ class PdfiumPageSource implements PageSource {
 		this.#disposed = true;
 		this.signal.removeEventListener("abort", this.abortListener);
 		this.#foregroundPool.dispose();
-		this.#pagePrefetchPool.dispose();
 		this.#prerenderPool.dispose();
 		this.terminateThumbnailClient();
 	}

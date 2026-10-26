@@ -166,28 +166,12 @@ describe("PdfiumWorkerClient terminal state", () => {
 		const source = await openPromise;
 		const prefetch = source.prefetchPage?.(6);
 		if (prefetch === undefined) throw new Error("The page prefetch API was not exposed.");
-		const prefetchWorker = await vi.waitFor(() => {
-			const activeWorker = ControlledWorker.instances.find(
-				(candidate) => candidate !== worker && candidate.requests.length > 0,
-			);
-			expect(activeWorker).toBeDefined();
-			return activeWorker;
-		});
-		const prefetchOpenRequest = prefetchWorker?.requests[0];
-		if (prefetchWorker === undefined || prefetchOpenRequest === undefined) {
-			throw new Error("The page prefetch worker did not open the PDF.");
-		}
-		prefetchWorker.reply({
-			id: prefetchOpenRequest.id,
-			type: "opened",
-			pageCount: 8,
-			fileLength: 1024,
-		});
-		await vi.waitFor(() => expect(prefetchWorker.requests).toHaveLength(2));
-		const prefetchRequest = prefetchWorker.requests[1];
+		await vi.waitFor(() => expect(worker.requests).toHaveLength(2));
+		const prefetchRequest = worker.requests[1];
 		if (prefetchRequest === undefined) throw new Error("The page prefetch was not queued.");
 		expect(prefetchRequest.type).toBe("page-prefetch");
-		prefetchWorker.reply({ id: prefetchRequest.id, type: "page-prefetch" });
+		expect(prefetchRequest.pageIndex).toBe(6);
+		worker.reply({ id: prefetchRequest.id, type: "page-prefetch" });
 
 		await expect(prefetch).resolves.toBeUndefined();
 		await source.dispose();

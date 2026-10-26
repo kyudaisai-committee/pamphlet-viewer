@@ -7,6 +7,7 @@ interface PdfiumWorkerSlot {
 	client: PdfiumWorkerClient | null;
 	opening: Promise<PdfiumWorkerClient> | null;
 	activeRequests: number;
+	activePrefetchRequests: number;
 }
 
 export class PdfiumWorkerPool {
@@ -23,6 +24,7 @@ export class PdfiumWorkerPool {
 			client: index === 0 ? firstClient : null,
 			opening: index === 0 && firstClient !== null ? Promise.resolve(firstClient) : null,
 			activeRequests: 0,
+			activePrefetchRequests: 0,
 		}));
 	}
 
@@ -31,7 +33,7 @@ export class PdfiumWorkerPool {
 	}
 
 	prefetchPage(pageIndex: number): Promise<void> {
-		return this.#run((client) => client.prefetchPage(pageIndex));
+		return this.#run((client) => client.prefetchPage(pageIndex), true);
 	}
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
@@ -45,18 +47,30 @@ export class PdfiumWorkerPool {
 		}
 	}
 
+	interruptPrefetch(): void {
+		if (this.#disposed) return;
+		for (const slot of this.#slots) {
+			if (slot.activePrefetchRequests > 0) this.#resetSlot(slot);
+		}
+	}
+
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.#resetSlots();
 	}
 
-	#run<Result>(operation: (client: PdfiumWorkerClient) => Promise<Result>): Promise<Result> {
+	#run<Result>(
+		operation: (client: PdfiumWorkerClient) => Promise<Result>,
+		prefetch = false,
+	): Promise<Result> {
 		this.#assertActive();
 		const slot = this.#getLeastBusySlot();
 		slot.activeRequests += 1;
+		if (prefetch) slot.activePrefetchRequests += 1;
 		return this.#runOnSlot(slot, operation).finally(() => {
 			slot.activeRequests -= 1;
+			if (prefetch) slot.activePrefetchRequests -= 1;
 		});
 	}
 
