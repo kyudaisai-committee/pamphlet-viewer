@@ -28,7 +28,9 @@ test("renders Square annotation appearances in page and thumbnail canvases", asy
 	thumbnailToggle.click();
 	await expect
 		.poll(() =>
-			shadowRoot.querySelector<HTMLCanvasElement>('.thumbnail-entry[data-page-index="0"] canvas'),
+			shadowRoot.querySelector<HTMLCanvasElement>(
+				'.thumbnail-entry[data-page-index="0"] canvas',
+			),
 		)
 		.not.toBeNull();
 	const thumbnailCanvas = shadowRoot.querySelector<HTMLCanvasElement>(

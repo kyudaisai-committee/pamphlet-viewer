@@ -79,7 +79,9 @@ export async function requestPdfRange(
 		}
 		if (totalLength !== null && range.total !== totalLength) {
 			cancelResponseBody(response);
-			throw new PdfRepresentationChangedError("The PDF length changed while it was being loaded.");
+			throw new PdfRepresentationChangedError(
+				"The PDF length changed while it was being loaded.",
+			);
 		}
 		if (
 			(etag !== null && response.headers.get("ETag") !== etag) ||

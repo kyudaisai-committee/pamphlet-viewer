@@ -412,7 +412,8 @@ test.each([320, 390])(
 		const viewModeSelect = shadowRoot?.querySelector<HTMLSelectElement>(
 			'.view-mode-control select[aria-label="表示方法"]',
 		);
-		const compactNavigation = shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
+		const compactNavigation =
+			shadowRoot?.querySelector<HTMLDetailsElement>(".compact-navigation");
 		const summary = compactNavigation?.querySelector<HTMLElement>("summary");
 		if (
 			toolbar === null ||
@@ -522,8 +523,10 @@ test.each([320, 390])(
 		expect(compactNavigation.open).toBe(false);
 
 		await summaryLocator.click();
-		const bookmarkToggle = compactNavigation.querySelector<HTMLButtonElement>(".bookmark-toggle");
-		if (bookmarkToggle === null) throw new Error("The compact bookmark toggle was not rendered.");
+		const bookmarkToggle =
+			compactNavigation.querySelector<HTMLButtonElement>(".bookmark-toggle");
+		if (bookmarkToggle === null)
+			throw new Error("The compact bookmark toggle was not rendered.");
 		await browserPage.elementLocator(bookmarkToggle).click();
 		await expect.poll(() => bookmarkToggle.getAttribute("aria-pressed")).toBe("true");
 		expect(JSON.parse(localStorage.getItem(BOOKMARKS_STORAGE_KEY) ?? "null")).toEqual({
@@ -645,7 +648,9 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 		if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
 		const rect = control.getBoundingClientRect();
 		const parentRect =
-			selector === ".zoom-controls" || selector.includes("view-") || selector.includes("fullscreen")
+			selector === ".zoom-controls" ||
+			selector.includes("view-") ||
+			selector.includes("fullscreen")
 				? settingsRect
 				: toolbarRect;
 		expect(rect.left, `${selector} left edge`).toBeGreaterThanOrEqual(parentRect.left);
@@ -756,7 +761,10 @@ test("does not apply an old fullscreen request to a reattached reader", async ()
 		configurable: true,
 		value: async function exitMockFullscreen(): Promise<void> {
 			exitCount += 1;
-			Object.defineProperty(document, "fullscreenElement", { configurable: true, value: null });
+			Object.defineProperty(document, "fullscreenElement", {
+				configurable: true,
+				value: null,
+			});
 		},
 	});
 	Object.defineProperty(oldHost, "requestFullscreen", {
@@ -784,7 +792,8 @@ test("does not apply an old fullscreen request to a reattached reader", async ()
 			value: oldHost,
 		});
 		const completeRequest = requestState.resolve;
-		if (completeRequest === null) throw new Error("The pending fullscreen request did not start.");
+		if (completeRequest === null)
+			throw new Error("The pending fullscreen request did not start.");
 		completeRequest();
 		await pendingToggle;
 

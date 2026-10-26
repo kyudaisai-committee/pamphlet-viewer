@@ -76,7 +76,9 @@ export class PdfiumFileAccess {
 		};
 		const isDataAvailable: AvailabilityCallback = (_fileAvail, offset, size): number => {
 			try {
-				return this.reader.isRangeAvailable(toUnsignedI32(offset), toUnsignedI32(size)) ? 1 : 0;
+				return this.reader.isRangeAvailable(toUnsignedI32(offset), toUnsignedI32(size))
+					? 1
+					: 0;
 			} catch (error) {
 				this.recordCallbackError(error);
 				return 0;

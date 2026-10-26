@@ -30,12 +30,15 @@ test("the built public error value drives thumbnail recovery through the custom 
 			throw new Error("The public error test frame did not create its viewer.");
 		}
 
-		await expect.poll(() => messages.some((message) => message.type === "pagechange")).toBe(true);
+		await expect
+			.poll(() => messages.some((message) => message.type === "pagechange"))
+			.toBe(true);
 		const initialSuccessfulRenderCount = Number(
 			viewer.getAttribute("data-successful-render-count"),
 		);
 		const shadowRoot = viewer.shadowRoot;
-		if (shadowRoot === null) throw new Error("The built viewer did not attach its shadow root.");
+		if (shadowRoot === null)
+			throw new Error("The built viewer did not attach its shadow root.");
 		viewer.setAttribute("data-fail-thumbnail-next-render", "true");
 		shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle")?.click();
 

@@ -18,10 +18,12 @@ describe("PDFium page-size lookup", () => {
 	it("reads indexed dimensions without loading the page and frees its output buffer", () => {
 		const fixture = createFixture();
 
-		expect(getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 7)).toEqual({
-			width: 300,
-			height: 400,
-		});
+		expect(getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 7)).toEqual(
+			{
+				width: 300,
+				height: 400,
+			},
+		);
 		expect(fixture.pdfium.FPDF_LoadPage).not.toHaveBeenCalled();
 		expect(fixture.getPageSize).toHaveBeenCalledWith(1, 7, 16);
 		expect(fixture.malloc).toHaveBeenCalledWith(8);
@@ -44,7 +46,9 @@ describe("PDFium page-size lookup", () => {
 	it("returns a read miss when the indexed size API cannot resolve the page dictionary", () => {
 		const fixture = createFixture({ getSizeResult: false });
 
-		expect(getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0)).toBeNull();
+		expect(
+			getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0),
+		).toBeNull();
 		expect(fixture.loadPage).not.toHaveBeenCalled();
 		expect(fixture.free).toHaveBeenCalledWith(16);
 	});
@@ -72,7 +76,9 @@ describe("PDFium page-size lookup", () => {
 	it("discards an unsuccessful size response while a range is missing", () => {
 		const fixture = createFixture({ getSizeResult: false, missingRange: true });
 
-		expect(getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0)).toBeNull();
+		expect(
+			getPageSizeByIndex(fixture.pdfium, fixture.availability, fixture.loader, 0),
+		).toBeNull();
 		expect(fixture.free).toHaveBeenCalledWith(16);
 	});
 
@@ -101,7 +107,9 @@ describe("PDFium page-data prefetch", () => {
 	it("loads and closes a page without allocating or rendering a bitmap", () => {
 		const fixture = createFixture();
 
-		expect(prefetchPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 5)).toBe(true);
+		expect(prefetchPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 5)).toBe(
+			true,
+		);
 		expect(fixture.loadPage).toHaveBeenCalledWith(1, 5);
 		expect(fixture.pdfium.FPDF_ClosePage).toHaveBeenCalledWith(2);
 		expect(fixture.createBitmap).not.toHaveBeenCalled();

@@ -38,14 +38,18 @@ export class RangeChunkCache {
 
 		if (this.#byteLength + chunk.byteLength > this.maxBytes) {
 			while (this.#byteLength > this.lowWatermark) {
-				const oldest = this.#chunks.entries().next().value as [number, Uint8Array] | undefined;
+				const oldest = this.#chunks.entries().next().value as
+					| [number, Uint8Array]
+					| undefined;
 				if (oldest === undefined) break;
 				this.#chunks.delete(oldest[0]);
 				this.#byteLength -= oldest[1].byteLength;
 				evicted = true;
 			}
 			while (this.#byteLength + chunk.byteLength > this.maxBytes) {
-				const oldest = this.#chunks.entries().next().value as [number, Uint8Array] | undefined;
+				const oldest = this.#chunks.entries().next().value as
+					| [number, Uint8Array]
+					| undefined;
 				if (oldest === undefined) break;
 				this.#chunks.delete(oldest[0]);
 				this.#byteLength -= oldest[1].byteLength;

@@ -155,14 +155,16 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 function getThumbnailPageNumbers(pageNumbers: readonly number[] | undefined): number[] {
 	if (pageNumbers === undefined) return [];
 	return [...new Set(pageNumbers)].filter(
-		(pageNumber) => Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
+		(pageNumber) =>
+			Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
 	);
 }
 
 function getImagePageNumbers(pageNumbers: readonly number[] | undefined): number[] {
 	if (pageNumbers === undefined) return [];
 	return [...new Set(pageNumbers)].filter(
-		(pageNumber) => Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
+		(pageNumber) =>
+			Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
 	);
 }
 

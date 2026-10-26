@@ -15,7 +15,11 @@ export function parseContentRange(value: string | null): ContentRange | null {
 	const start = Number(match[1]);
 	const end = Number(match[2]);
 	const total = Number(match[3]);
-	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || !Number.isSafeInteger(total)) {
+	if (
+		!Number.isSafeInteger(start) ||
+		!Number.isSafeInteger(end) ||
+		!Number.isSafeInteger(total)
+	) {
 		return null;
 	}
 	if (start < 0 || end < start || total <= end) return null;

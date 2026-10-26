@@ -78,7 +78,11 @@ export class ThumbnailScheduler {
 		const nextDesired = new Set<number>();
 		if (source !== null) {
 			for (const pageIndex of [...pageIndexes, ...prefetchIndexes]) {
-				if (Number.isSafeInteger(pageIndex) && pageIndex >= 0 && pageIndex < source.pageCount) {
+				if (
+					Number.isSafeInteger(pageIndex) &&
+					pageIndex >= 0 &&
+					pageIndex < source.pageCount
+				) {
 					nextDesired.add(pageIndex);
 				}
 			}
@@ -87,13 +91,17 @@ export class ThumbnailScheduler {
 		this.onDemandChange();
 		this.#queue = [];
 		this.#enqueueDesiredPages();
-		const desiredOrder = new Map(Array.from(nextDesired, (pageIndex, index) => [pageIndex, index]));
+		const desiredOrder = new Map(
+			Array.from(nextDesired, (pageIndex, index) => [pageIndex, index]),
+		);
 		this.#queue.sort((left, right) => {
 			if (left.kind !== right.kind) return left.kind === "visible" ? -1 : 1;
 			if (left.kind === "embedded" || right.kind === "embedded") {
 				return left.pageIndex - right.pageIndex;
 			}
-			return (desiredOrder.get(left.pageIndex) ?? 0) - (desiredOrder.get(right.pageIndex) ?? 0);
+			return (
+				(desiredOrder.get(left.pageIndex) ?? 0) - (desiredOrder.get(right.pageIndex) ?? 0)
+			);
 		});
 		if (source !== null) void this.#drain(this.#sourceGeneration, source);
 	}
@@ -147,7 +155,8 @@ export class ThumbnailScheduler {
 				sourceGeneration === this.#sourceGeneration &&
 				source === this.#source &&
 				(this.#queue.length > 0 ||
-					(this.#willPrefetchEmbeddedThumbnails && this.#embeddedPrefetchIndex < source.pageCount))
+					(this.#willPrefetchEmbeddedThumbnails &&
+						this.#embeddedPrefetchIndex < source.pageCount))
 			) {
 				let task = this.#queue.shift();
 				if (task === undefined) {
@@ -268,7 +277,9 @@ export class ThumbnailScheduler {
 		this.#cache.set(entry.pageIndex, entry);
 		this.#cacheBytes += entry.pixelBytes;
 		while (this.#cache.size > this.maxEntries || this.#cacheBytes > this.maxPixelBytes) {
-			const oldest = this.#cache.entries().next().value as [number, ThumbnailEntry] | undefined;
+			const oldest = this.#cache.entries().next().value as
+				| [number, ThumbnailEntry]
+				| undefined;
 			if (oldest === undefined) break;
 			this.#cache.delete(oldest[0]);
 			this.#cacheBytes -= oldest[1].pixelBytes;

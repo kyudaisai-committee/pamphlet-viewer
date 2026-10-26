@@ -19,7 +19,8 @@ test.each([390, 660, 700, 701, 702, 703, 840])(
 		await firstPage;
 
 		const shadowRoot = element.shadowRoot;
-		if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+		if (shadowRoot === null)
+			throw new Error("The pamphlet viewer did not attach its shadow root.");
 		const shell = shadowRoot.querySelector<HTMLElement>(".viewer-shell");
 		const stageSlot = shadowRoot.querySelector<HTMLElement>(".stage-slot");
 		if (shell === null || stageSlot === null) throw new Error("The reader stage is missing.");
@@ -140,7 +141,9 @@ async function waitForDisplayedPageFrame(shadowRoot: ShadowRoot, pageIndex: numb
 			if (stageSlot === null || pageFrame === null) return false;
 			const bounds = pageFrame.getBoundingClientRect();
 			return (
-				getComputedStyle(stageSlot).display === "flex" && bounds.width > 0 && bounds.height > 0
+				getComputedStyle(stageSlot).display === "flex" &&
+				bounds.width > 0 &&
+				bounds.height > 0
 			);
 		})
 		.toBe(true);

@@ -27,7 +27,10 @@ describe("PDFium file-access callbacks", () => {
 					unsignedValue,
 				);
 				expect(isAvailable(1, signedValue, signedValue)).toBe(1);
-				expect(fixture.reader.isRangeAvailable).toHaveBeenCalledWith(unsignedValue, unsignedValue);
+				expect(fixture.reader.isRangeAvailable).toHaveBeenCalledWith(
+					unsignedValue,
+					unsignedValue,
+				);
 				addHint(1, signedValue, signedValue);
 				expect(fixture.reader.hintRange).toHaveBeenCalledWith(unsignedValue, unsignedValue);
 				expect(fixture.callbackError).not.toHaveBeenCalled();

@@ -32,7 +32,9 @@ test("keeps explicit English and Japanese locales independent across instances",
 	expect(getViewerLanguage(englishViewer)).toBe("en");
 	expect(getViewerLanguage(japaneseViewer)).toBe("ja");
 	await expect.poll(() => getErrorMessage(englishViewer)).toBe("Could not resolve the PDF URL.");
-	await expect.poll(() => getErrorMessage(japaneseViewer)).toBe("PDFのURLを解決できませんでした。");
+	await expect
+		.poll(() => getErrorMessage(japaneseViewer))
+		.toBe("PDFのURLを解決できませんでした。");
 	expect(document.documentElement.lang).toBe("fr");
 });
 

@@ -101,7 +101,9 @@ describe("ThumbnailScheduler", () => {
 		await vi.waitFor(() => expect(calls).toEqual([0, 2]));
 		expect(staleClose).toHaveBeenCalledOnce();
 		pending[1]?.(pixelVisual());
-		await vi.waitFor(() => expect(scheduler.entries.map((entry) => entry.pageIndex)).toEqual([2]));
+		await vi.waitFor(() =>
+			expect(scheduler.entries.map((entry) => entry.pageIndex)).toEqual([2]),
+		);
 		scheduler.setSource(null);
 	});
 
@@ -193,7 +195,9 @@ describe("ThumbnailScheduler", () => {
 		releaseOldRender?.(bitmapVisual(staleClose));
 
 		await vi.waitFor(() => expect(renderCalls).toBe(2));
-		await vi.waitFor(() => expect(scheduler.entries.map((entry) => entry.pageIndex)).toEqual([0]));
+		await vi.waitFor(() =>
+			expect(scheduler.entries.map((entry) => entry.pageIndex)).toEqual([0]),
+		);
 		expect(staleClose).toHaveBeenCalledOnce();
 		scheduler.setSource(null);
 	});

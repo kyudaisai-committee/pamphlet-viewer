@@ -39,7 +39,12 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	failedWorker.reply({
 		id: mainRender.id,
 		type: "rendered",
-		visual: { type: "pixels", width: 1, height: 1, pixels: new Uint8Array([1, 2, 3, 255]).buffer },
+		visual: {
+			type: "pixels",
+			width: 1,
+			height: 1,
+			pixels: new Uint8Array([1, 2, 3, 255]).buffer,
+		},
 	});
 
 	const shadowRoot = element.shadowRoot;
@@ -90,7 +95,12 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	recoveredWorker.reply({
 		id: recoveredMainRender.id,
 		type: "rendered",
-		visual: { type: "pixels", width: 1, height: 1, pixels: new Uint8Array([4, 5, 6, 255]).buffer },
+		visual: {
+			type: "pixels",
+			width: 1,
+			height: 1,
+			pixels: new Uint8Array([4, 5, 6, 255]).buffer,
+		},
 	});
 	await expect.poll(() => shadowRoot.querySelector(".page-frame")).not.toBeNull();
 	await expect.poll(() => shadowRoot.querySelector('[role="alert"]')).toBeNull();

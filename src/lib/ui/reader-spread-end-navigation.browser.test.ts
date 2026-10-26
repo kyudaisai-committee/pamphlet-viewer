@@ -30,7 +30,8 @@ test("does not navigate past the last visible page in spread layout", async () =
 			.toEqual(getExpectedVisibleIndexes(scenario.pageCount, scenario.page));
 
 		const shadowRoot = element.shadowRoot;
-		if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+		if (shadowRoot === null)
+			throw new Error("The pamphlet viewer did not attach its shadow root.");
 		const nextButton = shadowRoot.querySelector<HTMLButtonElement>(
 			'button[aria-label="次のページ"]',
 		);
@@ -71,7 +72,8 @@ test("allows advancing from the cover and from a spread before the final page", 
 		await opened;
 
 		const shadowRoot = element.shadowRoot;
-		if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+		if (shadowRoot === null)
+			throw new Error("The pamphlet viewer did not attach its shadow root.");
 		const nextButton = shadowRoot.querySelector<HTMLButtonElement>(
 			'button[aria-label="次のページ"]',
 		);
@@ -95,7 +97,9 @@ test("keeps single-page navigation available until the last page", async () => {
 
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
-	const nextButton = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="次のページ"]');
+	const nextButton = shadowRoot.querySelector<HTMLButtonElement>(
+		'button[aria-label="次のページ"]',
+	);
 	if (nextButton === null) throw new Error("The next-page button was not rendered.");
 	expect(nextButton.disabled).toBe(false);
 	nextButton.click();

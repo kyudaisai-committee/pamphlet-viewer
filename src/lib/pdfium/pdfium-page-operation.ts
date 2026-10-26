@@ -37,7 +37,8 @@ export function getPageSizeByIndex(
 				sizePointer = pointer;
 			},
 		);
-		if (sizePointer === 0) throw new Error("PDFium could not allocate page-size output memory.");
+		if (sizePointer === 0)
+			throw new Error("PDFium could not allocate page-size output memory.");
 
 		const gotSize = availability.runNative(() =>
 			pdfium.FPDF_GetPageSizeByIndexF(availability.documentHandle, pageIndex, sizePointer),

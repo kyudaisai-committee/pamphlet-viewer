@@ -59,8 +59,9 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 		await expect
 			.poll(
 				() =>
-					viewer.shadowRoot?.querySelector<HTMLSelectElement>('select[aria-label="章へ移動"]')
-						?.options.length ?? 0,
+					viewer.shadowRoot?.querySelector<HTMLSelectElement>(
+						'select[aria-label="章へ移動"]',
+					)?.options.length ?? 0,
 			)
 			.toBe(2);
 		const chapterSelect = viewer.shadowRoot?.querySelector<HTMLSelectElement>(
@@ -88,7 +89,9 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 			.getEntriesByType("resource")
 			.map((entry) => new URL(entry.name));
 		expect(
-			resourceUrls.some((url) => url.pathname.startsWith("/dist/library/assets/pdfium.worker-")),
+			resourceUrls.some((url) =>
+				url.pathname.startsWith("/dist/library/assets/pdfium.worker-"),
+			),
 		).toBe(true);
 		expect(resourceUrls.every((url) => url.origin === window.location.origin)).toBe(true);
 		expect(frameWindow.customElements.get("pamphlet-viewer")).toBeDefined();

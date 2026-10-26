@@ -122,7 +122,8 @@ export function rangeFixturePlugin(): Plugin {
 					return;
 				}
 				if (pathname === REMOTE_LIBRARY_HTML_PATH) {
-					const searchParams = new URL(request.url ?? "/", "http://localhost").searchParams;
+					const searchParams = new URL(request.url ?? "/", "http://localhost")
+						.searchParams;
 					const entryUrl = searchParams.get("entry");
 					const pdfUrl = searchParams.get("pdf");
 					if (entryUrl === null || pdfUrl === null) {
@@ -143,7 +144,9 @@ export function rangeFixturePlugin(): Plugin {
 				}
 				if (pathname === REDIRECT_METRICS_PATH) {
 					response.setHeader("Content-Type", "application/json");
-					response.end(JSON.stringify({ ...redirectFixture.metrics, redirects: redirectRequests }));
+					response.end(
+						JSON.stringify({ ...redirectFixture.metrics, redirects: redirectRequests }),
+					);
 					return;
 				}
 				if (pathname === REDIRECT_FIXTURE_PATH) {
@@ -158,7 +161,11 @@ export function rangeFixturePlugin(): Plugin {
 					const corsServer = createCorsFixtureServer(regularFixture, assetRequests);
 					corsServer.listen(0, "127.0.0.1", function sendCorsServerPort(): void {
 						const address = corsServer.address();
-						if (address === null || address === undefined || typeof address === "string") {
+						if (
+							address === null ||
+							address === undefined ||
+							typeof address === "string"
+						) {
 							response.statusCode = 503;
 							response.end();
 							void disposeFixtureServer(corsServer).catch(reportFixtureDisposalError);

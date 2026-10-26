@@ -117,7 +117,10 @@ export class PdfRangeLoader {
 			const copyEnd = Math.min(position + length, chunkStart + chunk.byteLength);
 			const sourceStart = copyStart - chunkStart;
 			const destinationStart = targetOffset + copyStart - position;
-			target.set(chunk.subarray(sourceStart, sourceStart + copyEnd - copyStart), destinationStart);
+			target.set(
+				chunk.subarray(sourceStart, sourceStart + copyEnd - copyStart),
+				destinationStart,
+			);
 		}
 
 		return true;
@@ -172,7 +175,9 @@ export class PdfRangeLoader {
 			const wave = batches.slice(offset, offset + RANGE_FETCH_CONCURRENCY);
 			const results = await Promise.allSettled(wave.map((batch) => this.#fetchBatch(batch)));
 			this.#throwIfDisposed();
-			cacheEvicted ||= results.some((result) => result.status === "fulfilled" && result.value);
+			cacheEvicted ||= results.some(
+				(result) => result.status === "fulfilled" && result.value,
+			);
 			const rejection = results.find(
 				(result): result is PromiseRejectedResult => result.status === "rejected",
 			);
@@ -185,7 +190,9 @@ export class PdfRangeLoader {
 		if (cacheEvicted) this.#cacheEpoch += 1;
 
 		const retainedCount = this.#forgetRetainedChunks(batches);
-		if (retainedCount !== batches.reduce((count, batch) => count + batch.chunkIndexes.length, 0)) {
+		if (
+			retainedCount !== batches.reduce((count, batch) => count + batch.chunkIndexes.length, 0)
+		) {
 			throw new Error("The requested PDF byte ranges exceed the 64 MiB working cache.");
 		}
 		return retainedCount;

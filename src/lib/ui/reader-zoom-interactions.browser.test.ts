@@ -86,7 +86,9 @@ test("keeps a page assigned synchronously by a pagechange listener", async () =>
 	});
 
 	const shadowRoot = getShadowRoot(element);
-	const nextButton = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="次のページ"]');
+	const nextButton = shadowRoot.querySelector<HTMLButtonElement>(
+		'button[aria-label="次のページ"]',
+	);
 	if (nextButton === null) throw new Error("The next-page button was not rendered.");
 	nextButton.click();
 
@@ -128,14 +130,24 @@ test.each([390, 520, 700])(
 		await expect
 			.poll(() => getFrame(pageArea).getBoundingClientRect().width)
 			.toBeGreaterThan(initialWidth);
-		await expect.poll(() => pagePointError(pageArea, point, initialRatio)).toBeLessThanOrEqual(2);
+		await expect
+			.poll(() => pagePointError(pageArea, point, initialRatio))
+			.toBeLessThanOrEqual(2);
 
 		const pinchStartRatio = measurePageRatio(pageArea, point);
 		const widthBeforePinch = getFrame(pageArea).getBoundingClientRect().width;
-		pageArea.dispatchEvent(createPointerEvent("pointerdown", 1, point.x - 30, point.y, "touch"));
-		pageArea.dispatchEvent(createPointerEvent("pointerdown", 2, point.x + 30, point.y, "touch"));
-		pageArea.dispatchEvent(createPointerEvent("pointermove", 1, point.x - 45, point.y, "touch"));
-		pageArea.dispatchEvent(createPointerEvent("pointermove", 2, point.x + 45, point.y, "touch"));
+		pageArea.dispatchEvent(
+			createPointerEvent("pointerdown", 1, point.x - 30, point.y, "touch"),
+		);
+		pageArea.dispatchEvent(
+			createPointerEvent("pointerdown", 2, point.x + 30, point.y, "touch"),
+		);
+		pageArea.dispatchEvent(
+			createPointerEvent("pointermove", 1, point.x - 45, point.y, "touch"),
+		);
+		pageArea.dispatchEvent(
+			createPointerEvent("pointermove", 2, point.x + 45, point.y, "touch"),
+		);
 		pageArea.dispatchEvent(createPointerEvent("pointerup", 1, point.x - 45, point.y, "touch"));
 		pageArea.dispatchEvent(createPointerEvent("pointerup", 2, point.x + 45, point.y, "touch"));
 		await expect.poll(() => readZoom(shadowRoot)).toBe("270%");
@@ -242,8 +254,12 @@ test.each(["drag", "wheel"] as const)(
 		if (interaction === "drag") {
 			const point = getAreaPoint(pageArea, 0.5, 0.5);
 			pageArea.dispatchEvent(createPointerEvent("pointerdown", 1, point.x, point.y, "mouse"));
-			pageArea.dispatchEvent(createPointerEvent("pointermove", 1, point.x, point.y - 160, "mouse"));
-			pageArea.dispatchEvent(createPointerEvent("pointerup", 1, point.x, point.y - 160, "mouse"));
+			pageArea.dispatchEvent(
+				createPointerEvent("pointermove", 1, point.x, point.y - 160, "mouse"),
+			);
+			pageArea.dispatchEvent(
+				createPointerEvent("pointerup", 1, point.x, point.y - 160, "mouse"),
+			);
 		} else {
 			pageArea.dispatchEvent(
 				new WheelEvent("wheel", {
@@ -530,7 +546,12 @@ function createDeferred<T>(): Deferred<T> {
 }
 
 function pixelVisual(): PageVisual {
-	return { type: "pixels", width: 1, height: 1, pixels: new Uint8Array([70, 80, 90, 255]).buffer };
+	return {
+		type: "pixels",
+		width: 1,
+		height: 1,
+		pixels: new Uint8Array([70, 80, 90, 255]).buffer,
+	};
 }
 
 function getShadowRoot(element: PamphletViewerElement): ShadowRoot {

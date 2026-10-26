@@ -9,7 +9,8 @@ const MAX_RANGE_FETCH_BATCHES_PER_OPERATION = 128;
 
 export class PdfiumAvailabilityFatalError extends Error {
 	constructor(cause: unknown) {
-		const message = cause instanceof Error ? cause.message : "PDFium entered an unusable state.";
+		const message =
+			cause instanceof Error ? cause.message : "PDFium entered an unusable state.";
 		super(message, { cause });
 		this.name = "PdfiumAvailabilityFatalError";
 	}
@@ -99,7 +100,9 @@ export class PdfiumAvailabilitySession {
 	runNative<T>(operation: () => T, captureResult?: (result: T) => void): T {
 		if (this.#disposed) throw new Error("The PDFium availability session is disposed.");
 		if (this.#poisoned)
-			throw new Error("The PDFium availability session cannot be reused after a native failure.");
+			throw new Error(
+				"The PDFium availability session cannot be reused after a native failure.",
+			);
 		this.#callbackError = null;
 
 		let result: T;
@@ -137,7 +140,9 @@ export class PdfiumAvailabilitySession {
 			throw new RangeError(`Page index must be between 0 and ${this.pageCount - 1}.`);
 		}
 		if (this.#isLinearized !== true) {
-			throw new Error("PDFium could not resolve the requested page size from the open document.");
+			throw new Error(
+				"PDFium could not resolve the requested page size from the open document.",
+			);
 		}
 
 		const status = this.runNative(() =>
@@ -155,7 +160,9 @@ export class PdfiumAvailabilitySession {
 
 		const fetched = await this.#fetchMissingChunks(true);
 		if (fetched === 0) {
-			throw new Error("PDFium could not make progress loading the requested page metadata ranges.");
+			throw new Error(
+				"PDFium could not make progress loading the requested page metadata ranges.",
+			);
 		}
 		if (status === 1) {
 			await this.#rebuildNativeState();
@@ -194,7 +201,9 @@ export class PdfiumAvailabilitySession {
 
 			const fetched = await this.#fetchMissingChunks(true);
 			if (fetched === 0) {
-				throw new Error("PDFium could not make progress loading the requested page ranges.");
+				throw new Error(
+					"PDFium could not make progress loading the requested page ranges.",
+				);
 			}
 			if (status === 1) {
 				await this.#rebuildNativeState();
@@ -212,7 +221,9 @@ export class PdfiumAvailabilitySession {
 			this.#throwIfAborted();
 			const fetched = await this.#fetchMissingChunks();
 			if (fetched === 0) {
-				throw new Error("PDFium could not make progress loading the requested page ranges.");
+				throw new Error(
+					"PDFium could not make progress loading the requested page ranges.",
+				);
 			}
 			if (!this.loader.hasMissingChunks) break;
 		}
@@ -292,7 +303,9 @@ export class PdfiumAvailabilitySession {
 					if (this.loader.hasMissingChunks) {
 						rebuildAfterFetch = true;
 					} else {
-						const pageCount = this.runNative(() => this.pdfium.FPDF_GetPageCount(this.#document));
+						const pageCount = this.runNative(() =>
+							this.pdfium.FPDF_GetPageCount(this.#document),
+						);
 						if (this.loader.hasMissingChunks) {
 							rebuildAfterFetch = true;
 						} else if (!Number.isSafeInteger(pageCount) || pageCount < 1) {
@@ -305,7 +318,8 @@ export class PdfiumAvailabilitySession {
 							if (this.loader.hasMissingChunks) {
 								rebuildAfterFetch = true;
 							} else {
-								this.#isLinearized = linearized === 1 ? true : linearized === 0 ? false : null;
+								this.#isLinearized =
+									linearized === 1 ? true : linearized === 0 ? false : null;
 								return;
 							}
 						}
@@ -353,7 +367,9 @@ export class PdfiumAvailabilitySession {
 	#rebuildNativeState(): void {
 		this.#rebuildCount += 1;
 		if (this.#rebuildCount > MAX_CACHE_REBUILDS) {
-			throw new Error("PDFium could not keep the required ranges within the 64 MiB working cache.");
+			throw new Error(
+				"PDFium could not keep the required ranges within the 64 MiB working cache.",
+			);
 		}
 		this.#releaseDocumentAndAvailability();
 		this.#nativeCacheEpoch = this.loader.cacheEpoch;
