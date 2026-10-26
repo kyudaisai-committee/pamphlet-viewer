@@ -36,14 +36,16 @@ test("starts the latest visible page while the previous render range is held", a
 
 		controller.requestRender(renderInput(24));
 		await waitForDelayedRange();
-		const latestRequestId = controller.requestRender(renderInput(1));
+		const latestRequestId = controller.requestRender(renderInput(13));
 		if (latestRequestId === null) throw new Error("The latest page request was rejected.");
 		controllerOwnsSource = true;
 
 		await waitForRender(controller, 1, 3000);
 		expect(controller.renderedRequestId).toBe(latestRequestId);
-		expect(controller.pageVisuals[0]).toBeDefined();
-		expect((await readMetrics()).delayRangeFinished).toBe(false);
+		expect(controller.pageVisuals[12]).toBeDefined();
+		const metrics = await readMetrics();
+		expect(metrics.rangeRequests).toBeGreaterThan(1);
+		expect(metrics.delayRangeFinished).toBe(false);
 	} finally {
 		await releaseDelayedRange();
 		controller.dispose();
