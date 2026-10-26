@@ -130,6 +130,42 @@ describe("PagePrerenderScheduler", () => {
 		scheduler.setSource(null);
 	});
 
+	it.each([
+		{ budgetMiB: 64, retainedPages: [2, 3], evictedPages: [0, 1] },
+		{ budgetMiB: 128, retainedPages: [0, 1, 2, 3], evictedPages: [] },
+	])(
+		"retains full-size images under a $budgetMiB MiB cache budget",
+		async ({ budgetMiB, retainedPages, evictedPages }) => {
+			const closes = Array.from({ length: 4 }, () => vi.fn());
+			const visualBytes = 4096 * 2048 * 4;
+			const scheduler = new PagePrerenderScheduler(4, budgetMiB * 1024 * 1024);
+			scheduler.setSource(
+				createSource(async (pageIndex) => {
+					const close = closes[pageIndex];
+					if (close === undefined) throw new Error("Unexpected page request.");
+					return bitmapVisual(close, 4096, 2048);
+				}),
+			);
+			scheduler.setRequests(
+				Array.from({ length: 4 }, (_value, pageIndex) => ({ pageIndex, scale: 1 })),
+			);
+
+			await vi.waitFor(() =>
+				expect(scheduler.cachedPixelBytes).toBe(retainedPages.length * visualBytes),
+			);
+			for (const pageIndex of retainedPages) {
+				expect(scheduler.take(pageIndex, 1)).toBeDefined();
+			}
+			expect(scheduler.cachedPixelBytes).toBe(0);
+			for (const pageIndex of evictedPages) {
+				const close = closes[pageIndex];
+				if (close === undefined) throw new Error("The evicted image is missing.");
+				expect(close).toHaveBeenCalledOnce();
+			}
+			scheduler.setSource(null);
+		},
+	);
+
 	it("silently drops ordinary render failures", async () => {
 		const render = vi.fn(async () => {
 			throw new Error("Temporary background failure.");

@@ -3,7 +3,7 @@
 import type { PageSource, PageVisual } from "../document/page-source";
 
 export const MAX_PRERENDER_ENTRIES = 4;
-export const MAX_PRERENDER_PIXEL_BYTES = 64 * 1024 * 1024;
+export const MAX_PRERENDER_PIXEL_BYTES = 128 * 1024 * 1024;
 const MAX_CONCURRENT_PRERENDERS = 2;
 
 export interface PagePrerenderRequest {
@@ -34,6 +34,15 @@ export class PagePrerenderScheduler {
 	#tasksByKey = new Map<string, PagePrerenderTask>();
 	#cache = new Map<string, PagePrerenderEntry>();
 	#cacheBytes = 0;
+
+	constructor(
+		private readonly maxEntries = MAX_PRERENDER_ENTRIES,
+		private readonly maxPixelBytes = MAX_PRERENDER_PIXEL_BYTES,
+	) {}
+
+	get cachedPixelBytes(): number {
+		return this.#cacheBytes;
+	}
 
 	setSource(source: PageSource | null): void {
 		if (source === this.#source) return;
@@ -180,7 +189,7 @@ export class PagePrerenderScheduler {
 		if (
 			!Number.isSafeInteger(entry.pixelBytes) ||
 			entry.pixelBytes <= 0 ||
-			entry.pixelBytes > MAX_PRERENDER_PIXEL_BYTES
+			entry.pixelBytes > this.maxPixelBytes
 		) {
 			releaseVisual(entry.visual);
 			return;
@@ -189,10 +198,7 @@ export class PagePrerenderScheduler {
 		if (previous !== undefined) this.#deleteEntry(key, previous);
 		this.#cache.set(key, entry);
 		this.#cacheBytes += entry.pixelBytes;
-		while (
-			this.#cache.size > MAX_PRERENDER_ENTRIES ||
-			this.#cacheBytes > MAX_PRERENDER_PIXEL_BYTES
-		) {
+		while (this.#cache.size > this.maxEntries || this.#cacheBytes > this.maxPixelBytes) {
 			const oldest = this.#cache.entries().next().value as
 				| [string, PagePrerenderEntry]
 				| undefined;
