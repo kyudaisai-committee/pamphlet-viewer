@@ -56,6 +56,72 @@ test("renders first and distant pages before downloading the full PDF", async ()
 	}
 }, 120_000);
 
+test("prefetches a distant page's content ranges before rendering it", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+
+	const worker = new PdfiumWorkerClient();
+	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
+	try {
+		const info = await worker.open(url);
+		const beforePrefetch = await readMetrics();
+		await worker.prefetchPage(info.pageCount - 1);
+		const afterPrefetch = await readMetrics();
+		const beforeRanges = new Set(beforePrefetch.ranges.map(rangeKey));
+		const prefetchedRanges = afterPrefetch.ranges.filter(
+			(range) => !beforeRanges.has(rangeKey(range)),
+		);
+
+		expect(prefetchedRanges.some((range) => range.start > 8 * 1024 * 1024)).toBe(true);
+		expect(afterPrefetch.fullRequests).toBe(0);
+		expect(afterPrefetch.requestedBytes).toBeLessThan(afterPrefetch.fileLength);
+
+		const visual = await worker.renderPage(info.pageCount - 1, 1);
+		expect(visual.type).toBe("pixels");
+		if (visual.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		expect(centerPixel(visual.pixels).r).toBeGreaterThan(200);
+		const afterRender = await readMetrics();
+		expect(afterRender.fullRequests).toBe(0);
+		expect(afterRender.requestedBytes).toBeLessThan(afterRender.fileLength);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
+test("prefetches an image-bearing page's encoded image data without rendering", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+
+	const worker = new PdfiumWorkerClient();
+	const url = new URL("/__image-prefetch-range-fixture.pdf", window.location.href).href;
+	try {
+		const info = await worker.open(url);
+		const beforePrefetch = await readMetrics("/__image-prefetch-range-metrics");
+		await worker.prefetchPage(info.pageCount - 1);
+		const afterPrefetch = await readMetrics("/__image-prefetch-range-metrics");
+
+		expect(afterPrefetch.ranges.length).toBeGreaterThan(beforePrefetch.ranges.length);
+		expect(afterPrefetch.requestedBytes - beforePrefetch.requestedBytes).toBeGreaterThanOrEqual(
+			150 * 1024,
+		);
+		expect(afterPrefetch.fullRequests).toBe(0);
+		expect(afterPrefetch.requestedBytes).toBeLessThan(afterPrefetch.fileLength);
+
+		const visual = await worker.renderPage(info.pageCount - 1, 1);
+		expect(visual.type).toBe("pixels");
+		if (visual.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");
+		const renderedPixel = centerPixel(visual.pixels);
+		expect(renderedPixel.r).toBeGreaterThan(100);
+		expect(renderedPixel.g).toBeGreaterThan(100);
+		expect(renderedPixel.b).toBeGreaterThan(100);
+		const afterRender = await readMetrics("/__image-prefetch-range-metrics");
+		expect(afterRender.requestedBytes).toBe(afterPrefetch.requestedBytes);
+		expect(afterRender.ranges).toEqual(afterPrefetch.ranges);
+	} finally {
+		worker.terminate();
+	}
+}, 120_000);
+
 test("renders tiny pages at a fit scale above eight without exceeding the pixel limit", async () => {
 	const worker = new PdfiumWorkerClient();
 	try {

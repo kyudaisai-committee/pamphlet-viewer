@@ -13,6 +13,8 @@ import { createAnnotatedPdfFixture, createPdfFixture } from "./pdf-fixture.js";
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 const METRICS_PATH = "/__pdfium-range-metrics";
 const RESET_PATH = "/__pdfium-range-reset";
+const IMAGE_PREFETCH_FIXTURE_PATH = "/__image-prefetch-range-fixture.pdf";
+const IMAGE_PREFETCH_METRICS_PATH = "/__image-prefetch-range-metrics";
 const LINEARIZED_FIXTURE_PATH = "/__linearized-range-fixture.pdf";
 const LINEARIZED_METRICS_PATH = "/__linearized-range-metrics";
 const TINY_PAGE_FIXTURE_PATH = "/__tiny-page-range-fixture.pdf";
@@ -47,6 +49,10 @@ interface ByteRange {
 
 export function rangeFixturePlugin(): Plugin {
 	const regularFixture = createFixtureRecord(createPdfFixture(), METRICS_PATH);
+	const imagePrefetchFixture = createFixtureRecord(
+		createPdfFixture({ imagePageNumbers: [24] }),
+		IMAGE_PREFETCH_METRICS_PATH,
+	);
 	const linearizedFixture = createFixtureRecord(
 		Buffer.from(readFileSync(new URL("./fixtures/pamphlet-linearized.pdf", import.meta.url))),
 		LINEARIZED_METRICS_PATH,
@@ -75,6 +81,7 @@ export function rangeFixturePlugin(): Plugin {
 	let redirectRequests = 0;
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
+		[IMAGE_PREFETCH_FIXTURE_PATH, imagePrefetchFixture],
 		[LINEARIZED_FIXTURE_PATH, linearizedFixture],
 		[TINY_PAGE_FIXTURE_PATH, tinyPageFixture],
 		[ROTATED_CROP_FIXTURE_PATH, rotatedCropFixture],
