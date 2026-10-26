@@ -7,6 +7,29 @@ import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 
 const BOOKMARKS_STORAGE_KEY = "pamphlet-viewer.bookmarks.v1";
 
+test("prevents selecting UI labels while preserving editable controls", async () => {
+	await import("../entry");
+	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
+	element.layout = "single";
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const shadowRoot = element.shadowRoot;
+	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
+	const label = shadowRoot.querySelector<HTMLElement>(".reset-label");
+	const pageInput = shadowRoot.querySelector<HTMLInputElement>('[aria-label="ページ番号"]');
+	if (label === null || pageInput === null) {
+		throw new Error("The viewer label or page input is missing.");
+	}
+
+	expect(getComputedStyle(label).userSelect).toBe("none");
+	expect(getComputedStyle(pageInput).userSelect).toBe("text");
+	pageInput.value = "2";
+	pageInput.dispatchEvent(new Event("change", { bubbles: true }));
+	await expect.poll(() => element.page).toBe(2);
+});
+
 afterEach(async () => {
 	document.body.replaceChildren();
 	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
