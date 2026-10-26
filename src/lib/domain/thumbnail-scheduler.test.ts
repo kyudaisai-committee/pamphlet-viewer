@@ -328,6 +328,9 @@ function createPageSource(
 		async renderPage() {
 			return pixelVisual();
 		},
+		async renderPrefetchedPage() {
+			return pixelVisual();
+		},
 		dispose() {},
 	};
 }

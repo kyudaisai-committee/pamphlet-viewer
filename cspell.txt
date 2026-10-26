@@ -1,6 +1,10 @@
 EmbedPDF
 PDFium
 linearization
+prerender
+prerendered
+Prerenders
+PRERENDERS
 FPDF
 ANNOT
 Annot

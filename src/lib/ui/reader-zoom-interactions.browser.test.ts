@@ -531,6 +531,9 @@ function createBackend(tracker?: RenderTracker, pageCount = 1): DocumentBackend 
 						return visual;
 					});
 				},
+				async renderPrefetchedPage() {
+					return pixelVisual();
+				},
 				dispose() {},
 			};
 		},

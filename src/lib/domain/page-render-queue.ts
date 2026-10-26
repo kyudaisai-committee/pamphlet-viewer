@@ -5,6 +5,8 @@ import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 
+const MAX_CONCURRENT_RENDERS = 2;
+
 export type PageRenderPriority = "visible" | "thumbnail" | "prefetch";
 
 interface TaskBase {
@@ -29,7 +31,8 @@ type PageTask = RenderTask | PrefetchTask;
 
 export class PageRenderQueue {
 	#tasks: PageTask[] = [];
-	#running = false;
+	#active = 0;
+	#prefetchRunning = false;
 	#disposed = false;
 	#sequence = 0;
 
@@ -98,53 +101,72 @@ export class PageRenderQueue {
 		void this.#drain();
 	}
 
-	async #drain(): Promise<void> {
-		if (this.#running || this.#disposed) return;
-		this.#running = true;
-		try {
-			while (!this.#disposed && this.#tasks.length > 0) {
-				const task = this.#tasks.shift();
-				if (task === undefined) continue;
-				try {
-					if (task.type === "prefetch") {
-						await this.source.prefetchPage?.(task.pageIndex);
-						task.resolve();
-						continue;
-					}
-					if (task.priority === "thumbnail") {
-						if (this.source.renderThumbnail !== undefined) {
-							try {
-								const thumbnail = await this.source.renderThumbnail(task.pageIndex);
-								if (thumbnail !== null) {
-									task.resolve(thumbnail);
-									continue;
-								}
-							} catch (error) {
-								if (
-									this.source.propagateThumbnailErrors === true ||
-									isUnrecoverableThumbnailError(error)
-								) {
-									throw error;
-								}
-							}
-						}
-						const pageSize = await this.source.getPageSize(task.pageIndex);
-						task.resolve(
-							await this.source.renderPage(
-								task.pageIndex,
-								calculateThumbnailScale(pageSize.width, pageSize.height),
-							),
-						);
-						continue;
-					}
-					task.resolve(await this.source.renderPage(task.pageIndex, task.scale));
-				} catch (error) {
-					task.reject(error);
+	#drain(): void {
+		if (
+			!this.#disposed &&
+			!this.#prefetchRunning &&
+			this.#active === 0 &&
+			!this.#tasks.some((task) => task.type === "render")
+		) {
+			const prefetchIndex = this.#tasks.findIndex((task) => task.type === "prefetch");
+			if (prefetchIndex !== -1) {
+				const task = this.#tasks.splice(prefetchIndex, 1)[0];
+				if (task !== undefined) {
+					this.#prefetchRunning = true;
+					void this.#run(task);
 				}
 			}
+		}
+		while (!this.#disposed && this.#active < MAX_CONCURRENT_RENDERS && this.#tasks.length > 0) {
+			const renderIndex = this.#tasks.findIndex((task) => task.type === "render");
+			if (renderIndex === -1) break;
+			const task = this.#tasks.splice(renderIndex, 1)[0];
+			if (task === undefined) continue;
+			this.#active += 1;
+			void this.#run(task);
+		}
+	}
+
+	async #run(task: PageTask): Promise<void> {
+		try {
+			if (task.type === "prefetch") {
+				await this.source.prefetchPage?.(task.pageIndex);
+				task.resolve();
+				return;
+			}
+			if (task.priority === "thumbnail") {
+				if (this.source.renderThumbnail !== undefined) {
+					try {
+						const thumbnail = await this.source.renderThumbnail(task.pageIndex);
+						if (thumbnail !== null) {
+							task.resolve(thumbnail);
+							return;
+						}
+					} catch (error) {
+						if (
+							this.source.propagateThumbnailErrors === true ||
+							isUnrecoverableThumbnailError(error)
+						) {
+							throw error;
+						}
+					}
+				}
+				const pageSize = await this.source.getPageSize(task.pageIndex);
+				task.resolve(
+					await this.source.renderPage(
+						task.pageIndex,
+						calculateThumbnailScale(pageSize.width, pageSize.height),
+					),
+				);
+				return;
+			}
+			task.resolve(await this.source.renderPage(task.pageIndex, task.scale));
+		} catch (error) {
+			task.reject(error);
 		} finally {
-			this.#running = false;
-			if (!this.#disposed && this.#tasks.length > 0) void this.#drain();
+			if (task.type === "prefetch") this.#prefetchRunning = false;
+			else this.#active -= 1;
+			this.#drain();
 		}
 	}
 }

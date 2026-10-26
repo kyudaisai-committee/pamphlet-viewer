@@ -10,11 +10,14 @@ import { createViewerMessages } from "../i18n/viewer-messages";
 import type { ViewerMessages } from "../i18n/viewer-messages";
 import {
 	calculateFitScale,
+	getAdjacentPageGroups,
 	getPrefetchPageIndexes,
 	resolveLayout,
 	visiblePageIndexes,
 } from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
+import { PagePrerenderScheduler } from "./page-prerender-scheduler";
+import type { PagePrerenderRequest } from "./page-prerender-scheduler";
 import { PageRenderQueue } from "./page-render-queue";
 import { createPageRenderPlan } from "./render-plan";
 import type { PageRenderPlan } from "./render-plan";
@@ -78,6 +81,7 @@ export class ViewerController {
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailRenderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
+	#prerenderScheduler = new PagePrerenderScheduler();
 	#reportCleanupError: (error: unknown) => void;
 	#messages: ViewerMessages;
 
@@ -144,6 +148,7 @@ export class ViewerController {
 			this.pageSource = pageSource;
 			this.#renderQueue = new PageRenderQueue(pageSource);
 			this.#thumbnailRenderQueue = new PageRenderQueue(pageSource);
+			this.#prerenderScheduler.setSource(pageSource);
 			this.#thumbnailScheduler.setSource(pageSource);
 			this.pageCount = pageSource.pageCount;
 			this.phase = "ready";
@@ -210,6 +215,7 @@ export class ViewerController {
 		if (this.phase !== "ready") return null;
 		if (key === this.#lastRenderKey) return this.#renderId;
 		this.#lastRenderKey = key;
+		this.#prerenderScheduler.setRequests([], true);
 		this.#renderQueue?.cancelQueued("prefetch");
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
@@ -308,7 +314,24 @@ export class ViewerController {
 				pageIndexes.map(async (pageIndex, localIndex) => {
 					const plan = plans[localIndex];
 					if (plan === undefined) throw new Error("The page render plan is missing.");
-					const visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
+					const prerender = this.#prerenderScheduler.claim(pageIndex, plan.rasterScale);
+					let visual: PageVisual;
+					if (prerender === undefined) {
+						visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
+					} else {
+						try {
+							visual = await prerender;
+						} catch (error) {
+							if (!this.#isCurrent(request, source)) {
+								throw error;
+							}
+							visual = await renderQueue.render(
+								pageIndex,
+								plan.rasterScale,
+								"visible",
+							);
+						}
+					}
 					return { visual, plan };
 				}),
 			);
@@ -339,6 +362,7 @@ export class ViewerController {
 			this.renderedZoom = request.zoom;
 			this.renderRevision += 1;
 			this.#prefetchAdjacentPages(request, source, pageIndexes);
+			void this.#requestAdjacentPrerenders(request, source);
 			const visiblePages = pageIndexes.map((index) => index + 1);
 			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
 			if (pageChangeKey !== this.#lastPageChangeKey) {
@@ -390,6 +414,59 @@ export class ViewerController {
 		}
 	}
 
+	async #requestAdjacentPrerenders(request: ScheduledRender, source: PageSource): Promise<void> {
+		const layout = resolveLayout(request.layout, request.viewport.width);
+		const groups = getAdjacentPageGroups(this.pageCount, request.page, layout);
+		try {
+			const requestsByGroup = await Promise.all(
+				groups.map(async (pageIndexes) => {
+					const pageSizes = await Promise.all(
+						pageIndexes.map((pageIndex) => source.getPageSize(pageIndex)),
+					);
+					const displayScale = calculateFitScale(
+						pageSizes,
+						request.viewport,
+						request.fit,
+						request.zoom,
+					);
+					return pageIndexes.flatMap((pageIndex, localIndex) => {
+						const pageSize = pageSizes[localIndex];
+						if (pageSize === undefined) return [];
+						return [
+							{
+								pageIndex,
+								scale: createPageRenderPlan(
+									pageSize,
+									displayScale,
+									undefined,
+									request.devicePixelRatio ?? 1,
+								).rasterScale,
+							},
+						];
+					});
+				}),
+			);
+			if (!this.#isCurrent(request, source)) return;
+			const orderedRequests: PagePrerenderRequest[] = [];
+			for (let groupIndex = 0; ; groupIndex += 1) {
+				let foundRequest = false;
+				for (const groupRequests of requestsByGroup) {
+					const request = groupRequests[groupIndex];
+					if (request === undefined) continue;
+					orderedRequests.push(request);
+					foundRequest = true;
+				}
+				if (!foundRequest) break;
+			}
+			this.#prerenderScheduler.setRequests(orderedRequests);
+		} catch (error) {
+			if (source === this.pageSource && error instanceof PageSourceUnavailableError) {
+				this.#handleSourceUnavailable();
+			}
+			// A speculative page-size lookup can be retried with the next render request.
+		}
+	}
+
 	#isCurrent(request: ScheduledRender, source: PageSource): boolean {
 		return (
 			request.id === this.#renderId &&
@@ -411,6 +488,7 @@ export class ViewerController {
 		this.#renderQueue = null;
 		this.#thumbnailRenderQueue?.dispose();
 		this.#thumbnailRenderQueue = null;
+		this.#prerenderScheduler.setSource(null);
 		this.#thumbnailScheduler.setSource(null);
 		this.#abortController?.abort();
 		this.#abortController = null;
@@ -449,6 +527,7 @@ export class ViewerController {
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
 		this.#failedRenderKey = "";
+		this.#prerenderScheduler.clear();
 		this.#renderQueue?.cancelQueued("visible");
 		this.#renderQueue?.cancelQueued("prefetch");
 	}

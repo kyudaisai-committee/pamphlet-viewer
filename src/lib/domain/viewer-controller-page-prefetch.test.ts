@@ -201,6 +201,9 @@ function createPageSource(
 			return { width: 300, height: 400 };
 		},
 		renderPage,
+		async renderPrefetchedPage() {
+			return pixelVisual();
+		},
 		prefetchPage,
 		dispose() {},
 	};

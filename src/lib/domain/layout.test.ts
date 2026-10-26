@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	calculateFitScale,
+	getAdjacentPageGroups,
 	getPrefetchPageIndexes,
 	parsePageNumber,
 	resolveLayout,
@@ -42,6 +43,26 @@ describe("getPrefetchPageIndexes", () => {
 		expect(getPrefetchPageIndexes(10, [1, 2], "spread")).toEqual([0, 3, 4, 5, 6]);
 		expect(getPrefetchPageIndexes(10, [5, 6], "spread")).toEqual([1, 2, 3, 4, 7, 8, 9]);
 		expect(getPrefetchPageIndexes(5, [3, 4], "spread")).toEqual([0, 1, 2]);
+	});
+});
+
+describe("getAdjacentPageGroups", () => {
+	it("selects one neighboring page on each side in single-page layout", () => {
+		expect(getAdjacentPageGroups(10, 5, "single")).toEqual([[3], [5]]);
+		expect(getAdjacentPageGroups(4, 1, "single")).toEqual([[1]]);
+		expect(getAdjacentPageGroups(4, 4, "single")).toEqual([[2]]);
+	});
+
+	it("selects neighboring spreads while preserving the single-page cover and last page", () => {
+		expect(getAdjacentPageGroups(10, 1, "spread")).toEqual([[1, 2]]);
+		expect(getAdjacentPageGroups(10, 2, "spread")).toEqual([[0], [3, 4]]);
+		expect(getAdjacentPageGroups(5, 4, "spread")).toEqual([[1, 2]]);
+		expect(getAdjacentPageGroups(0, 1, "spread")).toEqual([]);
+	});
+
+	it("uses the resolved layout for automatic mode", () => {
+		const layout = resolveLayout("auto", 760);
+		expect(getAdjacentPageGroups(10, 2, layout)).toEqual([[0], [3, 4]]);
 	});
 });
 

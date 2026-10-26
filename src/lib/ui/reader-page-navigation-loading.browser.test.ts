@@ -77,6 +77,9 @@ function createPageSource(): PageSource {
 		async renderPage(): Promise<PageVisual> {
 			return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
 		},
+		async renderPrefetchedPage(): Promise<PageVisual> {
+			return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
+		},
 		dispose() {},
 	};
 }

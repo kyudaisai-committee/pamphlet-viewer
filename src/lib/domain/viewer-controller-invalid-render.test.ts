@@ -73,9 +73,12 @@ describe("ViewerController invalid render requests", () => {
 			await controller.load(
 				"brochure.pdf",
 				createBackend({
-					pageCount: 2,
+					pageCount: 1,
 					getPageSize,
 					renderPage,
+					async renderPrefetchedPage() {
+						return pixelVisual();
+					},
 					dispose() {},
 				}),
 			);
@@ -130,6 +133,9 @@ function createPageSource(
 			return { width: 300, height: 400 };
 		},
 		renderPage,
+		async renderPrefetchedPage() {
+			return pixelVisual();
+		},
 		dispose() {},
 	};
 }

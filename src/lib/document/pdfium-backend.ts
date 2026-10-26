@@ -8,21 +8,23 @@ import {
 	type PageSource,
 	type PageVisual,
 } from "./page-source";
+import { PdfiumWorkerPool } from "./pdfium-worker-pool";
 
 export class PdfiumBackend implements DocumentBackend {
 	async open(source: string, signal: AbortSignal): Promise<PageSource> {
 		if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
 		const client = new PdfiumWorkerClient();
 		let thumbnailClient: PdfiumWorkerClient | null = null;
+		let pageSource: PdfiumPageSource | null = null;
 		const abort = function terminateWorker(): void {
-			client.terminate();
-			thumbnailClient?.terminate();
+			if (pageSource === null) client.terminate();
+			else pageSource.dispose();
 		};
 		signal.addEventListener("abort", abort, { once: true });
 		try {
 			const info = await client.open(source);
 			if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-			return new PdfiumPageSource(
+			pageSource = new PdfiumPageSource(
 				info.pageCount,
 				client,
 				source,
@@ -37,6 +39,7 @@ export class PdfiumBackend implements DocumentBackend {
 					thumbnailClient = null;
 				},
 			);
+			return pageSource;
 		} catch (error) {
 			signal.removeEventListener("abort", abort);
 			client.terminate();
@@ -47,6 +50,8 @@ export class PdfiumBackend implements DocumentBackend {
 
 class PdfiumPageSource implements PageSource {
 	#disposed = false;
+	#foregroundPool: PdfiumWorkerPool;
+	#prefetchPool: PdfiumWorkerPool;
 	readonly propagateThumbnailErrors = true;
 
 	constructor(
@@ -57,7 +62,10 @@ class PdfiumPageSource implements PageSource {
 		private readonly abortListener: () => void,
 		private readonly getThumbnailClient: () => PdfiumWorkerClient,
 		private readonly terminateThumbnailClient: () => void,
-	) {}
+	) {
+		this.#foregroundPool = new PdfiumWorkerPool(source, pageCount, client);
+		this.#prefetchPool = new PdfiumWorkerPool(source, pageCount);
+	}
 
 	getPageSize(pageIndex: number): Promise<PageSize> {
 		this.#assertActive();
@@ -71,7 +79,12 @@ class PdfiumPageSource implements PageSource {
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
-		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);
+		return this.#foregroundPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
+	}
+
+	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual> {
+		this.#assertActive();
+		return this.#prefetchPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
 	}
 
 	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
@@ -88,7 +101,8 @@ class PdfiumPageSource implements PageSource {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.signal.removeEventListener("abort", this.abortListener);
-		this.client.terminate();
+		this.#foregroundPool.dispose();
+		this.#prefetchPool.dispose();
 		this.terminateThumbnailClient();
 	}
 

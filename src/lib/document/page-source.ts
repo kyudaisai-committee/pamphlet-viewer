@@ -18,6 +18,7 @@ export interface PageSource {
 	prefetchPage?(pageIndex: number): Promise<void>;
 	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	prefetchThumbnail?(pageIndex: number): Promise<PageVisual | null>;
+	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual>;
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual>;
 	dispose(): void | Promise<void>;
 }

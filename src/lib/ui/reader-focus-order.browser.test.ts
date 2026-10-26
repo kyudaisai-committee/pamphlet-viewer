@@ -246,6 +246,14 @@ function createBackend(): DocumentBackend {
 						pixels: new Uint8ClampedArray(300 * 400 * 4).buffer,
 					};
 				},
+				async renderPrefetchedPage(): Promise<PageVisual> {
+					return {
+						type: "pixels",
+						width: 300,
+						height: 400,
+						pixels: new Uint8ClampedArray(300 * 400 * 4).buffer,
+					};
+				},
 				dispose(): void {},
 			};
 		},
