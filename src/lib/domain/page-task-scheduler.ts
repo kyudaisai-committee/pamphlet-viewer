@@ -26,9 +26,10 @@ interface PageTaskWaiter<Result> {
 	abortListener: (() => void) | null;
 }
 
-interface ScheduledTask<Result> extends PageTask<Result> {
+interface ScheduledTask<Result> extends Omit<PageTask<Result>, "priority"> {
+	priority: PageTaskPriority;
 	sequence: number;
-	state: "queued" | "running" | "complete";
+	state: "queued" | "running" | "aborting" | "complete";
 	waiters: Set<PageTaskWaiter<Result>>;
 	controller: AbortController | null;
 	result: Result | null;
@@ -80,10 +81,10 @@ export class PageTaskScheduler {
 		}
 
 		const waiter = this.#createWaiter(scheduled, signal);
-		this.#drain();
 		return new Promise((resolve, reject) => {
 			waiter.resolve = resolve;
 			waiter.reject = reject;
+			this.#drain();
 		});
 	}
 
@@ -137,7 +138,11 @@ export class PageTaskScheduler {
 			this.#removeTask(task);
 			return;
 		}
-		if (task.state === "running") task.controller?.abort();
+		if (task.state === "running") {
+			task.state = "aborting";
+			this.#removeTask(task);
+			task.controller?.abort();
+		}
 	}
 
 	#drain(): void {
@@ -161,7 +166,9 @@ export class PageTaskScheduler {
 	#canStart(task: ScheduledTask<unknown>): boolean {
 		if (task.priority === "visible") return true;
 		const backgroundCount = [...this.#tasks.values()].filter(
-			(candidate) => candidate.state === "running" && candidate.priority !== "visible",
+			(candidate) =>
+				(candidate.state === "running" || candidate.state === "aborting") &&
+				candidate.priority !== "visible",
 		).length;
 		return backgroundCount < this.options.maximumConcurrent - this.options.reservedVisible;
 	}

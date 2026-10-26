@@ -92,6 +92,50 @@ test("releases a shared result once after every lease is released", async () => 
 	scheduler.dispose();
 });
 
+test("does not join a new consumer to an aborting task and releases its late result", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 2, reservedVisible: 0 });
+	const oldResult = createDeferred<{ id: string }>();
+	const releaseOldResult = vi.fn();
+	const controller = new AbortController();
+	const oldTask = scheduler.schedule(
+		{
+			key: "same-page:scale",
+			priority: "prerender",
+			execute: () => oldResult.promise,
+			releaseResult: releaseOldResult,
+		},
+		controller.signal,
+	);
+	controller.abort();
+	await expect(oldTask).rejects.toMatchObject({ name: "AbortError" });
+	const newTask = scheduler.schedule({
+		key: "same-page:scale",
+		priority: "visible",
+		execute: async () => ({ id: "new" }),
+	});
+	const newLease = await newTask;
+	expect(newLease.value.id).toBe("new");
+	newLease.release();
+
+	oldResult.resolve({ id: "old" });
+	await vi.waitFor(() => expect(releaseOldResult).toHaveBeenCalledOnce());
+	scheduler.dispose();
+});
+
+test("rejects a task whose executor throws synchronously", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const failure = new Error("synchronous executor failure");
+	const scheduled = scheduler.schedule({
+		key: "broken",
+		priority: "visible",
+		execute: () => {
+			throw failure;
+		},
+	});
+	await expect(scheduled).rejects.toBe(failure);
+	scheduler.dispose();
+});
+
 function createDeferred<Value>(): {
 	promise: Promise<Value>;
 	resolve(value: Value): void;
