@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";

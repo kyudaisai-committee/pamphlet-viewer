@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 const PIXEL_BYTES = 4;
 const MAX_THUMBNAIL_PIXELS = 160_000;
