@@ -16,6 +16,7 @@ export interface PageSource {
 	getPageSize(pageIndex: number): Promise<PageSize>;
 	prefetchPage?(pageIndex: number): Promise<void>;
 	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
+	prefetchThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual>;
 	dispose(): void | Promise<void>;
 }

@@ -36,12 +36,19 @@ interface ThumbnailRequest {
 	pageIndex: number;
 }
 
+interface ThumbnailPrefetchRequest {
+	id: number;
+	type: "thumbnail-prefetch";
+	pageIndex: number;
+}
+
 type WorkerRequest =
 	| OpenRequest
 	| PageSizeRequest
 	| PagePrefetchRequest
 	| RenderRequest
-	| ThumbnailRequest;
+	| ThumbnailRequest
+	| ThumbnailPrefetchRequest;
 
 interface OpenedResponse {
 	id: number;
@@ -73,6 +80,12 @@ interface ThumbnailResponse {
 	visual: PageVisual | null;
 }
 
+interface ThumbnailPrefetchResponse {
+	id: number;
+	type: "thumbnail-prefetch";
+	visual: PageVisual | null;
+}
+
 interface ErrorResponse {
 	id: number;
 	type: "error";
@@ -86,6 +99,7 @@ type WorkerResponse =
 	| PagePrefetchResponse
 	| RenderedResponse
 	| ThumbnailResponse
+	| ThumbnailPrefetchResponse
 	| ErrorResponse;
 
 interface WorkerScope {
@@ -150,6 +164,17 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 		if (request.type === "thumbnail") {
 			const visual = await session.renderThumbnail(request.pageIndex);
 			const response: ThumbnailResponse = { id: request.id, type: "thumbnail", visual };
+			const transfer = visual?.type === "pixels" ? [visual.pixels] : [];
+			workerScope.postMessage(response, transfer);
+			return;
+		}
+		if (request.type === "thumbnail-prefetch") {
+			const visual = await session.prefetchThumbnail(request.pageIndex);
+			const response: ThumbnailPrefetchResponse = {
+				id: request.id,
+				type: "thumbnail-prefetch",
+				visual,
+			};
 			const transfer = visual?.type === "pixels" ? [visual.pixels] : [];
 			workerScope.postMessage(response, transfer);
 			return;
