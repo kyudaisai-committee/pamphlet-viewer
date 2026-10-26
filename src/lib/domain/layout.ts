@@ -39,6 +39,37 @@ export function visiblePageIndexes(
 	return secondPageIndex < pageCount ? [firstPageIndex, secondPageIndex] : [firstPageIndex];
 }
 
+export function getPrefetchPageIndexes(
+	pageCount: number,
+	visibleIndexes: readonly number[],
+	layout: ResolvedLayout,
+): number[] {
+	const first = visibleIndexes[0];
+	if (pageCount < 1 || first === undefined) return [];
+	if (layout === "single") {
+		return [first - 2, first - 1, first + 1, first + 2].filter(
+			(pageIndex) => pageIndex >= 0 && pageIndex < pageCount,
+		);
+	}
+
+	const currentSpread = first === 0 ? 0 : Math.floor((first + 1) / 2);
+	const adjacentIndexes = [
+		currentSpread - 2,
+		currentSpread - 1,
+		currentSpread + 1,
+		currentSpread + 2,
+	].flatMap((spread) => {
+		if (spread < 0) return [];
+		if (spread === 0) return [0];
+		const firstPageIndex = spread * 2 - 1;
+		return [firstPageIndex, firstPageIndex + 1];
+	});
+	const visible = new Set(visibleIndexes);
+	return adjacentIndexes.filter(
+		(pageIndex) => pageIndex >= 0 && pageIndex < pageCount && !visible.has(pageIndex),
+	);
+}
+
 export function parsePageNumber(value: string, pageCount: number): number | null {
 	if (!/^\d+$/.test(value)) return null;
 	const pageNumber = Number(value);

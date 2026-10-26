@@ -8,7 +8,12 @@ import {
 } from "../document/page-source";
 import { createViewerMessages } from "../i18n/viewer-messages";
 import type { ViewerMessages } from "../i18n/viewer-messages";
-import { calculateFitScale, resolveLayout, visiblePageIndexes } from "./layout";
+import {
+	calculateFitScale,
+	getPrefetchPageIndexes,
+	resolveLayout,
+	visiblePageIndexes,
+} from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
 import { PageRenderQueue } from "./page-render-queue";
 import { createPageRenderPlan } from "./render-plan";
@@ -202,6 +207,7 @@ export class ViewerController {
 		if (this.phase !== "ready") return null;
 		if (key === this.#lastRenderKey) return this.#renderId;
 		this.#lastRenderKey = key;
+		this.#renderQueue?.cancelQueued("prefetch");
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
 		this.#renderId = id;
@@ -319,6 +325,7 @@ export class ViewerController {
 			this.renderedRequestId = request.id;
 			this.renderedZoom = request.zoom;
 			this.renderRevision += 1;
+			this.#prefetchAdjacentPages(request, source, pageIndexes);
 			const visiblePages = pageIndexes.map((index) => index + 1);
 			const pageChangeKey = `${request.page}:${visiblePages.join(",")}`;
 			if (pageChangeKey !== this.#lastPageChangeKey) {
@@ -350,6 +357,22 @@ export class ViewerController {
 					retryable: true,
 				});
 			}
+		}
+	}
+
+	#prefetchAdjacentPages(
+		request: ScheduledRender,
+		source: PageSource,
+		pageIndexes: readonly number[],
+	): void {
+		const renderQueue = this.#renderQueue;
+		if (renderQueue === null) return;
+		const layout = resolveLayout(request.layout, request.viewport.width);
+		for (const pageIndex of getPrefetchPageIndexes(this.pageCount, pageIndexes, layout)) {
+			void renderQueue.prefetchPage(pageIndex).catch((error: unknown) => {
+				if (source !== this.pageSource || !(error instanceof PageSourceUnavailableError)) return;
+				this.#handleSourceUnavailable();
+			});
 		}
 	}
 
@@ -411,6 +434,7 @@ export class ViewerController {
 		this.#lastRenderKey = "";
 		this.#failedRenderKey = "";
 		this.#renderQueue?.cancelQueued("visible");
+		this.#renderQueue?.cancelQueued("prefetch");
 	}
 
 	#setFailure(failure: ViewerFailure): void {

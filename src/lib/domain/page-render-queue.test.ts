@@ -10,27 +10,60 @@ import { PageRenderQueue } from "./page-render-queue";
 
 describe("PageRenderQueue", () => {
 	it("prioritizes a visible page over queued thumbnails", async () => {
-		const requests: number[] = [];
+		const requests: string[] = [];
 		const pending: Array<(visual: PageVisual) => void> = [];
-		const queue = new PageRenderQueue(
-			createPageSource((pageIndex) => {
-				requests.push(pageIndex);
-				return new Promise((resolve) => pending.push(resolve));
-			}),
-		);
+		let finishPrefetch: () => void = () => undefined;
+		const source = createPageSource((pageIndex) => {
+			requests.push(`render-${pageIndex}`);
+			return new Promise((resolve) => pending.push(resolve));
+		});
+		source.prefetchPage = vi.fn((pageIndex) => {
+			requests.push(`prefetch-${pageIndex}`);
+			return new Promise((resolve) => {
+				finishPrefetch = resolve;
+			});
+		});
+		const queue = new PageRenderQueue(source);
 
 		const activeThumbnail = queue.render(1, 0.3, "thumbnail");
-		await vi.waitFor(() => expect(requests).toEqual([1]));
+		await vi.waitFor(() => expect(requests).toEqual(["render-1"]));
+		const queuedPrefetch = queue.prefetchPage(3);
 		const queuedThumbnail = queue.render(2, 0.3, "thumbnail");
 		const visiblePage = queue.render(7, 1, "visible");
 		pending[0]?.(pixelVisual());
 		await activeThumbnail;
-		await vi.waitFor(() => expect(requests).toEqual([1, 7]));
+		await vi.waitFor(() => expect(requests).toEqual(["render-1", "render-7"]));
 		pending[1]?.(pixelVisual());
 		await visiblePage;
-		await vi.waitFor(() => expect(requests).toEqual([1, 7, 2]));
+		await vi.waitFor(() => expect(requests).toEqual(["render-1", "render-7", "render-2"]));
 		pending[2]?.(pixelVisual());
 		await queuedThumbnail;
+		await vi.waitFor(() =>
+			expect(requests).toEqual(["render-1", "render-7", "render-2", "prefetch-3"]),
+		);
+		finishPrefetch();
+		await queuedPrefetch;
+		queue.dispose();
+	});
+
+	it("cancels queued prefetch work when navigation changes", async () => {
+		const requests: number[] = [];
+		const pending: Array<(visual: PageVisual) => void> = [];
+		const source = createPageSource((pageIndex) => {
+			requests.push(pageIndex);
+			return new Promise((resolve) => pending.push(resolve));
+		});
+		const prefetchPage = vi.fn(async () => undefined);
+		source.prefetchPage = prefetchPage;
+		const queue = new PageRenderQueue(source);
+		const active = queue.render(1, 1, "visible");
+		await vi.waitFor(() => expect(requests).toEqual([1]));
+		const queued = queue.prefetchPage(2);
+		queue.cancelQueued("prefetch");
+		await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+		pending[0]?.(pixelVisual());
+		await active;
+		expect(prefetchPage).not.toHaveBeenCalled();
 		queue.dispose();
 	});
 
