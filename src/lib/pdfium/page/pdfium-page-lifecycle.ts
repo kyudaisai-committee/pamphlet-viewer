@@ -2,8 +2,8 @@
 
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 
-import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
-import type { PdfRangeLoader } from "./range-loader";
+import type { PdfiumAvailabilitySession } from "@/lib/pdfium/document/pdfium-availability-session";
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
 
 export function runPdfiumPageOperation<T>(
 	pdfium: WrappedPdfiumModule,

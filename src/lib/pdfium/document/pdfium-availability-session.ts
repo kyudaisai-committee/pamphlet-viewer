@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
+
 import { PdfiumFileAccess, type PdfiumRuntimeApi } from "./pdfium-file-access";
-import type { PdfRangeLoader } from "./range-loader";
 
 const MAX_AVAILABILITY_ATTEMPTS = 128;
 const MAX_CACHE_REBUILDS = 128;

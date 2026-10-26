@@ -4,15 +4,15 @@ import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
 import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
-
-import { PdfRangeBroker } from "./pdf-range-broker";
-import pdfiumWorkerAssetUrl from "./pdfium.worker.ts?worker&url";
-import { PdfRepresentationChangedError } from "./range-request";
+import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
+import { PdfRepresentationChangedError } from "@/lib/pdfium/range/range-request";
 import type {
 	RangeWorkerCancelRequest,
 	RangeWorkerRequest,
 	RangeWorkerResponse,
-} from "./range-transport";
+} from "@/lib/pdfium/range/range-transport";
+
+import pdfiumWorkerAssetUrl from "./pdfium.worker.ts?worker&url";
 
 export interface PdfiumDocumentInfo {
 	pageCount: number;

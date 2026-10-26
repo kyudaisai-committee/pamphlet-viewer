@@ -5,21 +5,21 @@ import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
+import {
+	getPageSizeByIndex,
+	getPdfiumHeap,
+	prefetchPdfiumPage,
+	renderPdfiumPage,
+} from "@/lib/pdfium/page/pdfium-page-operation";
+import { getPdfiumThumbnailByIndex } from "@/lib/pdfium/page/pdfium-thumbnail-operation";
+import { PdfRangeLoader, RANGE_CACHE_LIMIT } from "@/lib/pdfium/range/range-loader";
+import type { RangeWorkerRequester } from "@/lib/pdfium/range/range-transport";
 
 import {
 	PdfiumAvailabilitySession,
 	PdfiumAvailabilityFatalError,
 	type PdfiumAvailabilityApi,
 } from "./pdfium-availability-session";
-import {
-	getPageSizeByIndex,
-	getPdfiumHeap,
-	prefetchPdfiumPage,
-	renderPdfiumPage,
-} from "./pdfium-page-operation";
-import { getPdfiumThumbnailByIndex } from "./pdfium-thumbnail-operation";
-import { PdfRangeLoader, RANGE_CACHE_LIMIT } from "./range-loader";
-import type { RangeWorkerRequester } from "./range-transport";
 
 const MAX_OPERATION_ATTEMPTS = 128;
 

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-import { PdfRangeBroker } from "@/lib/pdfium/pdf-range-broker";
-import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "@/lib/pdfium/worker-client";
+import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
+import { PdfiumWorkerPool } from "@/lib/pdfium/worker/pdfium-worker-pool";
+import {
+	PdfiumWorkerClient,
+	PdfiumWorkerUnavailableError,
+} from "@/lib/pdfium/worker/worker-client";
 
 import {
 	PageSourceUnavailableError,
@@ -10,7 +14,6 @@ import {
 	type PageSource,
 	type PageVisual,
 } from "./page-source";
-import { PdfiumWorkerPool } from "./pdfium-worker-pool";
 
 export class PdfiumBackend implements DocumentBackend {
 	async open(source: string, signal: AbortSignal): Promise<PageSource> {

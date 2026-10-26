@@ -36,7 +36,7 @@ interface DocumentSessionStub {
 
 describe("PDF worker document lifecycle", () => {
 	afterEach(() => {
-		vi.doUnmock("./pdfium-document");
+		vi.doUnmock("@/lib/pdfium/document/pdfium-document");
 		vi.unstubAllGlobals();
 		vi.resetModules();
 	});
@@ -54,7 +54,7 @@ describe("PDF worker document lifecycle", () => {
 			async prefetchPage() {},
 		};
 		const openDocument = vi.fn(async () => session);
-		vi.doMock("./pdfium-document", () => ({
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
 				static open(): Promise<DocumentSessionStub> {
 					return openDocument();
@@ -111,7 +111,7 @@ describe("PDF worker document lifecycle", () => {
 			dispose() {},
 			prefetchPage,
 		};
-		vi.doMock("./pdfium-document", () => ({
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
 				static open(): Promise<DocumentSessionStub> {
 					return Promise.resolve(session);
@@ -157,7 +157,7 @@ describe("PDF worker document lifecycle", () => {
 	});
 
 	it("retires the worker when the server changes the PDF representation", async () => {
-		const { PdfRepresentationChangedError } = await import("./range-request");
+		const { PdfRepresentationChangedError } = await import("@/lib/pdfium/range/range-request");
 		const session: DocumentSessionStub = {
 			info: { pageCount: 4, fileLength: 1024 },
 			isPoisoned: false,
@@ -166,7 +166,7 @@ describe("PDF worker document lifecycle", () => {
 				throw new PdfRepresentationChangedError("The PDF representation changed.");
 			},
 		};
-		vi.doMock("./pdfium-document", () => ({
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
 				static open(): Promise<DocumentSessionStub> {
 					return Promise.resolve(session);
@@ -224,7 +224,7 @@ describe("PDF worker document lifecycle", () => {
 			dispose() {},
 			prefetchPage,
 		};
-		vi.doMock("./pdfium-document", () => ({
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
 				static open(): Promise<DocumentSessionStub> {
 					return Promise.resolve(session);
@@ -292,7 +292,7 @@ describe("PDF worker document lifecycle", () => {
 			dispose() {},
 			prefetchPage,
 		};
-		vi.doMock("./pdfium-document", () => ({
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
 				static open(): Promise<DocumentSessionStub> {
 					return Promise.resolve(session);

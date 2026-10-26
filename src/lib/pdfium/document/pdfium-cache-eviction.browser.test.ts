@@ -2,9 +2,9 @@ import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import { expect, test } from "vitest";
 
 import type { PageVisual } from "@/lib/document/page-source";
+import { RANGE_CHUNK_SIZE } from "@/lib/pdfium/range/range-loader";
 
 import { PdfiumDocumentSession } from "./pdfium-document";
-import { RANGE_CHUNK_SIZE } from "./range-loader";
 
 interface FixtureMetrics {
 	requestedBytes: number;

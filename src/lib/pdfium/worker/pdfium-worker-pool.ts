@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 
+import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import {
 	PageTaskScheduler,
 	type PageTaskLease,
 	type PageTaskPriority,
 } from "@/lib/domain/scheduling/page-task-scheduler";
-import { PdfRangeBroker } from "@/lib/pdfium/pdf-range-broker";
-import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "@/lib/pdfium/worker-client";
+import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
 
-import type { PageSize, PageVisual } from "./page-source";
+import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-client";
 
 export const PDFIUM_WORKER_LIMIT = 4;
 export const PDFIUM_VISIBLE_CONCURRENCY = 2;

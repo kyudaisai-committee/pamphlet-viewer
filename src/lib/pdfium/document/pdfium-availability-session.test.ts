@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
+
 import {
 	PdfiumAvailabilitySession,
 	type PdfiumAvailabilityApi,
 } from "./pdfium-availability-session";
 import { type PdfiumRuntimeApi } from "./pdfium-file-access";
-import type { PdfRangeLoader } from "./range-loader";
 
 interface FakeLoaderOptions {
 	getMissing?: () => boolean;

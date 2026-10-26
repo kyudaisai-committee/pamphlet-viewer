@@ -1,9 +1,10 @@
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
+import type { PdfiumAvailabilitySession } from "@/lib/pdfium/document/pdfium-availability-session";
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
+
 import { renderPdfiumPage } from "./pdfium-page-operation";
-import type { PdfRangeLoader } from "./range-loader";
 
 type ReadMissPhase = "load" | "size" | "render";
 

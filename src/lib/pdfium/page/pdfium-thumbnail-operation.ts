@@ -3,12 +3,12 @@
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 
 import type { PageVisual } from "@/lib/document/page-source";
+import type { PdfiumAvailabilitySession } from "@/lib/pdfium/document/pdfium-availability-session";
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
 
-import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
 import { runPdfiumPageOperation } from "./pdfium-page-lifecycle";
 import { getPdfiumHeap } from "./pdfium-page-operation";
 import { copyPdfiumThumbnailPixels } from "./pdfium-pixel-buffer";
-import type { PdfRangeLoader } from "./range-loader";
 
 export type PdfiumThumbnailResult = { type: "none" } | { type: "visual"; visual: PageVisual };
 

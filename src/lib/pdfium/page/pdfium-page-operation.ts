@@ -4,13 +4,13 @@ import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 
 import { MAX_PAGE_RENDER_PIXELS } from "@/lib/document/page-source";
 import type { PageSize, PageVisual } from "@/lib/document/page-source";
+import type { PdfiumAvailabilitySession } from "@/lib/pdfium/document/pdfium-availability-session";
+import type { PdfRangeLoader } from "@/lib/pdfium/range/range-loader";
 
-import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
 import { runPdfiumPageOperation } from "./pdfium-page-lifecycle";
 import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";
 import { combinePdfiumRenderFlags } from "./pdfium-render-flags";
 import type { PdfiumRenderFlags } from "./pdfium-render-flags";
-import type { PdfRangeLoader } from "./range-loader";
 
 const PAGE_SIZE_BUFFER_SIZE = 8;
 const FPDF_ANNOT = 0x01;

@@ -2,8 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import type { PageVisual } from "@/lib/document/page-source";
 import { PdfiumBackend } from "@/lib/document/pdfium-backend";
-
-import { PdfiumWorkerClient } from "./worker-client";
+import { PdfiumWorkerClient } from "@/lib/pdfium/worker/worker-client";
 
 test("renders RGBA channels, alpha, white background, and an independent pixel buffer", async () => {
 	const worker = new PdfiumWorkerClient();

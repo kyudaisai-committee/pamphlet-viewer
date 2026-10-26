@@ -9,7 +9,7 @@ const startupMocks = vi.hoisted(() => ({
 
 vi.mock("@embedpdf/pdfium", () => ({ init: startupMocks.init }));
 
-vi.mock("./range-loader", () => ({
+vi.mock("@/lib/pdfium/range/range-loader", () => ({
 	RANGE_CACHE_LIMIT: 64 * 1024 * 1024,
 	PdfRangeLoader: class {
 		cacheEpoch = 0;

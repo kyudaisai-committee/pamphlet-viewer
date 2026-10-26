@@ -2,17 +2,16 @@
 
 import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
-
-import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
-import { PdfRepresentationChangedError } from "./range-request";
-import type { PdfRangeResponse } from "./range-request";
-import { requestPdfRange } from "./range-request";
+import { PdfiumDocumentSession, PdfiumFatalError } from "@/lib/pdfium/document/pdfium-document";
+import { PdfRepresentationChangedError } from "@/lib/pdfium/range/range-request";
+import type { PdfRangeResponse } from "@/lib/pdfium/range/range-request";
+import { requestPdfRange } from "@/lib/pdfium/range/range-request";
 import type {
 	RangeTransportRequest,
 	RangeWorkerCancelRequest,
 	RangeWorkerRequest,
 	RangeWorkerResponse,
-} from "./range-transport";
+} from "@/lib/pdfium/range/range-transport";
 
 interface OpenRequest {
 	id: number;

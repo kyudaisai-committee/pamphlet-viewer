@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
-import { RANGE_CHUNK_SIZE } from "./range-loader";
-import { PdfiumWorkerClient } from "./worker-client";
+import { RANGE_CHUNK_SIZE } from "@/lib/pdfium/range/range-loader";
+import { PdfiumWorkerClient } from "@/lib/pdfium/worker/worker-client";
 
 interface FixtureMetrics {
 	requestedBytes: number;
