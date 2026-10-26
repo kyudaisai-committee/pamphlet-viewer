@@ -134,10 +134,12 @@ describe("PageRenderQueue", () => {
 		const renderThumbnail = vi.fn(async () => {
 			throw failure;
 		});
-		const source = createPageSource(renderPage);
-		source.getPageSize = getPageSize;
-		source.renderThumbnail = renderThumbnail;
-		source.propagateThumbnailErrors = true;
+		const source: PageSource = {
+			...createPageSource(renderPage),
+			getPageSize,
+			renderThumbnail,
+			propagateThumbnailErrors: true,
+		};
 		const queue = new PageRenderQueue(source);
 
 		await expect(queue.render(4, 0.3, "thumbnail")).rejects.toBe(failure);
