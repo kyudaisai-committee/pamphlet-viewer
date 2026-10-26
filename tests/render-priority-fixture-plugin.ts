@@ -11,6 +11,10 @@ const METRICS_PATH = "/__render-priority-metrics";
 
 interface FixtureMetrics {
 	rangeRequests: number;
+	requestedRangeBytes: number;
+	completedRangeBytes: number;
+	cancelledRangeRequests: number;
+	ranges: Array<{ start: number; end: number; completed: boolean; cancelled: boolean }>;
 	delayRangeStarted: boolean;
 	delayRangeFinished: boolean;
 	delayRangeCancelled: boolean;
@@ -36,6 +40,10 @@ export function renderPriorityFixturePlugin(): Plugin {
 	});
 	const metrics: FixtureMetrics = {
 		rangeRequests: 0,
+		requestedRangeBytes: 0,
+		completedRangeBytes: 0,
+		cancelledRangeRequests: 0,
+		ranges: [],
 		delayRangeStarted: false,
 		delayRangeFinished: false,
 		delayRangeCancelled: false,
@@ -69,6 +77,10 @@ export function renderPriorityFixturePlugin(): Plugin {
 					holdNextRange = url.searchParams.get("holdNextRange") === "true";
 					delayIssued = false;
 					metrics.rangeRequests = 0;
+					metrics.requestedRangeBytes = 0;
+					metrics.completedRangeBytes = 0;
+					metrics.cancelledRangeRequests = 0;
+					metrics.ranges = [];
 					metrics.delayRangeStarted = false;
 					metrics.delayRangeFinished = false;
 					metrics.delayRangeCancelled = false;
@@ -136,12 +148,24 @@ function servePdfRange(
 
 	metrics.rangeRequests += 1;
 	const body = pdf.subarray(range.start, range.end + 1);
+	const metricRange = {
+		start: range.start,
+		end: range.end,
+		completed: false,
+		cancelled: false,
+	};
+	metrics.ranges.push(metricRange);
+	metrics.requestedRangeBytes += body.byteLength;
 	response.statusCode = 206;
 	response.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${pdf.byteLength}`);
 	response.setHeader("Content-Length", body.byteLength);
 	const delayMs = delay.delayMs;
 	const send = function sendRangeResponse(): void {
 		if (response.destroyed) return;
+		response.once("finish", function recordCompletedRange(): void {
+			metricRange.completed = true;
+			metrics.completedRangeBytes += body.byteLength;
+		});
 		response.end(body);
 		if (delayMs !== 0) metrics.delayRangeFinished = true;
 	};
@@ -156,6 +180,8 @@ function servePdfRange(
 		response.once("close", function cancelClosedHeldRange(): void {
 			if (response.writableEnded) return;
 			delay.clearRelease(send);
+			metricRange.cancelled = true;
+			metrics.cancelledRangeRequests += 1;
 			metrics.delayRangeCancelled = true;
 		});
 		return;
@@ -164,6 +190,8 @@ function servePdfRange(
 	response.once("close", function cancelClosedRangeResponse(): void {
 		if (response.writableEnded) return;
 		clearTimeout(timer);
+		metricRange.cancelled = true;
+		metrics.cancelledRangeRequests += 1;
 		metrics.delayRangeCancelled = true;
 	});
 }

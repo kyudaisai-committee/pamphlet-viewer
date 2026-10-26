@@ -19,15 +19,20 @@ test("deduplicates overlapping in-flight chunks and reuses cached chunks", async
 	const broker = new PdfRangeBroker(URL);
 	const controller = new AbortController();
 	try {
+		const firstRequest = createRequest(0, 3 * RANGE_CHUNK_SIZE - 1, "visible");
+		const overlappingRequest = createRequest(
+			2 * RANGE_CHUNK_SIZE,
+			5 * RANGE_CHUNK_SIZE - 1,
+			"prerender",
+		);
+		const workerRequestedBytes =
+			firstRequest.requestedEnd -
+			firstRequest.start +
+			1 +
+			(overlappingRequest.requestedEnd - overlappingRequest.start + 1);
 		const [first, overlapping] = await Promise.all([
-			broker.request(
-				createRequest(0, 3 * RANGE_CHUNK_SIZE - 1, "visible"),
-				controller.signal,
-			),
-			broker.request(
-				createRequest(2 * RANGE_CHUNK_SIZE, 5 * RANGE_CHUNK_SIZE - 1, "prerender"),
-				controller.signal,
-			),
+			broker.request(firstRequest, controller.signal),
+			broker.request(overlappingRequest, controller.signal),
 		]);
 		expect([...first.bytes]).toEqual([...pdf.subarray(0, 3 * RANGE_CHUNK_SIZE)]);
 		expect([...overlapping.bytes]).toEqual([
@@ -37,6 +42,10 @@ test("deduplicates overlapping in-flight chunks and reuses cached chunks", async
 			`bytes=0-${4 * RANGE_CHUNK_SIZE - 1}`,
 			`bytes=${4 * RANGE_CHUNK_SIZE}-${5 * RANGE_CHUNK_SIZE - 1}`,
 		]);
+		expect(workerRequestedBytes).toBe(6 * RANGE_CHUNK_SIZE);
+		expect(ranges.reduce((total, range) => total + getRangeLength(range), 0)).toBe(
+			5 * RANGE_CHUNK_SIZE,
+		);
 		expect(broker.cachedByteLength).toBe(5 * RANGE_CHUNK_SIZE);
 
 		await broker.request(
@@ -226,6 +235,14 @@ function createResponse(pdf: Uint8Array, rangeHeader: string, etag = ETAG): Resp
 			"Cache-Control": "no-store",
 		},
 	});
+}
+
+function getRangeLength(range: string): number {
+	const match = /^bytes=(\d+)-(\d+)$/.exec(range);
+	if (match === null) throw new Error(`Invalid range: ${range}`);
+	const start = Number(match[1]);
+	const end = Number(match[2]);
+	return end - start + 1;
 }
 
 function createDeferred<Value>(): { promise: Promise<Value>; resolve(value: Value): void } {

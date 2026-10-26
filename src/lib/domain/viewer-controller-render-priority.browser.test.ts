@@ -2,12 +2,19 @@ import { expect, test, vi } from "vitest";
 
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PdfiumBackend } from "../document/pdfium-backend";
+import { PDFIUM_WORKER_LIMIT } from "../document/pdfium-worker-pool";
+import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
+import { PdfiumWorkerClient } from "../pdfium/worker-client";
 import { ViewerController } from "./viewer-controller.svelte";
 
 const FIXTURE_URL = new URL("/__render-priority-fixture.pdf", window.location.href).href;
 
 interface FixtureMetrics {
 	rangeRequests: number;
+	requestedRangeBytes: number;
+	completedRangeBytes: number;
+	cancelledRangeRequests: number;
+	ranges: Array<{ start: number; end: number; completed: boolean; cancelled: boolean }>;
 	delayRangeStarted: boolean;
 	delayRangeFinished: boolean;
 	delayRangeCancelled: boolean;
@@ -24,6 +31,9 @@ type SourceOverrides = Partial<
 >;
 
 test("starts the latest visible page while the previous render range is held", async () => {
+	const workerOpen = vi.spyOn(PdfiumWorkerClient.prototype, "open");
+	const workerTerminate = vi.spyOn(PdfiumWorkerClient.prototype, "terminate");
+	const rangeRequest = vi.spyOn(PdfRangeBroker.prototype, "request");
 	await configureDelay(0);
 	const source = await openFixture();
 	const controller = new ViewerController(() => undefined);
@@ -33,6 +43,9 @@ test("starts the latest visible page while the previous render range is held", a
 		const adapter = createSourceAdapter(source);
 		await controller.load(FIXTURE_URL, createBackend(adapter));
 		await configureDelay("hold");
+		workerOpen.mockClear();
+		workerTerminate.mockClear();
+		rangeRequest.mockClear();
 
 		controller.requestRender(renderInput(24));
 		await waitForDelayedRange();
@@ -45,11 +58,110 @@ test("starts the latest visible page while the previous render range is held", a
 		expect(controller.pageVisuals[12]).toBeDefined();
 		const metrics = await readMetrics();
 		expect(metrics.rangeRequests).toBeGreaterThan(1);
+		expect(metrics.cancelledRangeRequests).toBeGreaterThan(0);
+		expect(metrics.completedRangeBytes).toBeLessThanOrEqual(metrics.requestedRangeBytes);
 		expect(metrics.delayRangeFinished).toBe(false);
+		expect(workerOpen.mock.calls.length).toBeLessThanOrEqual(PDFIUM_WORKER_LIMIT);
+		expect(workerTerminate).not.toHaveBeenCalled();
+		const cancelledWorkerRangeBytes = rangeRequest.mock.calls.reduce(
+			(total, [request, signal]) =>
+				total + (signal.aborted ? request.requestedEnd - request.start + 1 : 0),
+			0,
+		);
+		expect(cancelledWorkerRangeBytes).toBeGreaterThan(0);
 	} finally {
 		await releaseDelayedRange();
 		controller.dispose();
 		if (!controllerOwnsSource) await source.dispose();
+		expect(workerTerminate).toHaveBeenCalled();
+		workerOpen.mockRestore();
+		workerTerminate.mockRestore();
+		rangeRequest.mockRestore();
+	}
+}, 30_000);
+
+test("uses completed page prefetch for a turn and schedules a new visible render after zoom", async () => {
+	await configureDelay(0);
+	const source = await openFixture();
+	const controller = new ViewerController(() => undefined);
+	let controllerOwnsSource = false;
+	const prerenderFinished = deferred<void>();
+	const dataPrefetchFinished = deferred<void>();
+	const renderPrefetchedPage = source.renderPrefetchedPage;
+	const prefetchPage = source.prefetchPage;
+	if (renderPrefetchedPage === undefined || prefetchPage === undefined) {
+		throw new Error("The PDFium prefetch APIs are unavailable.");
+	}
+	let allowInitialPrefetch = true;
+	const adapter = createSourceAdapter(source, {
+		async prefetchPage(pageIndex) {
+			if (allowInitialPrefetch && pageIndex === 1) {
+				await prefetchPage.call(source, pageIndex);
+				dataPrefetchFinished.resolve();
+			}
+		},
+		renderPrefetchedPage(pageIndex, scale, signal) {
+			if (allowInitialPrefetch && pageIndex === 1) {
+				return renderPrefetchedPage
+					.call(source, pageIndex, scale, signal)
+					.then((visual) => {
+						prerenderFinished.resolve();
+						return visual;
+					});
+			}
+			return Promise.resolve(pixelVisual());
+		},
+	});
+	const workerOpen = vi.spyOn(PdfiumWorkerClient.prototype, "open");
+	const workerTerminate = vi.spyOn(PdfiumWorkerClient.prototype, "terminate");
+	const workerRender = vi.spyOn(PdfiumWorkerClient.prototype, "renderPage");
+	try {
+		await controller.load(FIXTURE_URL, createBackend(adapter));
+		const firstRequestId = controller.requestRender(renderInput(1));
+		if (firstRequestId === null) throw new Error("The initial page request was rejected.");
+		controllerOwnsSource = true;
+		await waitForRender(controller, 1, 3000);
+		await Promise.all([prerenderFinished.promise, dataPrefetchFinished.promise]);
+		await flushTasks();
+		allowInitialPrefetch = false;
+
+		await configureDelay(0);
+		workerOpen.mockClear();
+		workerTerminate.mockClear();
+		workerRender.mockClear();
+		const turnRequestId = controller.requestRender(renderInput(2));
+		if (turnRequestId === null) throw new Error("The turn request was rejected.");
+		await waitForRender(controller, 2, 3000);
+		const turnWorkerOpens = workerOpen.mock.calls.length;
+		const visibleTurnRenders = workerRender.mock.calls.filter(
+			([, , priority]) => priority === "visible",
+		);
+		const turnMetrics = await readMetrics();
+		expect(controller.pageVisuals[1]).toBeDefined();
+		expect(turnWorkerOpens).toBeLessThanOrEqual(PDFIUM_WORKER_LIMIT);
+		expect(visibleTurnRenders).toHaveLength(0);
+		expect(turnMetrics.rangeRequests).toBeLessThanOrEqual(1);
+		expect(workerTerminate).not.toHaveBeenCalled();
+
+		workerOpen.mockClear();
+		workerTerminate.mockClear();
+		workerRender.mockClear();
+		const zoomRequestId = controller.requestRender({ ...renderInput(2), zoom: 2 });
+		if (zoomRequestId === null) throw new Error("The zoom request was rejected.");
+		await waitForRender(controller, 3, 3000);
+		const visibleZoomRenders = workerRender.mock.calls.filter(
+			([, , priority]) => priority === "visible",
+		);
+		expect(workerOpen.mock.calls.length).toBeLessThanOrEqual(PDFIUM_WORKER_LIMIT);
+		expect(visibleZoomRenders.length).toBeGreaterThan(0);
+		expect(workerTerminate).not.toHaveBeenCalled();
+	} finally {
+		controller.dispose();
+		if (!controllerOwnsSource) await source.dispose();
+		expect(workerTerminate).toHaveBeenCalled();
+		workerOpen.mockRestore();
+		workerTerminate.mockRestore();
+		workerRender.mockRestore();
 	}
 }, 30_000);
 
@@ -98,6 +210,9 @@ test("starts visible rendering while background page-size acquisition is delayed
 }, 30_000);
 
 test("starts visible rendering while adjacent page-data prefetch is delayed", async () => {
+	const workerOpen = vi.spyOn(PdfiumWorkerClient.prototype, "open");
+	const workerTerminate = vi.spyOn(PdfiumWorkerClient.prototype, "terminate");
+	const rangeRequest = vi.spyOn(PdfRangeBroker.prototype, "request");
 	await configureDelay(0);
 	const source = await openFixture();
 	const controller = new ViewerController(() => undefined);
@@ -123,6 +238,9 @@ test("starts visible rendering while adjacent page-data prefetch is delayed", as
 		});
 		await controller.load(FIXTURE_URL, createBackend(adapter));
 		await configureDelay("hold");
+		workerOpen.mockClear();
+		workerTerminate.mockClear();
+		rangeRequest.mockClear();
 
 		controller.requestRender(renderInput(12));
 		await waitForRender(controller, 1, 800);
@@ -135,12 +253,28 @@ test("starts visible rendering while adjacent page-data prefetch is delayed", as
 		await waitForRender(controller, 2, 3000);
 		expect(controller.renderedRequestId).toBe(latestRequestId);
 		expect(controller.pageVisuals[14]).toBeDefined();
-		expect((await readMetrics()).delayRangeFinished).toBe(false);
+		const metrics = await readMetrics();
+		expect(metrics.delayRangeCancelled).toBe(true);
+		expect(metrics.delayRangeFinished).toBe(false);
+		expect(metrics.cancelledRangeRequests).toBeGreaterThan(0);
+		expect(metrics.completedRangeBytes).toBeLessThan(metrics.requestedRangeBytes);
+		expect(workerOpen.mock.calls.length).toBeLessThanOrEqual(PDFIUM_WORKER_LIMIT);
+		expect(workerTerminate).not.toHaveBeenCalled();
+		const cancelledWorkerRangeBytes = rangeRequest.mock.calls.reduce(
+			(total, [request, signal]) =>
+				total + (signal.aborted ? request.requestedEnd - request.start + 1 : 0),
+			0,
+		);
+		expect(cancelledWorkerRangeBytes).toBeGreaterThan(0);
 	} finally {
 		await releaseDelayedRange();
 		controller.dispose();
 		if (!controllerOwnsSource) await source.dispose();
 		pendingPrerender.resolve(pixelVisual());
+		expect(workerTerminate).toHaveBeenCalled();
+		workerOpen.mockRestore();
+		workerTerminate.mockRestore();
+		rangeRequest.mockRestore();
 	}
 }, 30_000);
 
@@ -293,6 +427,10 @@ async function waitForRender(
 		timeout,
 		interval: 20,
 	});
+}
+
+async function flushTasks(): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
