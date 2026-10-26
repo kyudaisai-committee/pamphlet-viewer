@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { expect, it } from "vitest";
 
 import type { PamphletViewerConfig } from "@/lib/public-api";

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import path from "node:path";
 
 import js from "@eslint/js";

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { expect } from "vitest";
 
 export interface ReaderWorkerRequest {

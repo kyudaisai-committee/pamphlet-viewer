@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { describe, expect, it, vi } from "vitest";
 

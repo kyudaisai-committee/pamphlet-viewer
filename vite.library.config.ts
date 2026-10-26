@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { dts } from "rolldown-plugin-dts";
 import { defineConfig } from "vite";

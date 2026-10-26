@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { expect, test } from "vitest";
 
 import { PdfRangeLoader, RANGE_CHUNK_SIZE } from "./range-loader";

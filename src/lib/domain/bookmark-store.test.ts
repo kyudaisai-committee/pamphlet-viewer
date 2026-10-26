@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { expect, test } from "vitest";
 
 import { BookmarkStore } from "./bookmark-store";

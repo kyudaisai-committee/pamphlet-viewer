@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { page as browserPage, userEvent } from "vitest/browser";
 

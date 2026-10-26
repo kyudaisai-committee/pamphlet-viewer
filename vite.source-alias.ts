@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { fileURLToPath } from "node:url";
 
 export const sourceAlias = {

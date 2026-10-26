@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { describe, expect, it } from "vitest";
 
 import { parseFit, parseLayout, resolveDocumentSource } from "./viewer-options";

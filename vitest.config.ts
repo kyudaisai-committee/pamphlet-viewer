@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";

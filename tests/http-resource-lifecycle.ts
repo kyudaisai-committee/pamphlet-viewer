@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { createReadStream } from "node:fs";
 import type { ReadStream } from "node:fs";
 import type { Server, ServerResponse } from "node:http";

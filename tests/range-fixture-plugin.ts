@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";

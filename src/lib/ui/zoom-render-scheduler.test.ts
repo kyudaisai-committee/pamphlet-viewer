@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ZOOM_RENDER_DELAY_MS, ZoomRenderScheduler } from "./zoom-render-scheduler";

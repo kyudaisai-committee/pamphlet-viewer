@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { expect, test } from "vitest";
 
 import { calculateFitScale, visiblePageIndexes } from "../domain/layout";

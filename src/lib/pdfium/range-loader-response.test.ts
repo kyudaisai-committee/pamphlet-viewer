@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PdfRangeLoader, RANGE_CHUNK_SIZE, RANGE_REQUEST_TIMEOUT_MS } from "./range-loader";

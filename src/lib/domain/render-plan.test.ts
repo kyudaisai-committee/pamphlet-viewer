@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { describe, expect, it } from "vitest";
 
 import { createPageRenderPlan, MAX_PAGE_RENDER_PIXELS } from "./render-plan";
