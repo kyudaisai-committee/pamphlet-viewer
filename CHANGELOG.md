@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.0-alpha.9
+
+### Minor Changes
+
+- bebc7b7: 表示ページの周辺にあるPDFページデータを先読みします。
+
 ## 0.1.0-alpha.8
 
 ### Patch Changes
