@@ -28,7 +28,12 @@ interface RangeDelayControl {
 }
 
 export function renderPriorityFixturePlugin(): Plugin {
-	const pdf = createPdfFixture();
+	const fixtureGapBytes = 512 * 1024;
+	const pdf = createPdfFixture({
+		contentGapBytes: fixtureGapBytes,
+		midDocumentFillerBytes: 0,
+		pageObjectGapBytes: fixtureGapBytes,
+	});
 	const metrics: FixtureMetrics = {
 		rangeRequests: 0,
 		delayRangeStarted: false,

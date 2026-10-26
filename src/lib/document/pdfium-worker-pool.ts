@@ -1,92 +1,276 @@
 // SPDX-License-Identifier: MIT
 
+import {
+	PageTaskScheduler,
+	type PageTaskLease,
+	type PageTaskPriority,
+} from "../domain/page-task-scheduler";
+import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
 import type { PageSize, PageVisual } from "./page-source";
+
+export const PDFIUM_WORKER_LIMIT = 4;
+export const PDFIUM_VISIBLE_CONCURRENCY = 2;
+const WORKER_TERMINATION_GRACE_MS = 100;
 
 interface PdfiumWorkerSlot {
 	client: PdfiumWorkerClient | null;
 	opening: Promise<PdfiumWorkerClient> | null;
 	activeRequests: number;
-	activePrefetchRequests: number;
+	activeSignal: AbortSignal | null;
+	activeOperation: boolean;
 }
+
+type WorkerOperation<Result> = (
+	client: PdfiumWorkerClient,
+	priority: PageTaskPriority,
+	signal: AbortSignal,
+) => Promise<Result>;
 
 export class PdfiumWorkerPool {
 	#slots: PdfiumWorkerSlot[];
+	#scheduler: PageTaskScheduler;
+	#consumerControllers = new Map<PageTaskPriority, Set<AbortController>>();
+	#blockedVisibleTimer: ReturnType<typeof setTimeout> | null = null;
 	#disposed = false;
 
 	constructor(
 		private readonly source: string,
 		private readonly pageCount: number,
+		private readonly rangeBroker: PdfRangeBroker,
 		firstClient: PdfiumWorkerClient | null = null,
-		slotCount = 2,
+		slotCount = PDFIUM_WORKER_LIMIT,
 	) {
+		if (!Number.isSafeInteger(slotCount) || slotCount < 1 || slotCount > PDFIUM_WORKER_LIMIT) {
+			throw new RangeError(
+				`The PDF worker pool supports between 1 and ${PDFIUM_WORKER_LIMIT} workers.`,
+			);
+		}
 		this.#slots = Array.from({ length: slotCount }, (_, index) => ({
 			client: index === 0 ? firstClient : null,
 			opening: index === 0 && firstClient !== null ? Promise.resolve(firstClient) : null,
 			activeRequests: 0,
-			activePrefetchRequests: 0,
+			activeSignal: null,
+			activeOperation: false,
 		}));
+		this.#scheduler = new PageTaskScheduler({
+			maximumConcurrent: slotCount,
+			reservedVisible: Math.min(PDFIUM_VISIBLE_CONCURRENCY, slotCount - 1),
+			onVisibleBlocked: () => this.#scheduleVisibleRecovery(),
+		});
 	}
 
-	getPageSize(pageIndex: number): Promise<PageSize> {
-		return this.#run((client) => client.getPageSize(pageIndex));
+	getPageSize(
+		pageIndex: number,
+		priority: PageTaskPriority = "visible",
+		signal?: AbortSignal,
+	): Promise<PageSize> {
+		return this.#scheduleTask(
+			`size:${pageIndex}`,
+			priority,
+			(client, taskPriority, signal) => client.getPageSize(pageIndex, taskPriority, signal),
+			signal,
+		);
 	}
 
 	prefetchPage(pageIndex: number): Promise<void> {
-		return this.#run((client) => client.prefetchPage(pageIndex), true);
+		return this.#scheduleTask(`data:${pageIndex}`, "data", (client, _priority, signal) =>
+			client.prefetchPage(pageIndex, signal),
+		);
 	}
 
-	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
-		return this.#run((client) => client.renderPage(pageIndex, scale));
+	renderPage(
+		pageIndex: number,
+		scale: number,
+		priority: PageTaskPriority = "visible",
+	): Promise<PageVisual> {
+		return this.#scheduleVisualTask(
+			`render:${pageIndex}:${scale}`,
+			priority,
+			(client, taskPriority, signal) =>
+				client.renderPage(pageIndex, scale, taskPriority, signal),
+		).then((visual) => {
+			if (visual === null) throw new Error("PDF worker did not return a page image.");
+			return visual;
+		});
+	}
+
+	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		return this.#scheduleVisualTask(
+			`thumbnail:${pageIndex}`,
+			"thumbnail",
+			(client, _priority, signal) => client.renderThumbnail(pageIndex, signal),
+		);
+	}
+
+	promoteRender(pageIndex: number, scale: number): boolean {
+		return this.#scheduler.promote(`render:${pageIndex}:${scale}`, "visible");
+	}
+
+	prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		return this.#scheduleVisualTask(
+			`thumbnail:${pageIndex}`,
+			"thumbnail",
+			(client, _priority, signal) => client.prefetchThumbnail(pageIndex, signal),
+		);
 	}
 
 	interrupt(): void {
-		if (this.#disposed) return;
-		for (const slot of this.#slots) {
-			if (slot.activeRequests > 0) this.#resetSlot(slot);
-		}
+		this.cancelRequests("visible");
 	}
 
 	interruptPrefetch(): void {
-		if (this.#disposed) return;
-		for (const slot of this.#slots) {
-			if (slot.activePrefetchRequests > 0) this.#resetSlot(slot);
-		}
+		this.cancelRequests("data");
+	}
+
+	cancelRequests(priority: PageTaskPriority): void {
+		for (const controller of this.#consumerControllers.get(priority) ?? []) controller.abort();
 	}
 
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
+		for (const controllers of this.#consumerControllers.values()) {
+			for (const controller of controllers) controller.abort();
+		}
+		this.#consumerControllers.clear();
+		if (this.#blockedVisibleTimer !== null) clearTimeout(this.#blockedVisibleTimer);
+		this.#blockedVisibleTimer = null;
+		this.#scheduler.dispose();
 		this.#resetSlots();
 	}
 
-	#run<Result>(
-		operation: (client: PdfiumWorkerClient) => Promise<Result>,
-		prefetch = false,
+	#scheduleTask<Result>(
+		key: string,
+		priority: PageTaskPriority,
+		operation: WorkerOperation<Result>,
+		signal?: AbortSignal,
+		releaseResult?: (result: Result) => void,
 	): Promise<Result> {
+		return this.#scheduleLeaseTask(key, priority, operation, releaseResult, signal).then(
+			(lease) => {
+				const result = lease.value;
+				lease.release();
+				return result;
+			},
+		);
+	}
+
+	#scheduleLeaseTask<Result>(
+		key: string,
+		priority: PageTaskPriority,
+		operation: WorkerOperation<Result>,
+		releaseResult?: (result: Result) => void,
+		signal?: AbortSignal,
+	): Promise<PageTaskLease<Result>> {
 		this.#assertActive();
-		const slot = this.#getLeastBusySlot();
-		slot.activeRequests += 1;
-		if (prefetch) slot.activePrefetchRequests += 1;
-		return this.#runOnSlot(slot, operation).finally(() => {
-			slot.activeRequests -= 1;
-			if (prefetch) slot.activePrefetchRequests -= 1;
-		});
+		const controller = new AbortController();
+		const abortFromSignal = (): void => controller.abort();
+		if (signal?.aborted) controller.abort();
+		else signal?.addEventListener("abort", abortFromSignal, { once: true });
+		const controllers = this.#consumerControllers.get(priority) ?? new Set<AbortController>();
+		controllers.add(controller);
+		this.#consumerControllers.set(priority, controllers);
+		return this.#scheduler
+			.schedule(
+				{
+					key,
+					priority,
+					execute: (signal, taskPriority) =>
+						this.#executeWithRecovery(operation, taskPriority, signal),
+					releaseResult,
+				},
+				controller.signal,
+			)
+			.finally(() => {
+				signal?.removeEventListener("abort", abortFromSignal);
+				controllers.delete(controller);
+				if (controllers.size === 0) this.#consumerControllers.delete(priority);
+			});
+	}
+
+	async #scheduleVisualTask(
+		key: string,
+		priority: PageTaskPriority,
+		operation: WorkerOperation<PageVisual | null>,
+	): Promise<PageVisual | null> {
+		const lease = await this.#scheduleLeaseTask(key, priority, operation, releaseVisualResult);
+		try {
+			if (lease.value === null) return null;
+			return await clonePageVisual(lease.value);
+		} finally {
+			lease.release();
+		}
+	}
+
+	async #executeWithRecovery<Result>(
+		operation: WorkerOperation<Result>,
+		priority: PageTaskPriority,
+		signal: AbortSignal,
+	): Promise<Result> {
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			try {
+				return await this.#runOnSlot(operation, priority, signal);
+			} catch (error) {
+				if (
+					!(error instanceof PdfiumWorkerUnavailableError) ||
+					attempt === 1 ||
+					signal.aborted
+				) {
+					throw error;
+				}
+			}
+		}
+		throw new PdfiumWorkerUnavailableError("The PDF worker could not process the request.");
 	}
 
 	async #runOnSlot<Result>(
-		slot: PdfiumWorkerSlot,
-		operation: (client: PdfiumWorkerClient) => Promise<Result>,
+		operation: WorkerOperation<Result>,
+		priority: PageTaskPriority,
+		signal: AbortSignal,
 	): Promise<Result> {
-		const client = await this.#open(slot);
 		this.#assertActive();
-		return operation(client);
+		if (signal.aborted) throw createAbortError();
+		const slot = this.#getLeastBusySlot();
+		slot.activeRequests += 1;
+		slot.activeSignal = signal;
+		try {
+			const client = await this.#open(slot);
+			this.#assertActive();
+			if (signal.aborted) throw createAbortError();
+			slot.activeOperation = true;
+			return await operation(client, priority, signal);
+		} catch (error) {
+			if (error instanceof PdfiumWorkerUnavailableError) this.#resetSlot(slot);
+			throw error;
+		} finally {
+			slot.activeRequests -= 1;
+			slot.activeSignal = null;
+			slot.activeOperation = false;
+		}
+	}
+
+	#scheduleVisibleRecovery(): void {
+		if (this.#disposed || this.#blockedVisibleTimer !== null) return;
+		this.#blockedVisibleTimer = setTimeout(() => {
+			this.#blockedVisibleTimer = null;
+			if (this.#disposed || !this.#scheduler.isVisibleBlocked) return;
+			const stalledSlot = this.#slots.find(
+				(slot) =>
+					slot.activeRequests > 0 &&
+					slot.activeOperation &&
+					slot.activeSignal?.aborted === true &&
+					slot.client?.isOpen === true &&
+					slot.client.pendingRangeRequestCount === 0,
+			);
+			if (stalledSlot !== undefined) this.#resetSlot(stalledSlot);
+		}, WORKER_TERMINATION_GRACE_MS);
 	}
 
 	async #open(slot: PdfiumWorkerSlot): Promise<PdfiumWorkerClient> {
 		this.#assertActive();
 		if (slot.opening === null) {
-			const client = new PdfiumWorkerClient();
+			const client = new PdfiumWorkerClient(this.rangeBroker);
 			slot.client = client;
 			const opening = client
 				.open(this.source)
@@ -136,4 +320,29 @@ export class PdfiumWorkerPool {
 			throw new DOMException("PDF document is no longer available.", "AbortError");
 		}
 	}
+}
+
+async function clonePageVisual(visual: PageVisual): Promise<PageVisual> {
+	if (visual.type === "pixels") {
+		return {
+			type: "pixels",
+			width: visual.width,
+			height: visual.height,
+			pixels: visual.pixels.slice(0),
+		};
+	}
+	return {
+		type: "bitmap",
+		width: visual.width,
+		height: visual.height,
+		bitmap: await createImageBitmap(visual.bitmap),
+	};
+}
+
+function releaseVisualResult(visual: PageVisual | null): void {
+	if (visual?.type === "bitmap") visual.bitmap.close();
+}
+
+function createAbortError(): DOMException {
+	return new DOMException("PDF page task was cancelled.", "AbortError");
 }

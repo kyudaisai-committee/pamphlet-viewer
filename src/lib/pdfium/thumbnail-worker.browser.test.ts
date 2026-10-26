@@ -39,15 +39,11 @@ describe("PDFium thumbnail worker", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("prefetches an embedded thumbnail through its own worker session", async () => {
+	it("prefetches an embedded thumbnail through the document worker pool", async () => {
 		const source = await openSource();
 		const prefetch = source.prefetchThumbnail?.(1);
 		if (prefetch === undefined) throw new Error("The thumbnail prefetch API was not exposed.");
-		const thumbnailWorker = getWorker(1);
-		await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(1));
-		const open = thumbnailWorker.requests[0];
-		if (open === undefined) throw new Error("The thumbnail worker did not open.");
-		thumbnailWorker.reply({ id: open.id, type: "opened", pageCount: 2, fileLength: 1024 });
+		const thumbnailWorker = getWorker(0);
 		await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(2));
 		const request = thumbnailWorker.requests[1];
 		if (request === undefined) throw new Error("The thumbnail prefetch was not posted.");
@@ -97,29 +93,24 @@ describe("PDFium thumbnail worker", () => {
 		await source.dispose();
 	});
 
-	it("does not fall back to the body worker after an ordinary thumbnail error", async () => {
+	it("does not retry a failed thumbnail operation as a page render", async () => {
 		const source = await openSource();
 		const queue = new PageRenderQueue(source);
 		const documentWorker = getWorker(0);
 		try {
 			const rendering = queue.render(1, 0.3, "thumbnail");
-			const thumbnailWorker = getWorker(1);
-			await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(1));
-			const open = thumbnailWorker.requests[0];
-			if (open === undefined) throw new Error("The thumbnail worker did not open.");
-			thumbnailWorker.reply({ id: open.id, type: "opened", pageCount: 2, fileLength: 1024 });
-			await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(2));
-			const request = thumbnailWorker.requests[1];
+			await vi.waitFor(() => expect(documentWorker.requests).toHaveLength(2));
+			const request = documentWorker.requests[1];
 			if (request === undefined) throw new Error("The thumbnail request was not posted.");
 			expect(request.type).toBe("thumbnail");
-			thumbnailWorker.reply({
+			documentWorker.reply({
 				id: request.id,
 				type: "error",
 				message: "The thumbnail could not be decoded.",
 			});
 
 			await expect(rendering).rejects.toThrow("could not be decoded");
-			expect(documentWorker.requests).toHaveLength(1);
+			expect(documentWorker.requests).toHaveLength(2);
 		} finally {
 			queue.dispose();
 			await source.dispose();

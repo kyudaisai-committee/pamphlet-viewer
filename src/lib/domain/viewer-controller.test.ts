@@ -169,7 +169,9 @@ describe("ViewerController", () => {
 		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
 		controller.requestRender(input);
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
-		await vi.waitFor(() => expect(renderPrefetchedPage).toHaveBeenCalledWith(1, 1));
+		await vi.waitFor(() =>
+			expect(renderPrefetchedPage).toHaveBeenCalledWith(1, 1, expect.any(AbortSignal)),
+		);
 		await flushTasks();
 
 		controller.requestRender({ ...input, page: 2 });

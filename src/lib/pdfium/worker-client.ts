@@ -3,7 +3,15 @@
 import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
 import type { PageSize, PageVisual } from "../document/page-source";
+import type { PageTaskPriority } from "../domain/page-task-scheduler";
+import { PdfRangeBroker } from "./pdf-range-broker";
 import pdfiumWorkerAssetUrl from "./pdfium.worker.ts?worker&url";
+import { PdfRepresentationChangedError } from "./range-request";
+import type {
+	RangeWorkerCancelRequest,
+	RangeWorkerRequest,
+	RangeWorkerResponse,
+} from "./range-transport";
 
 export interface PdfiumDocumentInfo {
 	pageCount: number;
@@ -21,11 +29,13 @@ interface OpenRequest {
 	type: "open";
 	url: string;
 	wasmUrl: string;
+	useRangeBroker: boolean;
 }
 
 interface PageSizeRequest {
 	type: "page-size";
 	pageIndex: number;
+	priority: PageTaskPriority;
 }
 
 interface PagePrefetchRequest {
@@ -37,6 +47,7 @@ interface RenderRequest {
 	type: "render";
 	pageIndex: number;
 	scale: number;
+	priority: PageTaskPriority;
 }
 
 interface ThumbnailRequest {
@@ -97,6 +108,7 @@ interface ErrorResponse {
 	id: number;
 	type: "error";
 	message: string;
+	errorName?: string;
 	fatal?: boolean;
 }
 
@@ -108,7 +120,11 @@ type WorkerResponse =
 	| ThumbnailResponse
 	| ThumbnailPrefetchResponse
 	| ErrorResponse;
-type WorkerMessage = WorkerResponse | { type: "bootstrap-ready" };
+type WorkerMessage =
+	| WorkerResponse
+	| RangeWorkerRequest
+	| RangeWorkerCancelRequest
+	| { type: "bootstrap-ready" };
 type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 	? OpenedResponse
 	: Request extends PageSizeRequest
@@ -124,6 +140,14 @@ type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 interface PendingRequest {
 	resolve(response: WorkerResponse): void;
 	reject(error: Error): void;
+	priority: PageTaskPriority | null;
+	signal: AbortSignal | undefined;
+	abortListener: (() => void) | null;
+	cancellationRequested: boolean;
+}
+
+interface PendingRangeRequest {
+	controller: AbortController;
 }
 
 export class PdfiumWorkerClient {
@@ -133,8 +157,10 @@ export class PdfiumWorkerClient {
 	#pending = new Map<number, PendingRequest>();
 	#state: "active" | "terminated" | "unavailable" = "active";
 	#terminalError: Error | null = null;
+	#pendingRanges = new Map<number, PendingRangeRequest>();
+	#opened = false;
 
-	constructor() {
+	constructor(private readonly rangeBroker?: PdfRangeBroker) {
 		const workerUrl = new URL(pdfiumWorkerAssetUrl, import.meta.url);
 		const workerHandle =
 			workerUrl.origin === globalThis.location.origin
@@ -164,89 +190,248 @@ export class PdfiumWorkerClient {
 		});
 	}
 
-	async open(url: string): Promise<PdfiumDocumentInfo> {
+	get isOpen(): boolean {
+		return this.#state === "active" && this.#opened;
+	}
+
+	get pendingRangeRequestCount(): number {
+		return this.#pendingRanges.size;
+	}
+
+	async open(
+		url: string,
+		useRangeBroker = this.rangeBroker !== undefined,
+	): Promise<PdfiumDocumentInfo> {
 		const wasmUrl = new URL(pdfiumWasmAssetUrl, import.meta.url).href;
-		const response = await this.#request<OpenRequest>({ type: "open", url, wasmUrl });
+		const response = await this.#request<OpenRequest>({
+			type: "open",
+			url,
+			wasmUrl,
+			useRangeBroker,
+		});
+		this.#opened = true;
 		return { pageCount: response.pageCount, fileLength: response.fileLength };
 	}
 
-	async getPageSize(pageIndex: number): Promise<PageSize> {
-		const response = await this.#request<PageSizeRequest>({ type: "page-size", pageIndex });
+	async getPageSize(
+		pageIndex: number,
+		priority: PageTaskPriority = "visible",
+		signal?: AbortSignal,
+	): Promise<PageSize> {
+		const response = await this.#request<PageSizeRequest>(
+			{
+				type: "page-size",
+				pageIndex,
+				priority,
+			},
+			signal,
+		);
 		return response.pageSize;
 	}
 
-	async prefetchPage(pageIndex: number): Promise<void> {
-		await this.#request<PagePrefetchRequest>({ type: "page-prefetch", pageIndex });
+	async prefetchPage(pageIndex: number, signal?: AbortSignal): Promise<void> {
+		await this.#request<PagePrefetchRequest>({ type: "page-prefetch", pageIndex }, signal);
 	}
 
-	async renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
-		const response = await this.#request<RenderRequest>({ type: "render", pageIndex, scale });
+	async renderPage(
+		pageIndex: number,
+		scale: number,
+		priority: PageTaskPriority = "visible",
+		signal?: AbortSignal,
+	): Promise<PageVisual> {
+		const response = await this.#request<RenderRequest>(
+			{
+				type: "render",
+				pageIndex,
+				scale,
+				priority,
+			},
+			signal,
+		);
 		return response.visual;
 	}
 
-	async renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
-		const response = await this.#request<ThumbnailRequest>({ type: "thumbnail", pageIndex });
+	async renderThumbnail(pageIndex: number, signal?: AbortSignal): Promise<PageVisual | null> {
+		const response = await this.#request<ThumbnailRequest>(
+			{ type: "thumbnail", pageIndex },
+			signal,
+		);
 		return response.visual;
 	}
 
-	async prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
-		const response = await this.#request<ThumbnailPrefetchRequest>({
-			type: "thumbnail-prefetch",
-			pageIndex,
-		});
+	async prefetchThumbnail(pageIndex: number, signal?: AbortSignal): Promise<PageVisual | null> {
+		const response = await this.#request<ThumbnailPrefetchRequest>(
+			{
+				type: "thumbnail-prefetch",
+				pageIndex,
+			},
+			signal,
+		);
 		return response.visual;
+	}
+
+	cancelRequests(priority: PageTaskPriority): void {
+		for (const [id, pending] of this.#pending) {
+			if (pending.priority === priority) this.#requestCancellation(id, pending);
+		}
 	}
 
 	terminate(): void {
 		if (this.#state !== "active") return;
 		this.#state = "terminated";
+		this.#opened = false;
 		this.#stopWorker();
+		for (const pending of this.#pendingRanges.values()) pending.controller.abort();
+		this.#pendingRanges.clear();
 		this.#rejectPending(new DOMException("PDF worker was terminated.", "AbortError"));
 	}
 
-	#request<Request extends WorkerRequest>(request: Request): Promise<ResponseFor<Request>> {
+	#request<Request extends WorkerRequest>(
+		request: Request,
+		signal?: AbortSignal,
+	): Promise<ResponseFor<Request>> {
 		if (this.#state === "unavailable") return Promise.reject(this.#terminalError);
 		if (this.#state === "terminated")
 			return Promise.reject(new DOMException("PDF worker was terminated.", "AbortError"));
+		if (signal?.aborted) return Promise.reject(createAbortError());
 		const id = this.#nextId;
 		this.#nextId += 1;
 		return new Promise<ResponseFor<Request>>((resolve, reject) => {
-			this.#pending.set(id, {
+			const pending: PendingRequest = {
 				resolve: (response) => {
 					if (response.type === "error") {
-						reject(new Error(response.message));
+						reject(createWorkerError(response));
 						return;
 					}
 					resolve(response as ResponseFor<Request>);
 				},
 				reject,
-			});
+				priority: getRequestPriority(request),
+				signal,
+				abortListener: null,
+				cancellationRequested: false,
+			};
+			this.#pending.set(id, pending);
+			if (signal !== undefined) {
+				pending.abortListener = () => this.#requestCancellation(id, pending);
+				signal.addEventListener("abort", pending.abortListener, { once: true });
+			}
 			this.#worker.postMessage({ id, ...request });
+			if (signal?.aborted) this.#requestCancellation(id, pending);
 		});
 	}
 
-	#onMessage(response: WorkerResponse): void {
+	#onMessage(response: WorkerMessage): void {
+		if (response.type === "bootstrap-ready") return;
+		if (response.type === "range-cancel") {
+			this.#pendingRanges.get(response.id)?.controller.abort();
+			return;
+		}
+		if (response.type === "range-request") {
+			void this.#handleRangeRequest(response);
+			return;
+		}
 		if (response.type === "error" && response.fatal === true) {
 			this.#markUnavailable(new PdfiumWorkerUnavailableError(response.message));
 			return;
 		}
 
 		const pending = this.#pending.get(response.id);
-		if (pending === undefined) return;
+		if (pending === undefined) {
+			releaseWorkerResponse(response);
+			return;
+		}
 		this.#pending.delete(response.id);
+		this.#removeAbortListener(pending);
+		if (pending.signal?.aborted) {
+			releaseWorkerResponse(response);
+			pending.reject(createAbortError());
+			return;
+		}
 		pending.resolve(response);
 	}
 
+	async #handleRangeRequest(message: RangeWorkerRequest): Promise<void> {
+		const broker = this.rangeBroker;
+		if (broker === undefined) {
+			this.#replyToRangeRequest(message.id, null, "The PDF range broker is unavailable.");
+			return;
+		}
+		const controller = new AbortController();
+		this.#pendingRanges.set(message.id, { controller });
+		try {
+			const response = await broker.request(message.request, controller.signal);
+			if (controller.signal.aborted || this.#state !== "active") return;
+			const bytes = new Uint8Array(response.bytes.byteLength);
+			bytes.set(response.bytes);
+			this.#replyToRangeRequest(message.id, {
+				bytes: bytes.buffer,
+				totalLength: response.totalLength,
+				etag: response.etag,
+				lastModified: response.lastModified,
+				responseUrl: response.responseUrl,
+			});
+		} catch (error) {
+			if (!controller.signal.aborted && this.#state === "active") {
+				this.#replyToRangeRequest(
+					message.id,
+					null,
+					error instanceof Error ? error.message : "The PDF range request failed.",
+					error instanceof PdfRepresentationChangedError,
+				);
+			}
+		} finally {
+			this.#pendingRanges.delete(message.id);
+		}
+	}
+
+	#replyToRangeRequest(
+		id: number,
+		response: NonNullable<RangeWorkerResponse["response"]> | null,
+		error?: string,
+		fatal = false,
+	): void {
+		const message: RangeWorkerResponse =
+			response === null
+				? {
+						type: "range-response",
+						id,
+						error: error ?? "The PDF range request failed.",
+						fatal,
+					}
+				: { type: "range-response", id, response };
+		const transfer: Transferable[] = response === null ? [] : [response.bytes];
+		this.#worker.postMessage(message, transfer);
+	}
+
 	#rejectPending(error: Error): void {
-		for (const pending of this.#pending.values()) pending.reject(error);
+		for (const pending of this.#pending.values()) {
+			this.#removeAbortListener(pending);
+			pending.reject(error);
+		}
 		this.#pending.clear();
+	}
+
+	#requestCancellation(id: number, pending: PendingRequest): void {
+		if (pending.cancellationRequested || this.#pending.get(id) !== pending) return;
+		pending.cancellationRequested = true;
+		this.#worker.postMessage({ type: "cancel", id });
+	}
+
+	#removeAbortListener(pending: PendingRequest): void {
+		if (pending.abortListener === null) return;
+		pending.signal?.removeEventListener("abort", pending.abortListener);
+		pending.abortListener = null;
 	}
 
 	#markUnavailable(error: PdfiumWorkerUnavailableError): void {
 		if (this.#state !== "active") return;
 		this.#state = "unavailable";
+		this.#opened = false;
 		this.#terminalError = error;
 		this.#stopWorker();
+		for (const pending of this.#pendingRanges.values()) pending.controller.abort();
+		this.#pendingRanges.clear();
 		this.#rejectPending(error);
 	}
 
@@ -259,6 +444,34 @@ export class PdfiumWorkerClient {
 		this.#releaseBootstrapUrl?.();
 		this.#releaseBootstrapUrl = null;
 	}
+}
+
+function getRequestPriority(request: WorkerRequest): PageTaskPriority | null {
+	if (request.type === "page-size" || request.type === "render") return request.priority;
+	if (request.type === "page-prefetch") return "data";
+	if (request.type === "thumbnail" || request.type === "thumbnail-prefetch") return "thumbnail";
+	return null;
+}
+
+function createWorkerError(response: ErrorResponse): Error {
+	const error = new Error(response.message);
+	if (response.errorName !== undefined) error.name = response.errorName;
+	return error;
+}
+
+function releaseWorkerResponse(response: WorkerResponse): void {
+	if (
+		(response.type === "rendered" ||
+			response.type === "thumbnail" ||
+			response.type === "thumbnail-prefetch") &&
+		response.visual?.type === "bitmap"
+	) {
+		response.visual.bitmap.close();
+	}
+}
+
+function createAbortError(): DOMException {
+	return new DOMException("PDF page operation was cancelled.", "AbortError");
 }
 
 interface PdfiumWorkerHandle {

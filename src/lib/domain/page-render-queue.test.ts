@@ -57,7 +57,26 @@ describe("PageRenderQueue", () => {
 		queue.dispose();
 	});
 
-	it("prioritizes a visible page over queued thumbnails", async () => {
+	it("dispatches queued data prefetches so the source scheduler can order them", async () => {
+		const prefetchRequests: number[] = [];
+		const finishPrefetch: Array<() => void> = [];
+		const source = createPageSource(async () => pixelVisual());
+		source.prefetchPage = vi.fn((pageIndex) => {
+			prefetchRequests.push(pageIndex);
+			return new Promise<void>((resolve) => finishPrefetch.push(resolve));
+		});
+		const queue = new PageRenderQueue(source);
+
+		const first = queue.prefetchPage(5);
+		const second = queue.prefetchPage(6);
+		await vi.waitFor(() => expect(prefetchRequests).toEqual([5, 6]));
+
+		for (const finish of finishPrefetch) finish();
+		await Promise.all([first, second]);
+		queue.dispose();
+	});
+
+	it("dispatches data work while prioritizing visible pages over queued thumbnails", async () => {
 		const requests: string[] = [];
 		const pending: Array<(visual: PageVisual) => void> = [];
 		let finishPrefetch: () => void = () => undefined;
@@ -79,11 +98,11 @@ describe("PageRenderQueue", () => {
 		const queuedPrefetch = queue.prefetchPage(3);
 		const queuedThumbnail = queue.render(2, 0.3, "thumbnail");
 		const visiblePage = queue.render(7, 1, "visible");
-		expect(requests).toEqual(["render-1", "render-4"]);
+		expect(requests).toEqual(["render-1", "render-4", "prefetch-3"]);
 		pending[0]?.(pixelVisual());
 		await firstThumbnail;
 		await vi.waitFor(() => expect(requests).toContain("render-7"));
-		expect(requests).toEqual(["render-1", "render-4", "render-7"]);
+		expect(requests).toEqual(["render-1", "render-4", "prefetch-3", "render-7"]);
 		pending[2]?.(pixelVisual());
 		await visiblePage;
 		pending[1]?.(pixelVisual());
@@ -95,9 +114,9 @@ describe("PageRenderQueue", () => {
 			expect(requests).toEqual([
 				"render-1",
 				"render-4",
+				"prefetch-3",
 				"render-7",
 				"render-2",
-				"prefetch-3",
 			]),
 		);
 		finishPrefetch();
@@ -105,15 +124,24 @@ describe("PageRenderQueue", () => {
 		queue.dispose();
 	});
 
-	it("cancels queued prefetch work when navigation changes", async () => {
+	it("cancels a running prefetch request when navigation changes", async () => {
 		const requests: number[] = [];
 		const pending: Array<(visual: PageVisual) => void> = [];
+		let rejectPrefetch: (error: Error) => void = () => undefined;
 		const source = createPageSource((pageIndex) => {
 			requests.push(pageIndex);
 			return new Promise((resolve) => pending.push(resolve));
 		});
-		const prefetchPage = vi.fn(async () => undefined);
+		const prefetchPage = vi.fn(
+			() =>
+				new Promise<void>((_resolve, reject) => {
+					rejectPrefetch = reject;
+				}),
+		);
 		source.prefetchPage = prefetchPage;
+		source.cancelPrefetchPageRequests = vi.fn(() =>
+			rejectPrefetch(new DOMException("cancelled", "AbortError")),
+		);
 		const queue = new PageRenderQueue(source);
 		const active = queue.render(1, 1, "visible");
 		await vi.waitFor(() => expect(requests).toEqual([1]));
@@ -122,7 +150,7 @@ describe("PageRenderQueue", () => {
 		await expect(queued).rejects.toMatchObject({ name: "AbortError" });
 		pending[0]?.(pixelVisual());
 		await active;
-		expect(prefetchPage).not.toHaveBeenCalled();
+		expect(prefetchPage).toHaveBeenCalledOnce();
 		queue.dispose();
 	});
 

@@ -81,23 +81,23 @@ test("finishes visible renders while an unrelated adjacent PDFium worker remains
 			backgroundCompleted = true;
 		});
 		await vi.waitFor(() =>
-			expect(getRenderRequest(RenderWorker.instances[1], 23)).toBeDefined(),
+			expect(getRenderRequest(RenderWorker.instances[0], 23)).toBeDefined(),
 		);
 
 		const firstVisibleRender = source.renderPage(0, 1);
 		const secondVisibleRender = source.renderPage(1, 1);
 		await vi.waitFor(() =>
-			expect(getRenderRequest(RenderWorker.instances[0], 0)).toBeDefined(),
+			expect(getRenderRequest(RenderWorker.instances[1], 0)).toBeDefined(),
 		);
 		await vi.waitFor(() =>
 			expect(getRenderRequest(RenderWorker.instances[2], 1)).toBeDefined(),
 		);
-		replyToRender(RenderWorker.instances[0], 0);
+		replyToRender(RenderWorker.instances[1], 0);
 		replyToRender(RenderWorker.instances[2], 1);
 		await Promise.all([firstVisibleRender, secondVisibleRender]);
 		expect(backgroundCompleted).toBe(false);
 
-		replyToRender(RenderWorker.instances[1], 23);
+		replyToRender(RenderWorker.instances[0], 23);
 		await backgroundRender;
 	} finally {
 		await source?.dispose();

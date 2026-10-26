@@ -66,9 +66,9 @@ test("starts visible rendering while background page-size acquisition is delayed
 			throw new Error("The background page-size API is unavailable.");
 		}
 		const adapter = createSourceAdapter(source, {
-			getPrefetchedPageSize(pageIndex) {
+			getPrefetchedPageSize(pageIndex, signal) {
 				backgroundPageSizeCalls.push(pageIndex);
-				return getPrefetchedPageSize.call(source, pageIndex);
+				return getPrefetchedPageSize.call(source, pageIndex, signal);
 			},
 			async prefetchPage() {},
 			cancelPrefetchPageRequests() {},
@@ -76,18 +76,20 @@ test("starts visible rendering while background page-size acquisition is delayed
 		await controller.load(FIXTURE_URL, createBackend(adapter));
 		await configureDelay("hold");
 
-		controller.requestRender(renderInput(1));
+		controller.requestRender(renderInput(2));
 		await waitForRender(controller, 1, 800);
 		await waitForDelayedRange();
 		expect(backgroundPageSizeCalls.length).toBeGreaterThan(0);
-		const latestRequestId = controller.requestRender(renderInput(2));
+		const latestRequestId = controller.requestRender(renderInput(4));
 		if (latestRequestId === null) throw new Error("The latest page request was rejected.");
 		controllerOwnsSource = true;
 
 		await waitForRender(controller, 2, 3000);
 		expect(controller.renderedRequestId).toBe(latestRequestId);
-		expect(controller.pageVisuals[1]).toBeDefined();
-		expect((await readMetrics()).delayRangeFinished).toBe(false);
+		expect(controller.pageVisuals[3]).toBeDefined();
+		const metrics = await readMetrics();
+		expect(metrics.delayRangeCancelled).toBe(true);
+		expect(metrics.delayRangeFinished).toBe(false);
 	} finally {
 		await releaseDelayedRange();
 		controller.dispose();
@@ -102,6 +104,7 @@ test("starts visible rendering while adjacent page-data prefetch is delayed", as
 	let controllerOwnsSource = false;
 	const pendingPrerender = deferred<PageVisual>();
 	try {
+		await warmAdjacentPages(source, 9, 10);
 		await warmAdjacentPages(source, 11, 12);
 		const adjacentPrefetchPages: number[] = [];
 		const prefetchPage = source.prefetchPage;
@@ -125,13 +128,13 @@ test("starts visible rendering while adjacent page-data prefetch is delayed", as
 		await waitForRender(controller, 1, 800);
 		await waitForDelayedRange();
 		expect(adjacentPrefetchPages).toContain(12);
-		const latestRequestId = controller.requestRender(renderInput(13));
+		const latestRequestId = controller.requestRender(renderInput(15));
 		if (latestRequestId === null) throw new Error("The latest page request was rejected.");
 		controllerOwnsSource = true;
 
 		await waitForRender(controller, 2, 3000);
 		expect(controller.renderedRequestId).toBe(latestRequestId);
-		expect(controller.pageVisuals[12]).toBeDefined();
+		expect(controller.pageVisuals[14]).toBeDefined();
 		expect((await readMetrics()).delayRangeFinished).toBe(false);
 	} finally {
 		await releaseDelayedRange();
@@ -202,8 +205,8 @@ function createSourceAdapter(source: PageSource, overrides: SourceOverrides = {}
 	const renderPrefetchedPage = overrides.renderPrefetchedPage ?? source.renderPrefetchedPage;
 	const adapter: PageSource = {
 		pageCount: source.pageCount,
-		getPageSize(pageIndex) {
-			return source.getPageSize(pageIndex);
+		getPageSize(pageIndex, signal) {
+			return source.getPageSize(pageIndex, signal);
 		},
 		cancelForegroundRequests() {
 			source.cancelForegroundRequests?.();
@@ -211,16 +214,16 @@ function createSourceAdapter(source: PageSource, overrides: SourceOverrides = {}
 		renderPage(pageIndex, scale) {
 			return source.renderPage(pageIndex, scale);
 		},
-		renderPrefetchedPage(pageIndex, scale) {
-			return renderPrefetchedPage.call(source, pageIndex, scale);
+		renderPrefetchedPage(pageIndex, scale, signal) {
+			return renderPrefetchedPage.call(source, pageIndex, scale, signal);
 		},
 		dispose() {
 			return source.dispose();
 		},
 	};
 	if (getPrefetchedPageSize !== undefined) {
-		adapter.getPrefetchedPageSize = (pageIndex) =>
-			getPrefetchedPageSize.call(source, pageIndex);
+		adapter.getPrefetchedPageSize = (pageIndex, signal) =>
+			getPrefetchedPageSize.call(source, pageIndex, signal);
 	}
 	if (prefetchPage !== undefined) {
 		adapter.prefetchPage = (pageIndex) => prefetchPage.call(source, pageIndex);

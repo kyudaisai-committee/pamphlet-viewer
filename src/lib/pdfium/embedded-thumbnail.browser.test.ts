@@ -5,9 +5,12 @@ import { PdfiumBackend } from "../document/pdfium-backend";
 import { PageRenderQueue } from "../domain/page-render-queue";
 
 test("uses a PDFium-rendered color thumbnail without rendering the full page", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+	const metricsBeforeOpen = await getThumbnailFixtureMetrics();
 	const { queue, dispose } = await openQueue("/__embedded-thumbnail-range-fixture.pdf");
 	try {
-		const metricsBefore = await getThumbnailFixtureMetrics();
+		const metricsAfterOpen = await getThumbnailFixtureMetrics();
 		const visual = await queue.render(0, 0.3, "thumbnail");
 		const metricsAfter = await getThumbnailFixtureMetrics();
 
@@ -18,10 +21,13 @@ test("uses a PDFium-rendered color thumbnail without rendering the full page", a
 		expect(getPixel(visual, 0, 0)).toEqual([255, 0, 0, 255]);
 		expect(getPixel(visual, 1, 0)).toEqual([0, 0, 255, 255]);
 		expect(metricsAfter.fullRequests).toBe(0);
-		expect(metricsAfter.requestedBytes - metricsBefore.requestedBytes).toBeGreaterThan(0);
-		expect(metricsAfter.requestedBytes - metricsBefore.requestedBytes).toBeLessThan(
-			metricsAfter.fileLength,
+		expect(metricsAfterOpen.requestedBytes - metricsBeforeOpen.requestedBytes).toBeGreaterThan(
+			0,
 		);
+		expect(metricsAfterOpen.requestedBytes - metricsBeforeOpen.requestedBytes).toBeLessThan(
+			metricsAfterOpen.fileLength,
+		);
+		expect(metricsAfter.requestedBytes).toBe(metricsAfterOpen.requestedBytes);
 	} finally {
 		dispose();
 	}

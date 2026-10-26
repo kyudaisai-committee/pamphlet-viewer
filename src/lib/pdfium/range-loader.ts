@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 
+import type { PageTaskPriority } from "../domain/page-task-scheduler";
 import { createRangeBatchPlan, type RangeBatch } from "./range-batch";
 import { RangeChunkCache } from "./range-chunk-cache";
 import { PdfRepresentationChangedError, requestPdfRange } from "./range-request";
+import type { RangeWorkerRequester } from "./range-transport";
 
 export const RANGE_CHUNK_SIZE = 256 * 1024;
 export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
@@ -24,11 +26,14 @@ export class PdfRangeLoader {
 	#lastModified: string | null = null;
 	#requestUrl: string;
 	#disposed = false;
+	#priority: PageTaskPriority = "visible";
+	#operationSignal: AbortSignal | null = null;
 
 	constructor(
 		url: string,
 		private readonly signal: AbortSignal,
 		cacheLimitBytes = RANGE_CACHE_LIMIT,
+		private readonly rangeRequester: RangeWorkerRequester = requestWorkerRange,
 	) {
 		this.#requestUrl = url;
 		if (!Number.isSafeInteger(cacheLimitBytes) || cacheLimitBytes < RANGE_CHUNK_SIZE) {
@@ -67,6 +72,14 @@ export class PdfRangeLoader {
 		this.#totalLength = null;
 		this.#etag = null;
 		this.#lastModified = null;
+	}
+
+	setPriority(priority: PageTaskPriority): void {
+		this.#priority = priority;
+	}
+
+	setOperationSignal(signal: AbortSignal | null): void {
+		this.#operationSignal = signal;
 	}
 
 	async initialize(): Promise<number> {
@@ -239,15 +252,18 @@ export class PdfRangeLoader {
 		this.#throwIfDisposed();
 		const start = batch.startIndex * RANGE_CHUNK_SIZE;
 		const requestedEnd = start + batch.chunkIndexes.length * RANGE_CHUNK_SIZE - 1;
-		const response = await requestPdfRange({
-			url: this.#requestUrl,
-			signal: this.signal,
-			start,
-			requestedEnd,
-			totalLength: this.#totalLength,
-			etag: this.#etag,
-			lastModified: this.#lastModified,
-		});
+		const response = await this.rangeRequester(
+			{
+				url: this.#requestUrl,
+				start,
+				requestedEnd,
+				totalLength: this.#totalLength,
+				etag: this.#etag,
+				lastModified: this.#lastModified,
+				priority: this.#priority,
+			},
+			this.#operationSignal ?? this.signal,
+		);
 		this.#throwIfDisposed();
 		if (
 			(this.#totalLength !== null && this.#totalLength !== response.totalLength) ||
@@ -278,4 +294,19 @@ export class PdfRangeLoader {
 	#throwIfDisposed(): void {
 		if (this.#disposed) throw new DOMException("PDF loading was cancelled.", "AbortError");
 	}
+}
+
+async function requestWorkerRange(
+	request: Parameters<RangeWorkerRequester>[0],
+	signal: AbortSignal,
+): Promise<Awaited<ReturnType<typeof requestPdfRange>>> {
+	return requestPdfRange({
+		url: request.url,
+		start: request.start,
+		requestedEnd: request.requestedEnd,
+		totalLength: request.totalLength,
+		etag: request.etag,
+		lastModified: request.lastModified,
+		signal,
+	});
 }

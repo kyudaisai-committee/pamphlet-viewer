@@ -10,13 +10,14 @@ export interface PageTaskLease<Result> {
 export interface PageTask<Result> {
 	readonly key: string;
 	readonly priority: PageTaskPriority;
-	execute(signal: AbortSignal): Promise<Result>;
+	execute(signal: AbortSignal, priority: PageTaskPriority): Promise<Result>;
 	releaseResult?(result: Result): void;
 }
 
 export interface PageTaskSchedulerOptions {
 	maximumConcurrent: number;
 	reservedVisible: number;
+	onVisibleBlocked?: () => void;
 }
 
 interface PageTaskWaiter<Result> {
@@ -34,6 +35,7 @@ interface ScheduledTask<Result> extends Omit<PageTask<Result>, "priority"> {
 	waiters: Set<PageTaskWaiter<Result>>;
 	controller: AbortController | null;
 	result: Result | null;
+	hasResult: boolean;
 	leaseCount: number;
 }
 
@@ -58,6 +60,13 @@ export class PageTaskScheduler {
 		}
 	}
 
+	get isVisibleBlocked(): boolean {
+		return (
+			this.#active >= this.options.maximumConcurrent &&
+			this.#queue.some((task) => task.priority === "visible")
+		);
+	}
+
 	schedule<Result>(task: PageTask<Result>, signal?: AbortSignal): Promise<PageTaskLease<Result>> {
 		if (this.#disposed) return Promise.reject(createAbortError());
 		if (signal?.aborted) return Promise.reject(createAbortError());
@@ -72,6 +81,7 @@ export class PageTaskScheduler {
 				waiters: new Set(),
 				controller: null,
 				result: null,
+				hasResult: false,
 				leaseCount: 0,
 			};
 			this.#sequence += 1;
@@ -94,6 +104,20 @@ export class PageTaskScheduler {
 		});
 	}
 
+	promote(key: string, priority: PageTaskPriority): boolean {
+		const task = this.#tasks.get(key);
+		if (
+			task === undefined ||
+			task.state !== "queued" ||
+			getPriorityRank(priority) >= getPriorityRank(task.priority)
+		) {
+			return false;
+		}
+		task.priority = priority;
+		this.#drain();
+		return true;
+	}
+
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
@@ -101,9 +125,10 @@ export class PageTaskScheduler {
 			for (const waiter of [...task.waiters])
 				this.#removeWaiter(task, waiter, createAbortError());
 			if (task.state === "running") task.controller?.abort();
-			if (task.state === "complete" && task.leaseCount === 0 && task.result !== null) {
+			if (task.state === "complete" && task.leaseCount === 0 && task.hasResult) {
 				task.releaseResult?.(task.result);
 				task.result = null;
+				task.hasResult = false;
 			}
 		}
 		this.#queue = [];
@@ -169,6 +194,7 @@ export class PageTaskScheduler {
 			task.controller = new AbortController();
 			void this.#run(task);
 		}
+		if (this.isVisibleBlocked) this.options.onVisibleBlocked?.();
 	}
 
 	#canStart(task: ScheduledTask<unknown>): boolean {
@@ -180,12 +206,17 @@ export class PageTaskScheduler {
 
 	async #run<Result>(task: ScheduledTask<Result>): Promise<void> {
 		try {
-			const result = await task.execute(task.controller?.signal ?? AbortSignal.abort());
+			const result = await task.execute(
+				task.controller?.signal ?? AbortSignal.abort(),
+				task.priority,
+			);
 			task.result = result;
+			task.hasResult = true;
 			task.state = "complete";
 			if (task.waiters.size === 0 || this.#disposed) {
 				task.releaseResult?.(result);
 				task.result = null;
+				task.hasResult = false;
 				this.#removeTask(task);
 				return;
 			}
@@ -221,9 +252,10 @@ export class PageTaskScheduler {
 				if (released) return;
 				released = true;
 				task.leaseCount -= 1;
-				if (task.leaseCount !== 0 || task.result === null) return;
-				task.releaseResult?.(task.result);
+				if (task.leaseCount !== 0 || !task.hasResult) return;
+				task.releaseResult?.(task.result as Result);
 				task.result = null;
+				task.hasResult = false;
 				this.#removeTask(task);
 			},
 		};

@@ -30,6 +30,10 @@ vi.mock("./range-loader", () => ({
 			return 256;
 		}
 
+		setPriority(): void {}
+
+		setOperationSignal(): void {}
+
 		clearRangeHints(): void {}
 
 		clearMissingChunks(): void {

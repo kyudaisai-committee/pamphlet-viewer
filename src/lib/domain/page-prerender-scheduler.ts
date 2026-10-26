@@ -23,6 +23,7 @@ interface PagePrerenderTask extends PagePrerenderRequest {
 	claimed: boolean;
 	desired: boolean;
 	preserveResult: boolean;
+	controller: AbortController;
 	result: Promise<PageVisual> | null;
 }
 
@@ -36,6 +37,7 @@ export class PagePrerenderScheduler {
 
 	setSource(source: PageSource | null): void {
 		if (source === this.#source) return;
+		for (const task of this.#tasksByKey.values()) task.controller.abort();
 		this.#source = source;
 		this.#queue = [];
 		this.#tasksByKey.clear();
@@ -64,6 +66,13 @@ export class PagePrerenderScheduler {
 			task.preserveResult = preserveCache;
 			if (task.state === "queued" && !task.desired && !task.claimed) {
 				this.#tasksByKey.delete(key);
+			} else if (
+				task.state === "running" &&
+				!task.desired &&
+				!preserveCache &&
+				!task.claimed
+			) {
+				task.controller.abort();
 			}
 		}
 		this.#queue = this.#queue.filter((task) => this.#tasksByKey.get(task.key) === task);
@@ -86,6 +95,7 @@ export class PagePrerenderScheduler {
 				claimed: false,
 				desired: true,
 				preserveResult: false,
+				controller: new AbortController(),
 				result: null,
 			};
 			this.#tasksByKey.set(key, task);
@@ -115,6 +125,7 @@ export class PagePrerenderScheduler {
 	}
 
 	clear(): void {
+		for (const task of this.#tasksByKey.values()) task.controller.abort();
 		this.#queue = [];
 		this.#tasksByKey.clear();
 		this.#clearCache();
@@ -127,7 +138,11 @@ export class PagePrerenderScheduler {
 			this.#active += 1;
 			request.state = "running";
 			request.result = Promise.resolve().then(() =>
-				request.source.renderPrefetchedPage(request.pageIndex, request.scale),
+				request.source.renderPrefetchedPage(
+					request.pageIndex,
+					request.scale,
+					request.controller.signal,
+				),
 			);
 			void this.#finish(request);
 		}

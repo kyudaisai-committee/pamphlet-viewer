@@ -39,52 +39,77 @@ describe("ViewerController page-data prefetch", () => {
 		controller.dispose();
 	});
 
-	it("cancels obsolete queued prefetches when navigation changes", async () => {
+	it("cancels obsolete page-data requests when navigation changes", async () => {
 		const activePrefetch = createDeferred<void>();
 		const prefetchIndexes: number[] = [];
+		let activePrefetchStarted = false;
+		const cancelPrefetch = vi.fn(() => {
+			if (activePrefetchStarted) {
+				activePrefetch.reject(new DOMException("cancelled", "AbortError"));
+			}
+		});
 		const source = createPageSource(
 			8,
 			async () => pixelVisual(),
 			(pageIndex) => {
 				prefetchIndexes.push(pageIndex);
-				return pageIndex === 1 ? activePrefetch.promise : Promise.resolve();
+				if (pageIndex === 1) {
+					activePrefetchStarted = true;
+					return activePrefetch.promise;
+				}
+				return Promise.resolve();
 			},
 		);
+		source.cancelPrefetchPageRequests = cancelPrefetch;
 		const controller = new ViewerController(() => undefined);
 		await controller.load("brochure.pdf", createBackend(source));
 		controller.requestRender(renderInput(1));
-		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1]));
+		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1, 2]));
+		cancelPrefetch.mockClear();
 
 		controller.requestRender(renderInput(2));
-		expect(prefetchIndexes).toEqual([1]);
+		expect(cancelPrefetch).toHaveBeenCalledOnce();
 		activePrefetch.resolve(undefined);
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
-		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1, 0, 2, 3]));
+		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1, 2, 0, 2, 3]));
 
 		controller.dispose();
 	});
 
-	it("cancels queued prefetch work when render requests are invalidated", async () => {
+	it("cancels active page-data work when render requests are invalidated", async () => {
 		const activePrefetch = createDeferred<void>();
 		const prefetchIndexes: number[] = [];
+		let activePrefetchStarted = false;
+		const cancelPrefetch = vi.fn(() => {
+			if (activePrefetchStarted) {
+				activePrefetch.reject(new DOMException("cancelled", "AbortError"));
+			}
+		});
 		const source = createPageSource(
 			5,
 			async () => pixelVisual(),
 			(pageIndex) => {
 				prefetchIndexes.push(pageIndex);
-				return pageIndex === 1 ? activePrefetch.promise : Promise.resolve();
+				if (pageIndex === 1) {
+					activePrefetchStarted = true;
+					return activePrefetch.promise;
+				}
+				return Promise.resolve();
 			},
 		);
+		source.cancelPrefetchPageRequests = cancelPrefetch;
 		const controller = new ViewerController(() => undefined);
 		await controller.load("brochure.pdf", createBackend(source));
 		controller.requestRender(renderInput(1));
-		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1]));
+		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1, 2]));
+		cancelPrefetch.mockClear();
 
 		controller.failInvalidOption();
 		activePrefetch.resolve(undefined);
 		await flushMicrotasks();
 
-		expect(prefetchIndexes).toEqual([1]);
+		expect(prefetchIndexes).toEqual([1, 2]);
+		expect(cancelPrefetch).toHaveBeenCalledOnce();
 		expect(controller.failure?.code).toBe("invalid-option");
 		controller.dispose();
 	});
@@ -103,7 +128,7 @@ describe("ViewerController page-data prefetch", () => {
 		const controller = new ViewerController(() => undefined);
 		await controller.load("old.pdf", createBackend(oldSource));
 		controller.requestRender(renderInput(1));
-		await vi.waitFor(() => expect(oldPrefetchIndexes).toEqual([1]));
+		await vi.waitFor(() => expect(oldPrefetchIndexes).toEqual([1, 2]));
 
 		await controller.load(
 			"new.pdf",
@@ -112,7 +137,7 @@ describe("ViewerController page-data prefetch", () => {
 		activePrefetch.resolve(undefined);
 		await flushMicrotasks();
 
-		expect(oldPrefetchIndexes).toEqual([1]);
+		expect(oldPrefetchIndexes).toEqual([1, 2]);
 		expect(controller.phase).toBe("ready");
 		controller.dispose();
 	});
@@ -131,13 +156,13 @@ describe("ViewerController page-data prefetch", () => {
 		const controller = new ViewerController(() => undefined);
 		await controller.load("brochure.pdf", createBackend(source));
 		controller.requestRender(renderInput(1));
-		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1]));
+		await vi.waitFor(() => expect(prefetchIndexes).toEqual([1, 2]));
 
 		controller.dispose();
 		activePrefetch.resolve(undefined);
 		await flushMicrotasks();
 
-		expect(prefetchIndexes).toEqual([1]);
+		expect(prefetchIndexes).toEqual([1, 2]);
 		expect(controller.phase).toBe("empty");
 	});
 
@@ -165,7 +190,7 @@ describe("ViewerController page-data prefetch", () => {
 		await controller.load("brochure.pdf", backend);
 		controller.requestRender(input);
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
-		await vi.waitFor(() => expect(firstPrefetchIndexes).toEqual([1]));
+		await vi.waitFor(() => expect(firstPrefetchIndexes).toEqual([1, 2]));
 
 		unavailablePrefetch.reject(
 			new PageSourceUnavailableError("The PDF source can no longer be read."),

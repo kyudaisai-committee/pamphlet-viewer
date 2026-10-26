@@ -138,6 +138,34 @@ describe("PdfiumWorkerClient terminal state", () => {
 		client.terminate();
 	});
 
+	it("cancels an operation without terminating the worker and releases a late bitmap", async () => {
+		const client = new PdfiumWorkerClient();
+		const worker = getWorker();
+		const controller = new AbortController();
+		const render = client.renderPage(3, 1, "visible", controller.signal);
+		const request = worker.requests[0];
+		if (request === undefined) throw new Error("The render request was not posted.");
+
+		controller.abort();
+		expect(worker.requests[1]).toMatchObject({ type: "cancel", id: request.id });
+		const close = vi.fn();
+		worker.reply({
+			id: request.id,
+			type: "rendered",
+			visual: {
+				type: "bitmap",
+				width: 10,
+				height: 10,
+				bitmap: { close } as unknown as ImageBitmap,
+			},
+		});
+
+		await expect(render).rejects.toMatchObject({ name: "AbortError" });
+		expect(close).toHaveBeenCalledOnce();
+		expect(worker.terminateCalls).toBe(0);
+		client.terminate();
+	});
+
 	it("maps a dead PDFium worker to the document-level unavailable contract", async () => {
 		const backend = new PdfiumBackend();
 		const openPromise = backend.open("brochure.pdf", new AbortController().signal);
@@ -151,6 +179,22 @@ describe("PdfiumWorkerClient terminal state", () => {
 		const sizeRequest = worker.requests[1];
 		if (sizeRequest === undefined) throw new Error("The page-size request was not posted.");
 		worker.reply({ id: sizeRequest.id, type: "error", message: "Worker trap.", fatal: true });
+		await vi.waitFor(() => expect(ControlledWorker.instances).toHaveLength(2));
+		const retryWorker = ControlledWorker.instances[1];
+		if (retryWorker === undefined) throw new Error("The replacement worker was not created.");
+		const retryOpen = retryWorker.requests[0];
+		if (retryOpen === undefined) throw new Error("The replacement worker was not opened.");
+		retryWorker.reply({ id: retryOpen.id, type: "opened", pageCount: 2, fileLength: 1024 });
+		await vi.waitFor(() => expect(retryWorker.requests).toHaveLength(2));
+		const retrySize = retryWorker.requests[1];
+		if (retrySize === undefined)
+			throw new Error("The replacement page-size request was not posted.");
+		retryWorker.reply({
+			id: retrySize.id,
+			type: "error",
+			message: "The replacement worker failed.",
+			fatal: true,
+		});
 
 		await expect(pageSize).rejects.toBeInstanceOf(PageSourceUnavailableError);
 		await source.dispose();

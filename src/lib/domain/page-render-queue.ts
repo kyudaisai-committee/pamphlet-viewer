@@ -32,7 +32,6 @@ type PageTask = RenderTask | PrefetchTask;
 export class PageRenderQueue {
 	#tasks: PageTask[] = [];
 	#active = 0;
-	#prefetchRunning = false;
 	#disposed = false;
 	#sequence = 0;
 
@@ -105,21 +104,7 @@ export class PageRenderQueue {
 	}
 
 	#drain(): void {
-		if (
-			!this.#disposed &&
-			!this.#prefetchRunning &&
-			this.#active === 0 &&
-			!this.#tasks.some((task) => task.type === "render")
-		) {
-			const prefetchIndex = this.#tasks.findIndex((task) => task.type === "prefetch");
-			if (prefetchIndex !== -1) {
-				const task = this.#tasks.splice(prefetchIndex, 1)[0];
-				if (task !== undefined) {
-					this.#prefetchRunning = true;
-					void this.#run(task);
-				}
-			}
-		}
+		if (this.#disposed) return;
 		while (!this.#disposed && this.#active < MAX_CONCURRENT_RENDERS && this.#tasks.length > 0) {
 			const renderIndex = this.#tasks.findIndex((task) => task.type === "render");
 			if (renderIndex === -1) break;
@@ -127,6 +112,12 @@ export class PageRenderQueue {
 			if (task === undefined) continue;
 			this.#active += 1;
 			void this.#run(task);
+		}
+		while (!this.#disposed) {
+			const prefetchIndex = this.#tasks.findIndex((task) => task.type === "prefetch");
+			if (prefetchIndex === -1) return;
+			const task = this.#tasks.splice(prefetchIndex, 1)[0];
+			if (task !== undefined) void this.#run(task);
 		}
 	}
 
@@ -170,9 +161,10 @@ export class PageRenderQueue {
 		} catch (error) {
 			task.reject(error);
 		} finally {
-			if (task.type === "prefetch") this.#prefetchRunning = false;
-			else this.#active -= 1;
-			this.#drain();
+			if (task.type === "render") {
+				this.#active -= 1;
+				this.#drain();
+			}
 		}
 	}
 }

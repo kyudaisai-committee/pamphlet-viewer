@@ -79,6 +79,7 @@ export class ViewerController {
 	#sourceUnavailable = false;
 	#renderQueue: PageRenderQueue | null = null;
 	#thumbnailRenderQueue: PageRenderQueue | null = null;
+	#adjacentPrerenderController: AbortController | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
 	#prerenderScheduler = new PagePrerenderScheduler();
 	#reportCleanupError: (error: unknown) => void;
@@ -215,6 +216,7 @@ export class ViewerController {
 		if (key === this.#lastRenderKey) return this.#renderId;
 		this.#lastRenderKey = key;
 		this.#prerenderScheduler.setRequests([], true);
+		this.#cancelAdjacentPrerenderSizes();
 		this.#renderQueue?.cancelQueued("prefetch");
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
@@ -301,9 +303,31 @@ export class ViewerController {
 					const plan = plans[localIndex];
 					if (plan === undefined) throw new Error("The page render plan is missing.");
 					const prerender = this.#prerenderScheduler.take(pageIndex, plan.rasterScale);
-					const visual =
-						prerender ??
-						(await renderQueue.render(pageIndex, plan.rasterScale, "visible"));
+					if (prerender !== undefined) return { visual: prerender, plan };
+
+					const promotePageRender = source.promotePageRender;
+					if (promotePageRender !== undefined) {
+						const pendingPrerender = this.#prerenderScheduler.claim(
+							pageIndex,
+							plan.rasterScale,
+						);
+						if (pendingPrerender !== undefined) {
+							if (promotePageRender.call(source, pageIndex, plan.rasterScale)) {
+								try {
+									return { visual: await pendingPrerender, plan };
+								} catch {
+									// A failed speculative render is retried at visible priority.
+								}
+							} else {
+								void pendingPrerender.then(
+									(visual) => releaseVisuals([visual]),
+									() => undefined,
+								);
+							}
+						}
+					}
+
+					const visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
 					return { visual, plan };
 				}),
 			);
@@ -387,6 +411,9 @@ export class ViewerController {
 	}
 
 	async #requestAdjacentPrerenders(request: ScheduledRender, source: PageSource): Promise<void> {
+		this.#cancelAdjacentPrerenderSizes();
+		const controller = new AbortController();
+		this.#adjacentPrerenderController = controller;
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		const groups = getAdjacentPageGroups(this.pageCount, request.page, layout);
 		try {
@@ -395,8 +422,8 @@ export class ViewerController {
 					const pageSizes = await Promise.all(
 						pageIndexes.map((pageIndex) =>
 							source.getPrefetchedPageSize === undefined
-								? source.getPageSize(pageIndex)
-								: source.getPrefetchedPageSize(pageIndex),
+								? source.getPageSize(pageIndex, controller.signal)
+								: source.getPrefetchedPageSize(pageIndex, controller.signal),
 						),
 					);
 					const displayScale = calculateFitScale(
@@ -440,7 +467,16 @@ export class ViewerController {
 				this.#handleSourceUnavailable();
 			}
 			// A speculative page-size lookup can be retried with the next render request.
+		} finally {
+			if (this.#adjacentPrerenderController === controller) {
+				this.#adjacentPrerenderController = null;
+			}
 		}
+	}
+
+	#cancelAdjacentPrerenderSizes(): void {
+		this.#adjacentPrerenderController?.abort();
+		this.#adjacentPrerenderController = null;
 	}
 
 	#isCurrent(request: ScheduledRender, source: PageSource): boolean {
@@ -452,6 +488,7 @@ export class ViewerController {
 	}
 
 	#cancelDocument(preservePageChangeKey = false): void {
+		this.#cancelAdjacentPrerenderSizes();
 		this.#loadId += 1;
 		this.#renderId += 1;
 		this.#pendingRender = null;
@@ -499,6 +536,7 @@ export class ViewerController {
 	}
 
 	#invalidateRenderRequests(): void {
+		this.#cancelAdjacentPrerenderSizes();
 		this.#renderId += 1;
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";

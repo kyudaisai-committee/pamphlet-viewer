@@ -92,6 +92,29 @@ test("releases a shared result once after every lease is released", async () => 
 	scheduler.dispose();
 });
 
+test("removes a completed null result after its final lease is released", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const firstExecute = vi.fn(async () => null);
+	const firstLease = await scheduler.schedule({
+		key: "optional-thumbnail",
+		priority: "thumbnail",
+		execute: firstExecute,
+	});
+	expect(firstLease.value).toBeNull();
+	firstLease.release();
+
+	const secondExecute = vi.fn(async () => "rendered");
+	const secondLease = await scheduler.schedule({
+		key: "optional-thumbnail",
+		priority: "thumbnail",
+		execute: secondExecute,
+	});
+	expect(secondExecute).toHaveBeenCalledOnce();
+	expect(secondLease.value).toBe("rendered");
+	secondLease.release();
+	scheduler.dispose();
+});
+
 test("does not join a new consumer to an aborting task and releases its late result", async () => {
 	const scheduler = new PageTaskScheduler({ maximumConcurrent: 2, reservedVisible: 0 });
 	const oldResult = createDeferred<{ id: string }>();

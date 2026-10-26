@@ -13,7 +13,13 @@ interface PagePrefetchRequest {
 	pageIndex: number;
 }
 
+interface CancelRequest {
+	id: number;
+	type: "cancel";
+}
+
 type WorkerRequest = OpenRequest | PagePrefetchRequest;
+type WorkerMessage = WorkerRequest | CancelRequest;
 
 interface WorkerResponse {
 	id: number;
@@ -25,7 +31,7 @@ interface DocumentSessionStub {
 	readonly info: { pageCount: number; fileLength: number };
 	readonly isPoisoned: boolean;
 	dispose(): void;
-	prefetchPage(pageIndex: number): Promise<void>;
+	prefetchPage(pageIndex: number, signal?: AbortSignal): Promise<void>;
 }
 
 describe("PDF worker document lifecycle", () => {
@@ -59,13 +65,13 @@ describe("PDF worker document lifecycle", () => {
 
 		const responses: WorkerResponse[] = [];
 		const closeWorker = vi.fn();
-		let dispatch: ((request: OpenRequest) => void) | null = null;
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
 		const workerScope = {
 			addEventListener(
 				_type: "message",
-				listener: (event: MessageEvent<OpenRequest>) => void,
+				listener: (event: MessageEvent<WorkerMessage>) => void,
 			) {
-				dispatch = (request) => listener({ data: request } as MessageEvent<OpenRequest>);
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
 			},
 			postMessage(message: WorkerResponse): void {
 				responses.push(message);
@@ -115,13 +121,13 @@ describe("PDF worker document lifecycle", () => {
 		}));
 
 		const responses: WorkerResponse[] = [];
-		let dispatch: ((request: WorkerRequest) => void) | null = null;
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
 		const workerScope = {
 			addEventListener(
 				_type: "message",
-				listener: (event: MessageEvent<WorkerRequest>) => void,
+				listener: (event: MessageEvent<WorkerMessage>) => void,
 			) {
-				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerRequest>);
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
 			},
 			postMessage(message: WorkerResponse): void {
 				responses.push(message);
@@ -131,7 +137,7 @@ describe("PDF worker document lifecycle", () => {
 		vi.stubGlobal("self", workerScope);
 		await import("./pdfium.worker");
 
-		const send = (request: WorkerRequest): void => {
+		const send = (request: WorkerMessage): void => {
 			if (dispatch === null)
 				throw new Error("The PDF worker did not register its message handler.");
 			dispatch(request);
@@ -146,7 +152,7 @@ describe("PDF worker document lifecycle", () => {
 		send({ id: 2, type: "page-prefetch", pageIndex: 6 });
 		await vi.waitFor(() => expect(responses).toHaveLength(2));
 
-		expect(prefetchPage).toHaveBeenCalledWith(6);
+		expect(prefetchPage).toHaveBeenCalledWith(6, expect.any(AbortSignal));
 		expect(responses[1]).toMatchObject({ id: 2, type: "page-prefetch" });
 	});
 
@@ -171,13 +177,13 @@ describe("PDF worker document lifecycle", () => {
 
 		const responses: WorkerResponse[] = [];
 		const closeWorker = vi.fn();
-		let dispatch: ((request: WorkerRequest) => void) | null = null;
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
 		const workerScope = {
 			addEventListener(
 				_type: "message",
-				listener: (event: MessageEvent<WorkerRequest>) => void,
+				listener: (event: MessageEvent<WorkerMessage>) => void,
 			) {
-				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerRequest>);
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
 			},
 			postMessage(message: WorkerResponse): void {
 				responses.push(message);
@@ -187,7 +193,7 @@ describe("PDF worker document lifecycle", () => {
 		vi.stubGlobal("self", workerScope);
 		await import("./pdfium.worker");
 
-		const send = (request: WorkerRequest): void => {
+		const send = (request: WorkerMessage): void => {
 			if (dispatch === null)
 				throw new Error("The PDF worker did not register its message handler.");
 			dispatch(request);
@@ -206,4 +212,144 @@ describe("PDF worker document lifecycle", () => {
 		expect(session.dispose).toHaveBeenCalledOnce();
 		expect(closeWorker).toHaveBeenCalledOnce();
 	});
+
+	it("skips a queued operation cancelled while another operation is running", async () => {
+		const firstOperation = createDeferred<void>();
+		const prefetchPage = vi.fn((pageIndex: number) =>
+			pageIndex === 1 ? firstOperation.promise : Promise.resolve(),
+		);
+		const session: DocumentSessionStub = {
+			info: { pageCount: 8, fileLength: 1024 },
+			isPoisoned: false,
+			dispose() {},
+			prefetchPage,
+		};
+		vi.doMock("./pdfium-document", () => ({
+			PdfiumDocumentSession: class {
+				static open(): Promise<DocumentSessionStub> {
+					return Promise.resolve(session);
+				}
+			},
+			PdfiumFatalError: class extends Error {},
+		}));
+
+		const responses: WorkerResponse[] = [];
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
+		const workerScope = {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerMessage>) => void,
+			) {
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
+			},
+			postMessage(message: WorkerResponse): void {
+				responses.push(message);
+			},
+			close() {},
+		};
+		vi.stubGlobal("self", workerScope);
+		await import("./pdfium.worker");
+
+		const send = (request: WorkerMessage): void => {
+			if (dispatch === null)
+				throw new Error("The PDF worker did not register its message handler.");
+			dispatch(request);
+		};
+		send({
+			id: 1,
+			type: "open",
+			url: "https://example.test/brochure.pdf",
+			wasmUrl: "https://example.test/pdfium.wasm",
+		});
+		await vi.waitFor(() => expect(responses).toHaveLength(1));
+		send({ id: 2, type: "page-prefetch", pageIndex: 1 });
+		await vi.waitFor(() =>
+			expect(prefetchPage).toHaveBeenCalledWith(1, expect.any(AbortSignal)),
+		);
+		send({ id: 3, type: "page-prefetch", pageIndex: 2 });
+		send({ id: 3, type: "cancel" });
+		firstOperation.resolve(undefined);
+		await vi.waitFor(() => expect(responses).toHaveLength(3));
+
+		expect(prefetchPage).toHaveBeenCalledOnce();
+		expect(responses[2]).toMatchObject({ id: 3, type: "error", errorName: "AbortError" });
+	});
+
+	it("forwards cancellation to an active asynchronous operation and keeps the worker alive", async () => {
+		const prefetchPage = vi.fn((pageIndex: number, signal?: AbortSignal) => {
+			if (pageIndex !== 1) return Promise.resolve();
+			return new Promise<void>((_resolve, reject) => {
+				signal?.addEventListener(
+					"abort",
+					() => reject(new DOMException("The operation was cancelled.", "AbortError")),
+					{ once: true },
+				);
+			});
+		});
+		const session: DocumentSessionStub = {
+			info: { pageCount: 8, fileLength: 1024 },
+			isPoisoned: false,
+			dispose() {},
+			prefetchPage,
+		};
+		vi.doMock("./pdfium-document", () => ({
+			PdfiumDocumentSession: class {
+				static open(): Promise<DocumentSessionStub> {
+					return Promise.resolve(session);
+				}
+			},
+			PdfiumFatalError: class extends Error {},
+		}));
+
+		const responses: WorkerResponse[] = [];
+		const closeWorker = vi.fn();
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
+		const workerScope = {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerMessage>) => void,
+			) {
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
+			},
+			postMessage(message: WorkerResponse): void {
+				responses.push(message);
+			},
+			close: closeWorker,
+		};
+		vi.stubGlobal("self", workerScope);
+		await import("./pdfium.worker");
+
+		const send = (request: WorkerMessage): void => {
+			if (dispatch === null)
+				throw new Error("The PDF worker did not register its message handler.");
+			dispatch(request);
+		};
+		send({
+			id: 1,
+			type: "open",
+			url: "https://example.test/brochure.pdf",
+			wasmUrl: "https://example.test/pdfium.wasm",
+		});
+		await vi.waitFor(() => expect(responses).toHaveLength(1));
+		send({ id: 2, type: "page-prefetch", pageIndex: 1 });
+		await vi.waitFor(() =>
+			expect(prefetchPage).toHaveBeenCalledWith(1, expect.any(AbortSignal)),
+		);
+		send({ id: 2, type: "cancel" });
+		await vi.waitFor(() => expect(responses).toHaveLength(2));
+		expect(responses[1]).toMatchObject({ id: 2, type: "error", errorName: "AbortError" });
+
+		send({ id: 3, type: "page-prefetch", pageIndex: 2 });
+		await vi.waitFor(() => expect(responses).toHaveLength(3));
+		expect(prefetchPage).toHaveBeenCalledTimes(2);
+		expect(closeWorker).not.toHaveBeenCalled();
+	});
 });
+
+function createDeferred<Value>(): { promise: Promise<Value>; resolve(value: Value): void } {
+	let resolve: (value: Value) => void = () => undefined;
+	const promise = new Promise<Value>((complete) => {
+		resolve = complete;
+	});
+	return { promise, resolve };
+}

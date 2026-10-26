@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
 import {
 	PageSourceUnavailableError,
@@ -13,12 +14,14 @@ import { PdfiumWorkerPool } from "./pdfium-worker-pool";
 export class PdfiumBackend implements DocumentBackend {
 	async open(source: string, signal: AbortSignal): Promise<PageSource> {
 		if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-		const client = new PdfiumWorkerClient();
-		let thumbnailClient: PdfiumWorkerClient | null = null;
+		const rangeBroker = new PdfRangeBroker(source);
+		const client = new PdfiumWorkerClient(rangeBroker);
 		let pageSource: PdfiumPageSource | null = null;
-		const abort = function terminateWorker(): void {
-			if (pageSource === null) client.terminate();
-			else pageSource.dispose();
+		const abort = function abortDocumentOpen(): void {
+			if (pageSource === null) {
+				client.terminate();
+				rangeBroker.dispose();
+			} else pageSource.dispose();
 		};
 		signal.addEventListener("abort", abort, { once: true });
 		try {
@@ -26,23 +29,17 @@ export class PdfiumBackend implements DocumentBackend {
 			if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
 			pageSource = new PdfiumPageSource(
 				info.pageCount,
-				client,
 				source,
+				client,
+				rangeBroker,
 				signal,
 				abort,
-				() => {
-					thumbnailClient ??= new PdfiumWorkerClient();
-					return thumbnailClient;
-				},
-				() => {
-					thumbnailClient?.terminate();
-					thumbnailClient = null;
-				},
 			);
 			return pageSource;
 		} catch (error) {
 			signal.removeEventListener("abort", abort);
 			client.terminate();
+			rangeBroker.dispose();
 			throw error;
 		}
 	}
@@ -50,80 +47,78 @@ export class PdfiumBackend implements DocumentBackend {
 
 class PdfiumPageSource implements PageSource {
 	#disposed = false;
-	#foregroundPool: PdfiumWorkerPool;
-	#prerenderPool: PdfiumWorkerPool;
+	#workerPool: PdfiumWorkerPool;
 	readonly propagateThumbnailErrors = true;
 
 	constructor(
 		readonly pageCount: number,
+		source: string,
 		client: PdfiumWorkerClient,
-		private readonly source: string,
+		private readonly rangeBroker: PdfRangeBroker,
 		private readonly signal: AbortSignal,
 		private readonly abortListener: () => void,
-		private readonly getThumbnailClient: () => PdfiumWorkerClient,
-		private readonly terminateThumbnailClient: () => void,
 	) {
-		this.#foregroundPool = new PdfiumWorkerPool(source, pageCount, client);
-		this.#prerenderPool = new PdfiumWorkerPool(source, pageCount, null, 1);
+		this.#workerPool = new PdfiumWorkerPool(source, pageCount, rangeBroker, client);
 	}
 
-	getPageSize(pageIndex: number): Promise<PageSize> {
+	getPageSize(pageIndex: number, signal?: AbortSignal): Promise<PageSize> {
 		this.#assertActive();
-		return this.#foregroundPool.getPageSize(pageIndex).catch(mapSourceFailure);
+		return this.#workerPool.getPageSize(pageIndex, "visible", signal).catch(mapSourceFailure);
 	}
 
-	getPrefetchedPageSize(pageIndex: number): Promise<PageSize> {
+	getPrefetchedPageSize(pageIndex: number, signal?: AbortSignal): Promise<PageSize> {
 		this.#assertActive();
-		return this.#prerenderPool.getPageSize(pageIndex).catch(mapSourceFailure);
+		return this.#workerPool.getPageSize(pageIndex, "prerender", signal).catch(mapSourceFailure);
 	}
 
 	getThumbnailPageSize(pageIndex: number): Promise<PageSize> {
 		this.#assertActive();
-		return this.#openThumbnailWorker()
-			.then((client) => client.getPageSize(pageIndex))
-			.catch(mapSourceFailure);
+		return this.#workerPool.getPageSize(pageIndex, "thumbnail").catch(mapSourceFailure);
 	}
 
 	cancelForegroundRequests(): void {
-		this.#foregroundPool.interrupt();
+		this.#workerPool.cancelRequests("visible");
+	}
+
+	promotePageRender(pageIndex: number, scale: number): boolean {
+		return this.#workerPool.promoteRender(pageIndex, scale);
 	}
 
 	prefetchPage(pageIndex: number): Promise<void> {
 		this.#assertActive();
-		return this.#foregroundPool.prefetchPage(pageIndex).catch(mapSourceFailure);
+		return this.#workerPool.prefetchPage(pageIndex).catch(mapSourceFailure);
 	}
 
 	cancelPrefetchPageRequests(): void {
-		this.#foregroundPool.interruptPrefetch();
+		this.#workerPool.cancelRequests("data");
 	}
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
-		return this.#foregroundPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
+		return this.#workerPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
 	}
 
 	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
-		return this.#prerenderPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
+		return this.#workerPool.renderPage(pageIndex, scale, "prerender").catch(mapSourceFailure);
 	}
 
 	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
 		this.#assertActive();
-		return this.#renderThumbnail(pageIndex).catch(mapSourceFailure);
+		return this.#workerPool.renderThumbnail(pageIndex).catch(mapSourceFailure);
 	}
 
 	prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
 		this.#assertActive();
-		return this.#prefetchThumbnail(pageIndex).catch(mapSourceFailure);
+		return this.#workerPool.prefetchThumbnail(pageIndex).catch(mapSourceFailure);
 	}
 
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.signal.removeEventListener("abort", this.abortListener);
-		this.#foregroundPool.dispose();
-		this.#prerenderPool.dispose();
-		this.terminateThumbnailClient();
+		this.#workerPool.dispose();
+		this.rangeBroker.dispose();
 	}
 
 	#assertActive(): void {
@@ -131,46 +126,10 @@ class PdfiumPageSource implements PageSource {
 			throw new DOMException("PDF document is no longer available.", "AbortError");
 		}
 	}
-
-	async #renderThumbnail(pageIndex: number): Promise<PageVisual> {
-		const client = await this.#openThumbnailWorker();
-		const visual = await client.renderThumbnail(pageIndex);
-		if (visual === null) throw new Error("PDFium could not render the requested thumbnail.");
-		return visual;
-	}
-
-	async #prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
-		const client = await this.#openThumbnailWorker();
-		return client.prefetchThumbnail(pageIndex);
-	}
-
-	#thumbnailOpen: Promise<PdfiumWorkerClient> | null = null;
-
-	async #openThumbnailWorker(): Promise<PdfiumWorkerClient> {
-		this.#assertActive();
-		if (this.#thumbnailOpen === null) {
-			const client = this.getThumbnailClient();
-			this.#thumbnailOpen = client
-				.open(this.source)
-				.then((info) => {
-					if (info.pageCount !== this.pageCount) {
-						throw new PdfiumWorkerUnavailableError(
-							"The PDF source changed while its thumbnails were loading.",
-						);
-					}
-					return client;
-				})
-				.catch((error: unknown) => {
-					this.terminateThumbnailClient();
-					this.#thumbnailOpen = null;
-					throw error;
-				});
-		}
-		return this.#thumbnailOpen;
-	}
 }
 
 function mapSourceFailure(error: unknown): never {
+	if (error instanceof PageSourceUnavailableError) throw error;
 	if (error instanceof PdfiumWorkerUnavailableError) {
 		throw new PageSourceUnavailableError(error.message, { cause: error });
 	}

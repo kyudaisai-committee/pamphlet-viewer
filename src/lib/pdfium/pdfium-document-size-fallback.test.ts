@@ -25,6 +25,10 @@ vi.mock("./range-loader", () => ({
 			return rangeLoaderMocks.hasMissingChunks;
 		}
 
+		setPriority(): void {}
+
+		setOperationSignal(): void {}
+
 		async initialize(): Promise<number> {
 			this.totalLength = 256;
 			return 256;
