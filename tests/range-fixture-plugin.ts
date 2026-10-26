@@ -31,6 +31,7 @@ const CORS_CLOSE_PATH = "/__pdfium-cors-close";
 const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
 const ANNOTATED_FIXTURE_PATH = "/__annotated-range-fixture.pdf";
 const EMBEDDED_THUMBNAIL_FIXTURE_PATH = "/__embedded-thumbnail-range-fixture.pdf";
+const EMBEDDED_THUMBNAIL_BATCH_FIXTURE_PATH = "/__embedded-thumbnail-batch-range-fixture.pdf";
 const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 const LIBRARY_HTML_PATH = "/__built-library-test.html";
 const REMOTE_LIBRARY_HTML_PATH = "/__built-library-remote-test.html";
@@ -82,6 +83,14 @@ export function rangeFixturePlugin(): Plugin {
 		}),
 		"/__embedded-thumbnail-range-metrics",
 	);
+	const embeddedThumbnailBatchFixture = createFixtureRecord(
+		createPdfFixture({
+			thumbnailPageNumbers: Array.from({ length: 24 }, (_, index) => index + 1),
+			indexedThumbnailPageNumbers: [1],
+			imagePageNumbers: [24],
+		}),
+		"/__embedded-thumbnail-batch-range-metrics",
+	);
 	let redirectRequests = 0;
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
@@ -93,6 +102,7 @@ export function rangeFixturePlugin(): Plugin {
 		[REDIRECT_TARGET_PATH, redirectFixture],
 		[ANNOTATED_FIXTURE_PATH, annotatedFixture],
 		[EMBEDDED_THUMBNAIL_FIXTURE_PATH, embeddedThumbnailFixture],
+		[EMBEDDED_THUMBNAIL_BATCH_FIXTURE_PATH, embeddedThumbnailBatchFixture],
 	]);
 	const corsServers = new Map<number, ReturnType<typeof createServer>>();
 	const corsAssetRequests = new Map<number, string[]>();
