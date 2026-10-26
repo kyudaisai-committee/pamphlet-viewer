@@ -517,6 +517,10 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 		setZoomAt(value, center);
 	}
 
+	function onUserScroll(): void {
+		clearZoomAnchor();
+	}
+
 	function retry(): void {
 		if (controller.failure?.code === "load-failed") {
 			const resolvedSource = resolveDocumentSource(
@@ -569,6 +573,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 					bind:pageArea
 					onViewportChange={onViewportChange}
 					onZoomGesture={onZoomGesture}
+					onUserScroll={onUserScroll}
 					onPrevious={previousPage}
 					onNext={nextPage}
 					onRetry={retry}
