@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import type { ViewerPhase } from "../domain/viewer-controller.svelte";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		phase: ViewerPhase;
@@ -9,17 +10,18 @@
 	}
 
 	let { phase, pageCount }: Props = $props();
+	const messages = useViewerMessages();
 </script>
 
 <div class="status-bar" aria-live="polite">
 	{#if phase === "ready"}
-		<span>{pageCount}ページ</span>
+		<span>{messages.pageCount(pageCount)}</span>
 	{:else if phase === "loading"}
-		<span>準備中</span>
+		<span>{messages.statusLoading}</span>
 	{:else if phase === "error"}
-		<span>読み込みエラー</span>
+		<span>{messages.statusError}</span>
 	{:else}
-		<span>PDF未選択</span>
+		<span>{messages.statusEmpty}</span>
 	{/if}
 </div>
 

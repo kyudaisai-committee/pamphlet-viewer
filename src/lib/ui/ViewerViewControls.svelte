@@ -4,6 +4,7 @@
 	import { Maximize2Icon, Minimize2Icon } from "@lucide/svelte";
 
 	import type { FitMode, LayoutMode } from "../domain/layout";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface ViewOption {
 		value: string;
@@ -11,15 +12,6 @@
 		layout: LayoutMode;
 		label: string;
 	}
-
-	const VIEW_OPTIONS: readonly ViewOption[] = [
-		{ value: "auto-page", layout: "auto", fit: "page", label: "自動・ページ全体" },
-		{ value: "auto-width", layout: "auto", fit: "width", label: "自動・幅に合わせる" },
-		{ value: "single-page", layout: "single", fit: "page", label: "単ページ・ページ全体" },
-		{ value: "single-width", layout: "single", fit: "width", label: "単ページ・幅に合わせる" },
-		{ value: "spread-page", layout: "spread", fit: "page", label: "見開き・ページ全体" },
-		{ value: "spread-width", layout: "spread", fit: "width", label: "見開き・幅に合わせる" },
-	];
 
 	interface Props {
 		fit: FitMode;
@@ -40,30 +32,39 @@
 		onLayoutChange,
 		onToggleFullscreen,
 	}: Props = $props();
+	const messages = useViewerMessages();
+	const viewOptions: readonly ViewOption[] = $derived.by(() => [
+		{ value: "auto-page", layout: "auto", fit: "page", label: messages.viewAutoPage },
+		{ value: "auto-width", layout: "auto", fit: "width", label: messages.viewAutoWidth },
+		{ value: "single-page", layout: "single", fit: "page", label: messages.viewSinglePage },
+		{ value: "single-width", layout: "single", fit: "width", label: messages.viewSingleWidth },
+		{ value: "spread-page", layout: "spread", fit: "page", label: messages.viewSpreadPage },
+		{ value: "spread-width", layout: "spread", fit: "width", label: messages.viewSpreadWidth },
+	]);
 
 	let selectedView = $derived(
-		VIEW_OPTIONS.find((option) => option.fit === fit && option.layout === layout)?.value ??
-			VIEW_OPTIONS[0].value,
+		viewOptions.find((option) => option.fit === fit && option.layout === layout)?.value ??
+			viewOptions[0].value,
 	);
 
 	function onViewChange(value: string): void {
-		const option = VIEW_OPTIONS.find((viewOption) => viewOption.value === value);
+		const option = viewOptions.find((viewOption) => viewOption.value === value);
 		if (option === undefined) return;
 		onLayoutChange(option.layout);
 		onFitChange(option.fit);
 	}
 </script>
 
-<div class="view-controls" role="group" aria-label="表示設定">
+<div class="view-controls" role="group" aria-label={messages.viewSettingsLabel}>
 	<label class="view-mode-control">
-		<span class="visually-hidden">表示方法</span>
+		<span class="visually-hidden">{messages.viewMode}</span>
 		<select
-			aria-label="表示方法"
+			aria-label={messages.viewMode}
 			value={selectedView}
 			disabled={!enabled}
 			onchange={(event) => onViewChange(event.currentTarget.value)}
 		>
-			{#each VIEW_OPTIONS as option (option.value)}
+			{#each viewOptions as option (option.value)}
 				<option value={option.value}>{option.label}</option>
 			{/each}
 		</select>
@@ -72,9 +73,9 @@
 		class="icon-button fullscreen-toggle"
 		type="button"
 		data-control="fullscreen"
-		aria-label={fullscreen ? "埋め込み表示に戻す" : "全画面表示"}
+		aria-label={fullscreen ? messages.exitFullscreen : messages.fullscreen}
 		aria-pressed={fullscreen}
-		title={fullscreen ? "埋め込み表示に戻す" : "全画面表示"}
+		title={fullscreen ? messages.exitFullscreen : messages.fullscreen}
 		onclick={onToggleFullscreen}
 	>
 		{#if fullscreen}

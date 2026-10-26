@@ -26,6 +26,8 @@ evenodd
 mdsvex
 vite
 kyudaisai
+Paraglide
+Inlang
 unpremultiply
 kurage
 umitsukidev

@@ -9,6 +9,7 @@
 	import type { ViewportSize } from "../domain/layout";
 	import { detectPageSwipeDirection, ReaderGestureController } from "../domain/reader-gesture";
 	import type { GesturePoint } from "../domain/reader-gesture";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";
 
@@ -45,6 +46,7 @@
 		onNext,
 		onRetry,
 	}: Props = $props();
+	const messages = useViewerMessages();
 	const gestures = new ReaderGestureController();
 	let pointerActive = $state(false);
 	let swipeCandidate: { pointerId: number; start: GesturePoint; startedAt: number } | null = null;
@@ -216,7 +218,7 @@
 	class="page-area"
 	class:zoomed={zoom > 1}
 	class:dragging={pointerActive && hasScrollableContent()}
-	aria-label="パンフレット表示領域"
+	aria-label={messages.pageDisplayArea}
 	aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown"
 	tabindex="-1"
 	bind:this={pageArea}
@@ -230,7 +232,7 @@
 					style:width={`${page.plan.displayWidth}px`}
 					style:height={`${page.plan.displayHeight}px`}
 				>
-					<PageCanvas visual={page.visual} label={`${page.pageIndex + 1}ページ`} />
+					<PageCanvas visual={page.visual} label={messages.pageLabel(page.pageIndex + 1)} />
 				</div>
 			{/each}
 		</div>

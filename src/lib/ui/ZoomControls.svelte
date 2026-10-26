@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		zoom: number;
@@ -11,6 +12,7 @@
 	}
 
 	let { zoom, enabled, onZoomChange, onResetZoom }: Props = $props();
+	const messages = useViewerMessages();
 
 	function setZoomFromInput(event: Event): void {
 		const input = event.currentTarget;
@@ -19,12 +21,12 @@
 	}
 </script>
 
-<div class="zoom-controls" role="group" aria-label="拡大縮小">
+<div class="zoom-controls" role="group" aria-label={messages.zoomControls}>
 	<button
 		class="icon-button"
 		type="button"
-		aria-label="縮小"
-		title="縮小"
+		aria-label={messages.zoomOut}
+		title={messages.zoomOut}
 		disabled={!enabled || zoom <= 0.1}
 		onclick={() => onZoomChange(Math.max(0.1, zoom / 1.2))}
 	>
@@ -37,7 +39,7 @@
 		max="8"
 		step="0.1"
 		value={zoom}
-		aria-label="拡大率"
+		aria-label={messages.zoomLevel}
 		disabled={!enabled}
 		oninput={setZoomFromInput}
 	/>
@@ -45,8 +47,8 @@
 	<button
 		class="icon-button"
 		type="button"
-		aria-label="拡大"
-		title="拡大"
+		aria-label={messages.zoomIn}
+		title={messages.zoomIn}
 		disabled={!enabled || zoom >= 8}
 		onclick={() => onZoomChange(Math.min(8, zoom * 1.2))}
 	>
@@ -55,13 +57,13 @@
 	<button
 		class="text-button reset-zoom"
 		type="button"
-		aria-label="拡大率をリセット"
-		title="拡大率をリセット"
+		aria-label={messages.resetZoom}
+		title={messages.resetZoom}
 		disabled={!enabled || zoom === 1}
 		onclick={onResetZoom}
 	>
 		<RotateCcwIcon size={15} aria-hidden="true" />
-		<span class="reset-label">合わせる</span>
+		<span class="reset-label">{messages.fitView}</span>
 	</button>
 </div>
 

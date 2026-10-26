@@ -110,7 +110,7 @@ function invalidateRender(
 		controller.requestRender({ ...renderInput(1), page: 3 });
 		return;
 	}
-	controller.failInvalidOption("ページ配置またはフィット方法の値が正しくありません。");
+	controller.failInvalidOption();
 }
 
 function createBackend(pageSource: PageSource) {

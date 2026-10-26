@@ -10,6 +10,7 @@
 	} from "@lucide/svelte";
 
 	import type { PamphletChapter } from "@/lib/public-api";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import CompactNavigation from "./CompactNavigation.svelte";
 
 	interface Props {
@@ -53,15 +54,16 @@
 		onNext,
 		onToggleThumbnails,
 	}: Props = $props();
+	const messages = useViewerMessages();
 </script>
 
-<div class="page-controls" role="group" aria-label="ページ移動">
+<div class="page-controls" role="group" aria-label={messages.pageNavigationLabel}>
 	<button
 		class="icon-button thumbnail-toggle"
 		type="button"
-		aria-label={thumbnailsOpen ? "ページ一覧を閉じる" : "ページ一覧を開く"}
+		aria-label={thumbnailsOpen ? messages.hidePages : messages.showPages}
 		aria-expanded={thumbnailsOpen}
-		title={thumbnailsOpen ? "ページ一覧を閉じる" : "ページ一覧を開く"}
+		title={thumbnailsOpen ? messages.hidePages : messages.showPages}
 		onclick={onToggleThumbnails}
 	>
 		<PanelLeftIcon size={18} aria-hidden="true" />
@@ -69,8 +71,8 @@
 	<button
 		class="icon-button"
 		type="button"
-		aria-label="前のページ"
-		title="前のページ"
+		aria-label={messages.previousPage}
+		title={messages.previousPage}
 		aria-keyshortcuts="ArrowLeft PageUp"
 		disabled={!enabled || !canPrevious}
 		onclick={onPrevious}
@@ -83,7 +85,7 @@
 			min="1"
 			max={pageCount}
 			value={page}
-			aria-label="ページ番号"
+			aria-label={messages.pageNumber}
 			disabled={!enabled}
 			onchange={(event) => onPageChange(event.currentTarget.value)}
 		/>
@@ -92,8 +94,8 @@
 	<button
 		class="icon-button"
 		type="button"
-		aria-label="次のページ"
-		title="次のページ"
+		aria-label={messages.nextPage}
+		title={messages.nextPage}
 		aria-keyshortcuts="ArrowRight PageDown"
 		disabled={!enabled || !canNext}
 		onclick={onNext}
@@ -103,9 +105,9 @@
 	<button
 		class="icon-button bookmark-toggle"
 		type="button"
-		aria-label={bookmarked ? "このページのブックマークを解除" : "このページをブックマーク"}
+		aria-label={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
 		aria-pressed={bookmarked}
-		title={bookmarked ? "このページのブックマークを解除" : "このページをブックマーク"}
+		title={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
 		disabled={!bookmarkEnabled}
 		onclick={onToggleBookmark}
 	>
@@ -130,14 +132,14 @@
 
 {#if chapters.length > 0}
 	<label class="chapter-control">
-		<span>章</span>
+		<span>{messages.chapter}</span>
 		<select
-			aria-label="章へ移動"
+			aria-label={messages.goToChapter}
 			value={currentChapterPage ?? ""}
 			disabled={!enabled}
 			onchange={(event) => onChapterChange(event.currentTarget.value)}
 		>
-			<option value="">章を選択</option>
+			<option value="">{messages.selectChapter}</option>
 			{#each chapters as chapter (chapter.page)}
 				<option value={chapter.page}>{chapter.title}</option>
 			{/each}
@@ -146,9 +148,9 @@
 {/if}
 {#if bookmarkPages.length > 0}
 	<label class="bookmark-list-control">
-		<span>保存ページ</span>
+		<span>{messages.savedPages}</span>
 		<select
-			aria-label="ブックマーク一覧"
+			aria-label={messages.bookmarkList}
 			value=""
 			disabled={!bookmarkEnabled}
 			onchange={(event) => {
@@ -156,9 +158,9 @@
 				event.currentTarget.value = "";
 			}}
 		>
-			<option value="">移動</option>
+			<option value="">{messages.go}</option>
 			{#each bookmarkPages as savedPage (savedPage)}
-				<option value={savedPage}>{savedPage}ページ</option>
+				<option value={savedPage}>{messages.savedPage(savedPage)}</option>
 			{/each}
 		</select>
 	</label>

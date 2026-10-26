@@ -1,3 +1,4 @@
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 
@@ -10,7 +11,14 @@ const LICENSE_BANNER = `/*!
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [svelte()],
+	plugins: [
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/paraglide",
+			emitTsDeclarations: true,
+		}),
+		svelte(),
+	],
 	resolve: { alias: sourceAlias },
 	build: {
 		outDir: "dist/demo",

@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import type { FitMode, LayoutMode } from "../domain/layout";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
 	import ZoomControls from "./ZoomControls.svelte";
 
@@ -30,9 +31,10 @@
 		onResetZoom,
 		onToggleFullscreen,
 	}: Props = $props();
+	const messages = useViewerMessages();
 </script>
 
-<div class="settings-toolbar" role="group" aria-label="ズームと表示設定">
+<div class="settings-toolbar" role="group" aria-label={messages.settingsLabel}>
 	<ZoomControls {zoom} {enabled} {onZoomChange} {onResetZoom} />
 	<ViewerViewControls
 		{fit}

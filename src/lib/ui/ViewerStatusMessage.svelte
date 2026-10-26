@@ -2,6 +2,7 @@
 
 <script lang="ts">
 	import type { ViewerFailure, ViewerPhase } from "../domain/viewer-controller.svelte";
+	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		phase: ViewerPhase;
@@ -10,20 +11,21 @@
 	}
 
 	let { phase, failure, onRetry }: Props = $props();
+	const messages = useViewerMessages();
 </script>
 
 <div class="status" role={phase === "error" ? "alert" : "status"}>
 	{#if phase === "loading"}
-		<span>PDFの情報を読み込んでいます。</span>
+		<span>{messages.loadingDocument}</span>
 	{:else if phase === "error"}
-		<p>{failure?.message ?? "PDFを表示できませんでした。"}</p>
+		<p>{failure?.message ?? messages.displayError}</p>
 		{#if failure?.retryable}
-			<button type="button" onclick={onRetry}>再試行</button>
+			<button type="button" onclick={onRetry}>{messages.retry}</button>
 		{/if}
 	{:else if phase === "ready"}
-		<span>ページを描画しています。</span>
+		<span>{messages.renderingPage}</span>
 	{:else}
-		<span>PDFのURLを設定すると、ここにパンフレットが表示されます。</span>
+		<span>{messages.emptyViewer}</span>
 	{/if}
 </div>
 

@@ -1,3 +1,4 @@
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { dts } from "rolldown-plugin-dts";
 import { defineConfig } from "vite";
@@ -11,7 +12,15 @@ const LICENSE_BANNER = `/*!
 
 export default defineConfig({
 	base: "./",
-	plugins: [svelte(), ...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" })],
+	plugins: [
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/paraglide",
+			emitTsDeclarations: true,
+		}),
+		svelte(),
+		...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" }),
+	],
 	resolve: { alias: sourceAlias },
 	oxc: { exclude: [/\.js$/, /\.d\.[cm]?ts$/] },
 	build: {
