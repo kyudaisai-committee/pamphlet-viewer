@@ -122,6 +122,57 @@ test("does not join a new consumer to an aborting task and releases its late res
 	scheduler.dispose();
 });
 
+test("keeps an aborting background task inside the reserved-slot count until it settles", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 2, reservedVisible: 1 });
+	const oldBackground = createDeferred<string>();
+	const visibleWork = createDeferred<string>();
+	const started: string[] = [];
+	const calls: string[] = [];
+	const backgroundController = new AbortController();
+	const oldTask = scheduler.schedule(
+		{
+			key: "background:old",
+			priority: "data",
+			execute: () => {
+				started.push("old background");
+				return oldBackground.promise;
+			},
+		},
+		backgroundController.signal,
+	);
+	const visibleTask = scheduler.schedule({
+		key: "visible:current",
+		priority: "visible",
+		execute: () => {
+			started.push("visible");
+			return visibleWork.promise;
+		},
+	});
+	expect(started).toEqual(["old background", "visible"]);
+	backgroundController.abort();
+	await expect(oldTask).rejects.toMatchObject({ name: "AbortError" });
+
+	const queuedBackground = scheduler.schedule({
+		key: "background:new",
+		priority: "data",
+		execute: async () => {
+			calls.push("new background");
+			return "new";
+		},
+	});
+	visibleWork.resolve("visible");
+	const visibleLease = await visibleTask;
+	visibleLease.release();
+	await Promise.resolve();
+	expect(calls).toEqual([]);
+
+	oldBackground.resolve("late old result");
+	const queuedLease = await queuedBackground;
+	expect(calls).toEqual(["new background"]);
+	queuedLease.release();
+	scheduler.dispose();
+});
+
 test("rejects a task whose executor throws synchronously", async () => {
 	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
 	const failure = new Error("synchronous executor failure");

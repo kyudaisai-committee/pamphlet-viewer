@@ -30,6 +30,7 @@ interface ScheduledTask<Result> extends Omit<PageTask<Result>, "priority"> {
 	priority: PageTaskPriority;
 	sequence: number;
 	state: "queued" | "running" | "aborting" | "complete";
+	runningPriority: PageTaskPriority | null;
 	waiters: Set<PageTaskWaiter<Result>>;
 	controller: AbortController | null;
 	result: Result | null;
@@ -40,6 +41,7 @@ export class PageTaskScheduler {
 	#tasks = new Map<string, ScheduledTask<unknown>>();
 	#queue: ScheduledTask<unknown>[] = [];
 	#active = 0;
+	#activeBackground = 0;
 	#sequence = 0;
 	#disposed = false;
 
@@ -66,6 +68,7 @@ export class PageTaskScheduler {
 				...task,
 				sequence: this.#sequence,
 				state: "queued",
+				runningPriority: null,
 				waiters: new Set(),
 				controller: null,
 				result: null,
@@ -76,7 +79,10 @@ export class PageTaskScheduler {
 			this.#queue.push(scheduled as ScheduledTask<unknown>);
 		} else if (scheduled.state === "complete") {
 			return Promise.resolve(this.#createLease(scheduled));
-		} else if (getPriorityRank(task.priority) < getPriorityRank(scheduled.priority)) {
+		} else if (
+			scheduled.state === "queued" &&
+			getPriorityRank(task.priority) < getPriorityRank(scheduled.priority)
+		) {
 			scheduled.priority = task.priority;
 		}
 
@@ -157,6 +163,8 @@ export class PageTaskScheduler {
 			const task = this.#queue.splice(index, 1)[0];
 			if (task === undefined) continue;
 			this.#active += 1;
+			task.runningPriority = task.priority;
+			if (task.runningPriority !== "visible") this.#activeBackground += 1;
 			task.state = "running";
 			task.controller = new AbortController();
 			void this.#run(task);
@@ -165,12 +173,9 @@ export class PageTaskScheduler {
 
 	#canStart(task: ScheduledTask<unknown>): boolean {
 		if (task.priority === "visible") return true;
-		const backgroundCount = [...this.#tasks.values()].filter(
-			(candidate) =>
-				(candidate.state === "running" || candidate.state === "aborting") &&
-				candidate.priority !== "visible",
-		).length;
-		return backgroundCount < this.options.maximumConcurrent - this.options.reservedVisible;
+		return (
+			this.#activeBackground < this.options.maximumConcurrent - this.options.reservedVisible
+		);
 	}
 
 	async #run<Result>(task: ScheduledTask<Result>): Promise<void> {
@@ -199,6 +204,10 @@ export class PageTaskScheduler {
 			this.#removeTask(task);
 		} finally {
 			this.#active -= 1;
+			if (task.runningPriority !== null && task.runningPriority !== "visible") {
+				this.#activeBackground -= 1;
+			}
+			task.runningPriority = null;
 			this.#drain();
 		}
 	}
