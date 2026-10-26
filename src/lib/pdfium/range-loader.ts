@@ -146,6 +146,10 @@ export class PdfRangeLoader {
 		this.#hintedChunks.clear();
 	}
 
+	clearMissingChunks(): void {
+		this.#missingChunks.clear();
+	}
+
 	async fetchMissingChunks(includeHints = false): Promise<number> {
 		this.#throwIfDisposed();
 		const cacheCapacityChunks = Math.floor(this.#cacheLimitBytes / RANGE_CHUNK_SIZE);

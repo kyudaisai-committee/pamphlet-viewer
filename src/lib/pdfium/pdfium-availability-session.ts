@@ -84,6 +84,11 @@ export class PdfiumAvailabilitySession {
 	beginPageOperation(): void {
 		this.#rebuildCount = 0;
 		this.#rangeFetchBatchCount = 0;
+		if (!this.loader.hasMissingChunks) return;
+
+		this.loader.clearMissingChunks();
+		this.loader.clearRangeHints();
+		this.#rebuildNativeState();
 	}
 
 	completePageOperation(): void {
@@ -345,7 +350,7 @@ export class PdfiumAvailabilitySession {
 		return fetched;
 	}
 
-	async #rebuildNativeState(): Promise<void> {
+	#rebuildNativeState(): void {
 		this.#rebuildCount += 1;
 		if (this.#rebuildCount > MAX_CACHE_REBUILDS) {
 			throw new Error("PDFium could not keep the required ranges within the 64 MiB working cache.");
