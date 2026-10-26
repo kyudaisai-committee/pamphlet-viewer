@@ -238,6 +238,14 @@ export class PdfiumWorkerClient {
 		return response.pageSize;
 	}
 
+	promotePageSize(pageIndex: number, priority: PageTaskPriority): boolean {
+		return this.#promotePageRequests(
+			(pageRequest) =>
+				pageRequest.type === "page-size" && pageRequest.pageIndex === pageIndex,
+			priority,
+		);
+	}
+
 	async prefetchPage(pageIndex: number, signal?: AbortSignal): Promise<void> {
 		await this.#request<PagePrefetchRequest>({ type: "page-prefetch", pageIndex }, signal);
 	}
@@ -286,13 +294,23 @@ export class PdfiumWorkerClient {
 	}
 
 	promoteRender(pageIndex: number, scale: number, priority: PageTaskPriority): boolean {
+		return this.#promotePageRequests(
+			(pageRequest) =>
+				pageRequest.type === "render" &&
+				pageRequest.pageIndex === pageIndex &&
+				pageRequest.scale === scale,
+			priority,
+		);
+	}
+
+	#promotePageRequests(
+		matches: (request: WorkerRequest) => boolean,
+		priority: PageTaskPriority,
+	): boolean {
 		let promoted = false;
 		for (const [id, pending] of this.#pending) {
-			const request = pending.request;
 			if (
-				request.type !== "render" ||
-				request.pageIndex !== pageIndex ||
-				request.scale !== scale ||
+				!matches(pending.request) ||
 				pending.cancellationRequested ||
 				pending.signal?.aborted === true ||
 				pending.priority === null ||
@@ -302,7 +320,17 @@ export class PdfiumWorkerClient {
 			}
 			pending.priority = priority;
 			promoted = true;
-			this.#worker.postMessage({ type: "promote", id, priority });
+			try {
+				this.#worker.postMessage({ type: "promote", id, priority });
+			} catch (error) {
+				this.#markUnavailable(
+					new PdfiumWorkerUnavailableError(
+						"The PDF worker stopped while promoting a page operation.",
+						{ cause: error },
+					),
+				);
+				return promoted;
+			}
 		}
 		return promoted;
 	}
@@ -383,7 +411,16 @@ export class PdfiumWorkerClient {
 		if (response.type === "range-promote") {
 			const pending = this.#pendingRanges.get(response.id);
 			if (pending !== undefined) {
-				this.rangeBroker?.promoteRequest(pending.request, response.priority);
+				try {
+					this.rangeBroker?.promoteRequest(pending.request, response.priority);
+				} catch (error) {
+					this.#markUnavailable(
+						new PdfiumWorkerUnavailableError(
+							"The document range broker stopped while promoting a request.",
+							{ cause: error },
+						),
+					);
+				}
 			}
 			return;
 		}
@@ -474,9 +511,12 @@ export class PdfiumWorkerClient {
 		try {
 			this.#worker.postMessage({ type: "cancel", id });
 		} catch (error) {
-			this.#pending.delete(id);
-			this.#removeAbortListener(pending);
-			pending.reject(error instanceof Error ? error : new Error("The PDF worker stopped."));
+			this.#markUnavailable(
+				new PdfiumWorkerUnavailableError(
+					"The PDF worker stopped while cancelling a page operation.",
+					{ cause: error },
+				),
+			);
 		}
 	}
 

@@ -94,7 +94,8 @@ export class PageTaskScheduler {
 			(scheduled.state === "queued" || scheduled.state === "running") &&
 			getPriorityRank(task.priority) < getPriorityRank(scheduled.priority)
 		) {
-			this.#promoteTask(scheduled, task.priority);
+			const promotionError = this.#promoteTask(scheduled, task.priority);
+			if (promotionError !== null) return Promise.reject(promotionError);
 		}
 
 		const waiter = this.#createWaiter(scheduled, signal);
@@ -114,7 +115,8 @@ export class PageTaskScheduler {
 		) {
 			return false;
 		}
-		this.#promoteTask(task, priority);
+		const promotionError = this.#promoteTask(task, priority);
+		if (promotionError !== null) return true;
 		this.#drain();
 		return true;
 	}
@@ -205,9 +207,22 @@ export class PageTaskScheduler {
 		);
 	}
 
-	#promoteTask(task: ScheduledTask<unknown>, priority: PageTaskPriority): void {
+	#promoteTask(task: ScheduledTask<unknown>, priority: PageTaskPriority): Error | null {
+		if (task.state !== "running") {
+			task.priority = priority;
+			return null;
+		}
+		try {
+			task.onPriorityChange?.(priority);
+		} catch (error) {
+			const promotionError =
+				error instanceof Error ? error : new Error("The page task could not be promoted.");
+			for (const waiter of [...task.waiters]) {
+				this.#removeWaiter(task, waiter, promotionError);
+			}
+			return promotionError;
+		}
 		task.priority = priority;
-		if (task.state !== "running") return;
 		if (
 			task.runningPriority !== null &&
 			task.runningPriority !== "visible" &&
@@ -216,7 +231,7 @@ export class PageTaskScheduler {
 			this.#activeBackground -= 1;
 		}
 		task.runningPriority = priority;
-		task.onPriorityChange?.(priority);
+		return null;
 	}
 
 	async #run<Result>(task: ScheduledTask<Result>): Promise<void> {

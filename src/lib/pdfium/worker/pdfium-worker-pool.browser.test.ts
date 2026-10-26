@@ -17,6 +17,7 @@ class ControlledWorker extends EventTarget {
 	readonly requests: WorkerRequest[] = [];
 	terminateCalls = 0;
 	opened = false;
+	postMessageErrorForType: string | null = null;
 
 	constructor() {
 		super();
@@ -25,6 +26,9 @@ class ControlledWorker extends EventTarget {
 
 	postMessage(message: unknown): void {
 		if (!isWorkerRequest(message)) throw new Error("The PDF worker request is invalid.");
+		if (this.postMessageErrorForType === message.type) {
+			throw new Error(`The worker could not receive ${message.type}.`);
+		}
 		this.requests.push(message);
 	}
 
@@ -221,6 +225,177 @@ test("promotes an in-flight prerender through the real backend and range broker"
 		controller.abort();
 		source.dispose();
 		vi.unstubAllGlobals();
+	}
+});
+
+test("promotes in-flight page-size work and its outstanding range request", async () => {
+	const sourceUrl = "https://example.test/catalog.pdf";
+	const pdf = Uint8Array.from({ length: RANGE_CHUNK_SIZE * 12 }, (_value, index) => index % 251);
+	const fetches: Array<{
+		range: string;
+		signal: AbortSignal;
+		resolve(response: Response): void;
+	}> = [];
+	vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+		const signal = init.signal;
+		const range = new Headers(init.headers).get("Range");
+		if (!(signal instanceof AbortSignal) || range === null) {
+			throw new Error("The PDF range broker omitted an abortable request.");
+		}
+		return new Promise<Response>((resolve, reject) => {
+			fetches.push({ range, signal, resolve });
+			signal.addEventListener(
+				"abort",
+				() => reject(new DOMException("The range fetch was cancelled.", "AbortError")),
+				{ once: true },
+			);
+		});
+	});
+	const opening = new PdfiumBackend().open(sourceUrl, new AbortController().signal);
+	const worker = getWorker(0);
+	const openRequest = await waitForRequest(worker, "open");
+	worker.reply({ id: openRequest.id, type: "opened", pageCount: 3, fileLength: pdf.byteLength });
+	const source = await opening;
+	try {
+		worker.reply({
+			type: "range-request",
+			id: 200,
+			request: createRangeRequest(sourceUrl, 0, "thumbnail"),
+		});
+		worker.reply({
+			type: "range-request",
+			id: 201,
+			request: createRangeRequest(sourceUrl, 4 * RANGE_CHUNK_SIZE, "thumbnail"),
+		});
+		await vi.waitFor(() => expect(fetches).toHaveLength(2));
+
+		const prefetchedSize = source.getPrefetchedPageSize?.(1);
+		if (prefetchedSize === undefined)
+			throw new Error("The prefetch page-size API is unavailable.");
+		const sizeRequest = await waitForRequest(worker, "page-size");
+		worker.reply({
+			type: "range-request",
+			id: 202,
+			request: createRangeRequest(sourceUrl, 8 * RANGE_CHUNK_SIZE, "prerender"),
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(fetches).toHaveLength(2);
+
+		const visibleSize = source.getPageSize(1);
+		await vi.waitFor(() =>
+			expect(worker.requests).toContainEqual(
+				expect.objectContaining({
+					type: "promote",
+					id: sizeRequest.id,
+					priority: "visible",
+				}),
+			),
+		);
+		worker.reply({ type: "range-promote", id: 202, priority: "visible" });
+		await vi.waitFor(() => expect(fetches).toHaveLength(3));
+		expect(fetches.slice(0, 2).every((fetch) => !fetch.signal.aborted)).toBe(true);
+		const promotedFetch = fetches[2];
+		if (promotedFetch === undefined) throw new Error("The promoted range fetch did not start.");
+		promotedFetch.resolve(createRangeResponse(pdf, promotedFetch.range));
+		await vi.waitFor(() =>
+			expect(worker.requests).toContainEqual(
+				expect.objectContaining({ type: "range-response", id: 202 }),
+			),
+		);
+		worker.reply({
+			id: sizeRequest.id,
+			type: "page-size",
+			pageSize: { width: 300, height: 400 },
+		});
+		await expect(prefetchedSize).resolves.toEqual({ width: 300, height: 400 });
+		await expect(visibleSize).resolves.toEqual({ width: 300, height: 400 });
+	} finally {
+		source.dispose();
+		vi.unstubAllGlobals();
+	}
+});
+
+test("retries a render when promotion cannot be posted to its worker", async () => {
+	const backend = new PdfiumBackend();
+	const opening = backend.open("https://example.test/catalog.pdf", new AbortController().signal);
+	const worker = getWorker(0);
+	const openRequest = await waitForRequest(worker, "open");
+	worker.reply({ id: openRequest.id, type: "opened", pageCount: 3, fileLength: 1024 });
+	const source = await opening;
+	try {
+		const rendering = source.renderPrefetchedPage(1, 1);
+		const prerender = await waitForRequest(worker, "render");
+		worker.postMessageErrorForType = "promote";
+		expect(source.promotePageRender?.(1, 1)).toBe(true);
+		await vi.waitFor(() => expect(ControlledWorker.instances).toHaveLength(2));
+		expect(worker.terminateCalls).toBe(1);
+		const replacement = getWorker(1);
+		const replacementOpen = await waitForRequest(replacement, "open");
+		expect(prerender.id).toBeGreaterThan(openRequest.id);
+		replacement.reply({
+			id: replacementOpen.id,
+			type: "opened",
+			pageCount: 3,
+			fileLength: 1024,
+		});
+		const retry = await waitForRequest(replacement, "render");
+		replacement.reply({
+			id: retry.id,
+			type: "rendered",
+			visual: {
+				type: "pixels",
+				width: 1,
+				height: 1,
+				pixels: new ArrayBuffer(4),
+			},
+		});
+		await expect(rendering).resolves.toMatchObject({ type: "pixels", width: 1, height: 1 });
+	} finally {
+		source.dispose();
+	}
+});
+
+test("exchanges a worker when a cancellation message cannot be posted", async () => {
+	const backend = new PdfiumBackend();
+	const opening = backend.open("https://example.test/catalog.pdf", new AbortController().signal);
+	const worker = getWorker(0);
+	const openRequest = await waitForRequest(worker, "open");
+	worker.reply({ id: openRequest.id, type: "opened", pageCount: 3, fileLength: 1024 });
+	const source = await opening;
+	const controller = new AbortController();
+	try {
+		const cancelledRender = source.renderPrefetchedPage(1, 1, controller.signal);
+		await waitForRequest(worker, "render");
+		worker.postMessageErrorForType = "cancel";
+		controller.abort();
+		await expect(cancelledRender).rejects.toMatchObject({ name: "AbortError" });
+		await vi.waitFor(() => expect(worker.terminateCalls).toBe(1));
+
+		const latestRender = source.renderPage(2, 1);
+		await vi.waitFor(() => expect(ControlledWorker.instances).toHaveLength(2));
+		const replacement = getWorker(1);
+		const replacementOpen = await waitForRequest(replacement, "open");
+		replacement.reply({
+			id: replacementOpen.id,
+			type: "opened",
+			pageCount: 3,
+			fileLength: 1024,
+		});
+		const render = await waitForRequest(replacement, "render");
+		replacement.reply({
+			id: render.id,
+			type: "rendered",
+			visual: {
+				type: "pixels",
+				width: 1,
+				height: 1,
+				pixels: new ArrayBuffer(4),
+			},
+		});
+		await expect(latestRender).resolves.toMatchObject({ type: "pixels", width: 1, height: 1 });
+	} finally {
+		controller.abort();
+		source.dispose();
 	}
 });
 

@@ -79,6 +79,8 @@ export class PdfiumWorkerPool {
 			pageIndex,
 			(client, taskPriority, signal) => client.getPageSize(pageIndex, taskPriority, signal),
 			signal,
+			undefined,
+			(client, taskPriority) => client.promotePageSize(pageIndex, taskPriority),
 		);
 	}
 

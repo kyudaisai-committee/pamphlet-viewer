@@ -17,6 +17,7 @@ class ControlledWorker extends EventTarget {
 	readonly requests: WorkerRequestRecord[] = [];
 	terminateCalls = 0;
 	postMessageError: Error | null = null;
+	postMessageErrorForType: string | null = null;
 
 	constructor() {
 		super();
@@ -26,6 +27,9 @@ class ControlledWorker extends EventTarget {
 	postMessage(message: unknown): void {
 		if (this.postMessageError !== null) throw this.postMessageError;
 		if (!isWorkerRequestRecord(message)) throw new Error("Unexpected worker request.");
+		if (this.postMessageErrorForType === message.type) {
+			throw new Error(`The worker could not receive ${message.type}.`);
+		}
 		this.requests.push(message);
 	}
 
@@ -297,6 +301,62 @@ describe("PdfiumWorkerClient terminal state", () => {
 		worker.reply({ id: request.id, type: "opened", pageCount: 1, fileLength: 256 });
 		await expect(secondOpen).resolves.toMatchObject({ pageCount: 1 });
 		client.terminate();
+	});
+
+	it("retires a worker when promotion cannot be posted and releases a late render", async () => {
+		const client = new PdfiumWorkerClient();
+		const worker = getWorker();
+		const opening = client.open("catalog.pdf");
+		const openRequest = worker.requests[0];
+		if (openRequest === undefined) throw new Error("The open request was not posted.");
+		worker.reply({ id: openRequest.id, type: "opened", pageCount: 2, fileLength: 1024 });
+		await opening;
+
+		const render = client.renderPage(1, 1, "prerender");
+		const renderRequest = worker.requests[1];
+		if (renderRequest === undefined) throw new Error("The render request was not posted.");
+		worker.postMessageErrorForType = "promote";
+		expect(client.promoteRender(1, 1, "visible")).toBe(true);
+		await expect(render).rejects.toBeInstanceOf(PdfiumWorkerUnavailableError);
+		expect(worker.terminateCalls).toBe(1);
+
+		const close = vi.fn();
+		worker.reply({
+			id: renderRequest.id,
+			type: "rendered",
+			visual: {
+				type: "bitmap",
+				width: 1,
+				height: 1,
+				bitmap: { close } as unknown as ImageBitmap,
+			},
+		});
+		expect(close).toHaveBeenCalledOnce();
+	});
+
+	it("handles a range promotion after its broker is disposed", async () => {
+		const broker = new PdfRangeBroker("https://example.test/catalog.pdf");
+		const client = new PdfiumWorkerClient(broker);
+		expect(client.isOpen).toBe(false);
+		const worker = getWorker();
+		worker.reply({
+			type: "range-request",
+			id: 12,
+			request: {
+				url: "https://example.test/catalog.pdf",
+				start: 0,
+				requestedEnd: 255,
+				totalLength: null,
+				etag: null,
+				lastModified: null,
+				priority: "prerender",
+			},
+		});
+		broker.dispose();
+		expect(() =>
+			worker.reply({ type: "range-promote", id: 12, priority: "visible" }),
+		).not.toThrow();
+		await vi.waitFor(() => expect(worker.terminateCalls).toBe(1));
 	});
 });
 

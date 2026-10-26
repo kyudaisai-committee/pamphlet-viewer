@@ -16,6 +16,13 @@ interface PagePrefetchRequest {
 	pageIndex: number;
 }
 
+interface PageSizeRequest {
+	id: number;
+	type: "page-size";
+	pageIndex: number;
+	priority: "visible" | "data" | "prerender" | "thumbnail";
+}
+
 interface CancelRequest {
 	id: number;
 	type: "cancel";
@@ -47,7 +54,7 @@ interface RangeResponseMessage {
 	};
 }
 
-type WorkerRequest = OpenRequest | PagePrefetchRequest | RenderRequest;
+type WorkerRequest = OpenRequest | PagePrefetchRequest | PageSizeRequest | RenderRequest;
 type WorkerMessage = WorkerRequest | CancelRequest | PromoteRequest | RangeResponseMessage;
 
 interface WorkerResponse {
@@ -62,6 +69,11 @@ interface DocumentSessionStub {
 	dispose(): void;
 	prefetchPage(pageIndex: number, signal?: AbortSignal): Promise<void>;
 	setPriority?(priority: "visible" | "data" | "prerender" | "thumbnail"): void;
+	getPageSize?(
+		pageIndex: number,
+		priority: "visible" | "data" | "prerender" | "thumbnail",
+		signal?: AbortSignal,
+	): Promise<{ width: number; height: number }>;
 	renderPage?(
 		pageIndex: number,
 		scale: number,
@@ -410,6 +422,24 @@ describe("PDF worker document lifecycle", () => {
 				);
 				return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
 			},
+			async getPageSize(_pageIndex, priority, signal) {
+				if (rangeRequester === undefined || signal === undefined) {
+					throw new Error("The PDF range requester was not initialized.");
+				}
+				await rangeRequester(
+					{
+						url: "https://example.test/catalog.pdf",
+						start: 256,
+						requestedEnd: 511,
+						totalLength: 1024,
+						etag: '"catalog-v1"',
+						lastModified: null,
+						priority,
+					},
+					signal,
+				);
+				return { width: 300, height: 400 };
+			},
 		};
 		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
 			PdfiumDocumentSession: class {
@@ -489,6 +519,33 @@ describe("PDF worker document lifecycle", () => {
 		});
 		await vi.waitFor(() =>
 			expect(messages).toContainEqual(expect.objectContaining({ id: 2, type: "rendered" })),
+		);
+
+		send({ id: 3, type: "page-size", pageIndex: 1, priority: "prerender" });
+		await vi.waitFor(() => expect(messages.filter(isRangeRequest)).toHaveLength(2));
+		const sizeRangeRequest = messages.filter(isRangeRequest)[1];
+		if (sizeRangeRequest === undefined)
+			throw new Error("The page-size operation did not request a range.");
+		send({ id: 3, type: "promote", priority: "visible" });
+		expect(setPriority).toHaveBeenLastCalledWith("visible");
+		expect(messages).toContainEqual({
+			type: "range-promote",
+			id: sizeRangeRequest.id,
+			priority: "visible",
+		});
+		send({
+			type: "range-response",
+			id: sizeRangeRequest.id,
+			response: {
+				bytes: new ArrayBuffer(256),
+				totalLength: 1024,
+				etag: '"catalog-v1"',
+				lastModified: null,
+				responseUrl: "https://example.test/catalog.pdf",
+			},
+		});
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ id: 3, type: "page-size" })),
 		);
 	});
 

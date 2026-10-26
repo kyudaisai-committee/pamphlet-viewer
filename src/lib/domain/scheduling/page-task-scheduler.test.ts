@@ -233,6 +233,54 @@ test("promotes running work and frees its reserved background slot", async () =>
 	scheduler.dispose();
 });
 
+test("turns a priority callback failure into task cancellation without releasing its slot early", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const runningResult = createDeferred<{ id: string }>();
+	const failure = new Error("The worker could not receive the promotion.");
+	const releaseResult = vi.fn();
+	const started: string[] = [];
+	let runningSignal: AbortSignal | undefined;
+	const running = scheduler.schedule({
+		key: "prerender:1",
+		priority: "prerender",
+		execute: (signal) => {
+			runningSignal = signal;
+			started.push("prerender");
+			return runningResult.promise;
+		},
+		onPriorityChange() {
+			throw failure;
+		},
+		releaseResult,
+	});
+	const promoted = scheduler.schedule({
+		key: "prerender:1",
+		priority: "visible",
+		execute: async () => ({ id: "duplicate" }),
+	});
+	const latest = scheduler.schedule({
+		key: "visible:2",
+		priority: "visible",
+		execute: async () => {
+			started.push("visible");
+			return { id: "visible" };
+		},
+	});
+
+	await expect(promoted).rejects.toBe(failure);
+	await expect(running).rejects.toBe(failure);
+	expect(runningSignal?.aborted).toBe(true);
+	expect(started).toEqual(["prerender"]);
+	expect(releaseResult).not.toHaveBeenCalled();
+
+	runningResult.resolve({ id: "late" });
+	const latestLease = await latest;
+	expect(started).toEqual(["prerender", "visible"]);
+	expect(releaseResult).toHaveBeenCalledOnce();
+	latestLease.release();
+	scheduler.dispose();
+});
+
 test("rejects a task whose executor throws synchronously", async () => {
 	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
 	const failure = new Error("synchronous executor failure");
