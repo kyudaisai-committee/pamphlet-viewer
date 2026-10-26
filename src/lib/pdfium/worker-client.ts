@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
 import type { PageSize, PageVisual } from "../document/page-source";

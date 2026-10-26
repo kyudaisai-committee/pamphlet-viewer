@@ -24,3 +24,7 @@ evenodd
 mdsvex
 vite
 kyudaisai
+kurage
+umitsukidev
+Lucide
+lucide

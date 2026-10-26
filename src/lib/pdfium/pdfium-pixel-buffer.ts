@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 const PIXEL_BYTES = 4;
 
 export function copyRgbaBitmapPixels(

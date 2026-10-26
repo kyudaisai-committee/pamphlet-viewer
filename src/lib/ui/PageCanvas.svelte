@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import type { PageVisual } from "../document/page-source";
 

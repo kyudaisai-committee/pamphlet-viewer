@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { createRangeBatchPlan, type RangeBatch } from "./range-batch";
 import { RangeChunkCache } from "./range-chunk-cache";
 import { requestPdfRange } from "./range-request";

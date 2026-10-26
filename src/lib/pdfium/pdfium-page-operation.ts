@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 
 import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";

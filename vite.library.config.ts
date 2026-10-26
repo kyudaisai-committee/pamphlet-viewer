@@ -4,6 +4,11 @@ import { defineConfig } from "vite";
 
 import { sourceAlias } from "./vite.source-alias.js";
 
+const LICENSE_BANNER = `/*!
+ * SPDX-License-Identifier: MIT
+ * Source code: https://github.com/kyudaisai-committee/pamphlet-viewer
+ */`;
+
 export default defineConfig({
 	base: "./",
 	plugins: [svelte(), ...dts({ generator: "tsc", tsconfig: "./tsconfig.library.json" })],
@@ -17,11 +22,16 @@ export default defineConfig({
 			input: { "pamphlet-viewer": "src/lib/entry.ts" },
 			preserveEntrySignatures: "strict",
 			output: {
+				banner: LICENSE_BANNER,
+				comments: { legal: true },
 				format: "es",
 				entryFileNames: "[name].js",
 				chunkFileNames: "chunks/[name]-[hash].js",
 				assetFileNames: "assets/[name]-[hash][extname]",
 			},
 		},
+	},
+	worker: {
+		rolldownOptions: { output: { banner: LICENSE_BANNER, comments: { legal: true } } },
 	},
 });

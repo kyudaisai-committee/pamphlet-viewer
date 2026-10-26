@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export interface PageSize {
 	width: number;
 	height: number;

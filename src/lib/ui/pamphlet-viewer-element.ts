@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PamphletViewerConfig } from "@/lib/public-api";
 
 import { setViewerElementConfig } from "./viewer-element-config";

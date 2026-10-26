@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import { XIcon } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";

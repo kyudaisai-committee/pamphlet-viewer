@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PageSource, PageVisual } from "../document/page-source";
 
 export type PageRenderPriority = "visible" | "thumbnail";

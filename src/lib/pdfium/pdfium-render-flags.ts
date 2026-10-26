@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export interface PdfiumRenderFlags {
 	annotations?: number;
 	reverseByteOrder?: number;

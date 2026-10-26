@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { DocumentBackend, PageSource, PageVisual } from "./document/page-source";
 import type { FitMode, LayoutMode } from "./domain/layout";
 import type { ViewerFailure } from "./domain/viewer-controller.svelte";

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
 
