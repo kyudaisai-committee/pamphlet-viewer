@@ -53,6 +53,39 @@ describe("ViewerController", () => {
 		expect(closeCalls[1]?.mock.calls).toHaveLength(1);
 	});
 
+	it("starts the newest render while an earlier page-size request is pending", async () => {
+		const stalePageSize = createDeferred<{ width: number; height: number }>();
+		const getPageSize = vi.fn((pageIndex: number) =>
+			pageIndex === 0 ? stalePageSize.promise : Promise.resolve({ width: 300, height: 400 }),
+		);
+		const latestVisual = pixelVisual();
+		const renderPage = vi.fn(async (pageIndex: number) => {
+			if (pageIndex !== 1) throw new Error("The stale page must not be rendered.");
+			return latestVisual;
+		});
+		const source: PageSource = {
+			...createPageSource(2, pixelVisual),
+			getPageSize,
+			renderPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(getPageSize).toHaveBeenCalledWith(0));
+
+		controller.requestRender({ ...input, page: 2 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		expect(renderPage).toHaveBeenCalledWith(1, 1);
+		expect(controller.pageVisuals[1]).toBe(latestVisual);
+
+		stalePageSize.resolve({ width: 300, height: 400 });
+		await flushTasks();
+		expect(controller.renderRevision).toBe(1);
+		expect(renderPage).toHaveBeenCalledTimes(1);
+		controller.dispose();
+	});
+
 	it("keeps logical zoom size while rendering within the page pixel budget", async () => {
 		let renderedScale = 0;
 		const source: PageSource = {
@@ -176,7 +209,7 @@ describe("ViewerController", () => {
 		controller.dispose();
 	});
 
-	it("promotes an in-flight adjacent render without waiting for another prerender", async () => {
+	it("renders a visible page without waiting for an in-flight adjacent prerender", async () => {
 		const unrelatedRender = createDeferred<PageVisual>();
 		const unrelatedStarted = createDeferred<void>();
 		const visibleRender = createDeferred<PageVisual>();
@@ -203,12 +236,15 @@ describe("ViewerController", () => {
 		await Promise.all([unrelatedStarted.promise, visibleStarted.promise]);
 
 		controller.requestRender(renderInput(3));
-		visibleRender.resolve(pixelVisual());
 		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(renderPage).toHaveBeenCalledTimes(2);
+		expect(controller.pageVisuals[2]).toBeDefined();
+
+		visibleRender.resolve(pixelVisual());
+		await vi.waitFor(() => expect(renderPrefetchedPage.mock.calls).toHaveLength(4));
 		expect(renderPrefetchedPage.mock.calls.map(([pageIndex]) => pageIndex)).toEqual([
 			0, 2, 1, 3,
 		]);
-		expect(renderPage).toHaveBeenCalledTimes(1);
 
 		controller.dispose();
 		unrelatedRender.resolve(bitmapVisual(closeUnrelated));

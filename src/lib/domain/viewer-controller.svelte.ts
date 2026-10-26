@@ -71,7 +71,6 @@ export class ViewerController {
 	#loadId = 0;
 	#renderId = 0;
 	#pendingRender: ScheduledRender | null = null;
-	#renderingGeneration: number | null = null;
 	#lastRenderKey = "";
 	#lastPageChangeKey = "";
 	#failedRenderKey = "";
@@ -222,7 +221,7 @@ export class ViewerController {
 		this.#renderId = id;
 		const generation = this.#loadId;
 		this.#pendingRender = { ...input, id, generation };
-		if (this.#renderingGeneration !== generation) void this.#drainRenderQueue(generation);
+		this.#drainRenderQueue(generation);
 		return id;
 	}
 
@@ -263,26 +262,12 @@ export class ViewerController {
 		this.phase = "empty";
 	}
 
-	async #drainRenderQueue(generation: number): Promise<void> {
-		if (this.#renderingGeneration === generation) return;
-		this.#renderingGeneration = generation;
-		try {
-			while (
-				generation === this.#loadId &&
-				this.#pendingRender !== null &&
-				this.#pendingRender.generation === generation
-			) {
-				const request = this.#pendingRender;
-				this.#pendingRender = null;
-				await this.#render(request);
-			}
-		} finally {
-			if (this.#renderingGeneration === generation) this.#renderingGeneration = null;
-			const pendingGeneration = this.#pendingRender?.generation;
-			if (pendingGeneration !== undefined && pendingGeneration === this.#loadId) {
-				void this.#drainRenderQueue(pendingGeneration);
-			}
-		}
+	#drainRenderQueue(generation: number): void {
+		const request = this.#pendingRender;
+		if (generation !== this.#loadId || request === null || request.generation !== generation)
+			return;
+		this.#pendingRender = null;
+		void this.#render(request);
 	}
 
 	async #render(request: ScheduledRender): Promise<void> {
@@ -314,24 +299,10 @@ export class ViewerController {
 				pageIndexes.map(async (pageIndex, localIndex) => {
 					const plan = plans[localIndex];
 					if (plan === undefined) throw new Error("The page render plan is missing.");
-					const prerender = this.#prerenderScheduler.claim(pageIndex, plan.rasterScale);
-					let visual: PageVisual;
-					if (prerender === undefined) {
-						visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
-					} else {
-						try {
-							visual = await prerender;
-						} catch (error) {
-							if (!this.#isCurrent(request, source)) {
-								throw error;
-							}
-							visual = await renderQueue.render(
-								pageIndex,
-								plan.rasterScale,
-								"visible",
-							);
-						}
-					}
+					const prerender = this.#prerenderScheduler.take(pageIndex, plan.rasterScale);
+					const visual =
+						prerender ??
+						(await renderQueue.render(pageIndex, plan.rasterScale, "visible"));
 					return { visual, plan };
 				}),
 			);
