@@ -94,6 +94,58 @@ describe("PagePrerenderScheduler", () => {
 		scheduler.setSource(null);
 	});
 
+	it("does not rejoin an aborted same-key task before it settles", async () => {
+		const oldResult = deferred<PageVisual>();
+		const newResult = deferred<PageVisual>();
+		const otherResult = deferred<PageVisual>();
+		const oldStarted = deferred<void>();
+		const otherStarted = deferred<void>();
+		const newStarted = deferred<void>();
+		const oldClose = vi.fn();
+		let pageOneRenders = 0;
+		const scheduler = new PagePrerenderScheduler();
+		scheduler.setSource(
+			createSource((pageIndex) => {
+				if (pageIndex === 1) {
+					pageOneRenders += 1;
+					if (pageOneRenders === 1) {
+						oldStarted.resolve();
+						return oldResult.promise;
+					}
+					newStarted.resolve();
+					return newResult.promise;
+				}
+				otherStarted.resolve();
+				return otherResult.promise;
+			}),
+		);
+		scheduler.setRequests([
+			{ pageIndex: 1, scale: 1 },
+			{ pageIndex: 2, scale: 1 },
+		]);
+		await Promise.all([oldStarted.promise, otherStarted.promise]);
+
+		scheduler.setRequests([{ pageIndex: 2, scale: 1 }]);
+		scheduler.setRequests([
+			{ pageIndex: 1, scale: 1 },
+			{ pageIndex: 2, scale: 1 },
+		]);
+
+		expect(scheduler.claim(1, 1)).toBeUndefined();
+		expect(pageOneRenders).toBe(1);
+		oldResult.resolve(bitmapVisual(oldClose));
+		await newStarted.promise;
+		expect(pageOneRenders).toBe(2);
+		expect(oldClose).toHaveBeenCalledOnce();
+		expect(scheduler.take(1, 1)).toBeUndefined();
+
+		newResult.resolve(pixelVisual());
+		await vi.waitFor(() => expect(scheduler.cachedPixelBytes).toBe(4));
+		expect(scheduler.take(1, 1)).toBeDefined();
+		otherResult.resolve(pixelVisual());
+		scheduler.setSource(null);
+	});
+
 	it("transfers cached bitmap ownership without closing the returned visual", async () => {
 		const close = vi.fn();
 		const visual = bitmapVisual(close);

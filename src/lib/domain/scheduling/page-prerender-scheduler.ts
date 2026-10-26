@@ -19,7 +19,7 @@ interface PagePrerenderEntry extends PagePrerenderRequest {
 interface PagePrerenderTask extends PagePrerenderRequest {
 	key: string;
 	source: PageSource;
-	state: "queued" | "running";
+	state: "queued" | "running" | "aborting";
 	claimed: boolean;
 	desired: boolean;
 	preserveResult: boolean;
@@ -81,6 +81,8 @@ export class PagePrerenderScheduler {
 				!preserveCache &&
 				!task.claimed
 			) {
+				task.state = "aborting";
+				if (this.#tasksByKey.get(key) === task) this.#tasksByKey.delete(key);
 				task.controller.abort();
 			}
 		}
@@ -128,6 +130,7 @@ export class PagePrerenderScheduler {
 		if (
 			task?.state !== "running" ||
 			task.claimed ||
+			task.controller.signal.aborted ||
 			task.result === null ||
 			task.source !== this.#source
 		) {
