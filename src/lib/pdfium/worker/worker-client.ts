@@ -202,14 +202,18 @@ export class PdfiumWorkerClient {
 	async open(
 		url: string,
 		useRangeBroker = this.rangeBroker !== undefined,
+		signal?: AbortSignal,
 	): Promise<PdfiumDocumentInfo> {
 		const wasmUrl = new URL(pdfiumWasmAssetUrl, import.meta.url).href;
-		const response = await this.#request<OpenRequest>({
-			type: "open",
-			url,
-			wasmUrl,
-			useRangeBroker,
-		});
+		const response = await this.#request<OpenRequest>(
+			{
+				type: "open",
+				url,
+				wasmUrl,
+				useRangeBroker,
+			},
+			signal,
+		);
 		this.#opened = true;
 		return { pageCount: response.pageCount, fileLength: response.fileLength };
 	}

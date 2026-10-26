@@ -2,7 +2,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { PdfiumBackend } from "@/lib/document/pdfium-backend";
 import { PagePrerenderScheduler } from "@/lib/domain/scheduling/page-prerender-scheduler";
+import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
 
+import { PdfiumWorkerPool } from "./pdfium-worker-pool";
 interface WorkerRequest {
 	id: number;
 	type: string;
@@ -84,6 +86,54 @@ test("cancels and retries a prerender through the real PDF backend worker pool",
 	} finally {
 		scheduler.setSource(null);
 		source.dispose();
+	}
+});
+
+test("replaces an abandoned opening worker before the old open response arrives", async () => {
+	const broker = new PdfRangeBroker("https://example.test/catalog.pdf");
+	const pool = new PdfiumWorkerPool("https://example.test/catalog.pdf", 10, broker, null, 4);
+	const controllers = Array.from({ length: 4 }, () => new AbortController());
+	try {
+		const obsoleteRequests = controllers.map((controller, pageIndex) =>
+			pool.getPageSize(pageIndex, "visible", controller.signal),
+		);
+		await vi.waitFor(() => expect(ControlledWorker.instances).toHaveLength(4));
+		const oldWorkers = [...ControlledWorker.instances];
+		const oldOpenRequests = oldWorkers.map((worker) => worker.requests[0]);
+		for (const request of oldOpenRequests) {
+			if (request === undefined) throw new Error("An obsolete worker did not start opening.");
+			expect(request.type).toBe("open");
+		}
+
+		for (const controller of controllers) controller.abort();
+		await Promise.allSettled(obsoleteRequests);
+		for (const [index, worker] of oldWorkers.entries()) {
+			const request = oldOpenRequests[index];
+			if (request === undefined) throw new Error("An open request is missing.");
+			expect(worker.requests).toContainEqual({ type: "cancel", id: request.id });
+		}
+
+		const latestPageSize = pool.getPageSize(8, "visible");
+		await vi.waitFor(() => expect(ControlledWorker.instances).toHaveLength(5));
+		const replacement = getWorker(4);
+		const replacementOpen = await waitForRequest(replacement, "open");
+		expect(oldWorkers.some((worker) => worker.terminateCalls > 0)).toBe(true);
+		replacement.reply({
+			id: replacementOpen.id,
+			type: "opened",
+			pageCount: 10,
+			fileLength: 1024,
+		});
+		const pageSizeRequest = await waitForRequest(replacement, "page-size");
+		replacement.reply({
+			id: pageSizeRequest.id,
+			type: "page-size",
+			pageSize: { width: 300, height: 400 },
+		});
+		await expect(latestPageSize).resolves.toEqual({ width: 300, height: 400 });
+	} finally {
+		pool.dispose();
+		broker.dispose();
 	}
 });
 

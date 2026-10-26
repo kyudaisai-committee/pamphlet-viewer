@@ -17,9 +17,11 @@ const WORKER_TERMINATION_GRACE_MS = 100;
 interface PdfiumWorkerSlot {
 	client: PdfiumWorkerClient | null;
 	opening: Promise<PdfiumWorkerClient> | null;
+	openingController: AbortController | null;
+	openingConsumers: number;
 	activeRequests: number;
-	activeSignal: AbortSignal | null;
-	activeOperation: boolean;
+	activeSignals: Set<AbortSignal>;
+	activeOperationCount: number;
 }
 
 type WorkerOperation<Result> = (
@@ -50,9 +52,11 @@ export class PdfiumWorkerPool {
 		this.#slots = Array.from({ length: slotCount }, (_, index) => ({
 			client: index === 0 ? firstClient : null,
 			opening: index === 0 && firstClient !== null ? Promise.resolve(firstClient) : null,
+			openingController: null,
+			openingConsumers: 0,
 			activeRequests: 0,
-			activeSignal: null,
-			activeOperation: false,
+			activeSignals: new Set(),
+			activeOperationCount: 0,
 		}));
 		this.#scheduler = new PageTaskScheduler({
 			maximumConcurrent: slotCount,
@@ -243,20 +247,23 @@ export class PdfiumWorkerPool {
 		if (signal.aborted) throw createAbortError();
 		const slot = this.#getLeastBusySlot();
 		slot.activeRequests += 1;
-		slot.activeSignal = signal;
+		slot.activeSignals.add(signal);
+		let operationStarted = false;
 		try {
-			const client = await this.#open(slot);
+			const client = await this.#open(slot, signal);
 			this.#assertActive();
 			if (signal.aborted) throw createAbortError();
-			slot.activeOperation = true;
+			slot.activeOperationCount += 1;
+			operationStarted = true;
 			return await operation(client, priority, signal);
 		} catch (error) {
 			if (error instanceof PdfiumWorkerUnavailableError) this.#resetSlot(slot);
 			throw error;
 		} finally {
 			slot.activeRequests -= 1;
-			slot.activeSignal = null;
-			slot.activeOperation = false;
+			slot.activeSignals.delete(signal);
+			if (operationStarted) slot.activeOperationCount -= 1;
+			this.#scheduleVisibleRecovery();
 		}
 	}
 
@@ -267,40 +274,70 @@ export class PdfiumWorkerPool {
 			if (this.#disposed || !this.#scheduler.isVisibleBlocked) return;
 			const stalledSlot = this.#slots.find(
 				(slot) =>
-					slot.activeRequests > 0 &&
-					slot.activeOperation &&
-					slot.activeSignal?.aborted === true &&
-					slot.client?.isOpen === true &&
-					slot.client.pendingRangeRequestCount === 0,
+					(slot.openingController?.signal.aborted === true &&
+						slot.openingConsumers === 0 &&
+						slot.client?.isOpen !== true) ||
+					(slot.activeOperationCount > 0 &&
+						slot.activeRequests > 0 &&
+						slot.activeSignals.size > 0 &&
+						[...slot.activeSignals].every((signal) => signal.aborted) &&
+						slot.client?.isOpen === true &&
+						slot.client.pendingRangeRequestCount === 0),
 			);
 			if (stalledSlot !== undefined) this.#resetSlot(stalledSlot);
 		}, WORKER_TERMINATION_GRACE_MS);
 	}
 
-	async #open(slot: PdfiumWorkerSlot): Promise<PdfiumWorkerClient> {
+	async #open(slot: PdfiumWorkerSlot, signal: AbortSignal): Promise<PdfiumWorkerClient> {
 		this.#assertActive();
+		if (signal.aborted) throw createAbortError();
+		if (slot.openingController?.signal.aborted === true && slot.client?.isOpen !== true) {
+			this.#resetSlot(slot);
+		}
 		if (slot.opening === null) {
 			const client = new PdfiumWorkerClient(this.rangeBroker);
+			const controller = new AbortController();
 			slot.client = client;
+			slot.openingController = controller;
 			const opening = client
-				.open(this.source)
+				.open(this.source, true, controller.signal)
 				.then((info) => {
 					if (info.pageCount !== this.pageCount) {
 						throw new PdfiumWorkerUnavailableError(
 							"The PDF source changed while its pages were rendering.",
 						);
 					}
+					if (slot.opening === opening) slot.openingController = null;
+					this.#scheduleVisibleRecovery();
 					return client;
 				})
 				.catch((error: unknown) => {
 					client.terminate();
 					if (slot.client === client) slot.client = null;
-					if (slot.opening === opening) slot.opening = null;
+					if (slot.opening === opening) {
+						slot.opening = null;
+						slot.openingController = null;
+						slot.openingConsumers = 0;
+					}
+					this.#scheduleVisibleRecovery();
 					throw error;
 				});
 			slot.opening = opening;
 		}
-		return slot.opening;
+		const opening = slot.opening;
+		if (opening === null) throw new Error("The PDF worker failed to start opening.");
+		slot.openingConsumers += 1;
+		try {
+			return await waitForSignal(opening, signal);
+		} finally {
+			if (slot.opening === opening) {
+				slot.openingConsumers -= 1;
+				if (slot.openingConsumers === 0 && slot.openingController !== null) {
+					slot.openingController.abort();
+					this.#scheduleVisibleRecovery();
+				}
+			}
+		}
 	}
 
 	#getLeastBusySlot(): PdfiumWorkerSlot {
@@ -320,9 +357,12 @@ export class PdfiumWorkerPool {
 	}
 
 	#resetSlot(slot: PdfiumWorkerSlot): void {
+		slot.openingController?.abort();
 		slot.client?.terminate();
 		slot.client = null;
 		slot.opening = null;
+		slot.openingController = null;
+		slot.openingConsumers = 0;
 	}
 
 	#assertActive(): void {
@@ -355,4 +395,25 @@ function releaseVisualResult(visual: PageVisual | null): void {
 
 function createAbortError(): DOMException {
 	return new DOMException("PDF page task was cancelled.", "AbortError");
+}
+
+function waitForSignal<Value>(promise: Promise<Value>, signal: AbortSignal): Promise<Value> {
+	if (signal.aborted) return Promise.reject(createAbortError());
+	return new Promise((resolve, reject) => {
+		const abort = function rejectWhenSignalAborts(): void {
+			signal.removeEventListener("abort", abort);
+			reject(createAbortError());
+		};
+		signal.addEventListener("abort", abort, { once: true });
+		promise.then(
+			(value) => {
+				signal.removeEventListener("abort", abort);
+				resolve(value);
+			},
+			(error: unknown) => {
+				signal.removeEventListener("abort", abort);
+				reject(error);
+			},
+		);
+	});
 }

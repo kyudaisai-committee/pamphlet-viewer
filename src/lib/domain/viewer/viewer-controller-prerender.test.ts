@@ -105,7 +105,11 @@ it("shares an in-flight prerender with the visible request for that page", async
 it("does not retry a stale claimed prerender at visible priority", async () => {
 	const failedPrerender = deferred<PageVisual>();
 	const prerenderStarted = deferred<void>();
-	const renderPage = vi.fn(async () => pixelVisual());
+	const renderedPageIndexes: number[] = [];
+	const renderPage = vi.fn(async (pageIndex: number) => {
+		renderedPageIndexes.push(pageIndex);
+		return pixelVisual();
+	});
 	const source: PageSource = {
 		pageCount: 3,
 		async getPageSize() {
@@ -144,7 +148,7 @@ it("does not retry a stale claimed prerender at visible priority", async () => {
 	failedPrerender.reject(new Error("The obsolete prerender failed."));
 	await new Promise((resolve) => setTimeout(resolve, 0));
 
-	expect(renderPage.mock.calls.map(([pageIndex]) => pageIndex)).toEqual([0, 2]);
+	expect(renderedPageIndexes).toEqual([0, 2]);
 	expect(controller.pageVisuals[2]).toBeDefined();
 	controller.dispose();
 });
