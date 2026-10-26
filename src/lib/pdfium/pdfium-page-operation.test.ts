@@ -2,7 +2,7 @@ import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
-import { getPageSizeByIndex } from "./pdfium-page-operation";
+import { getPageSizeByIndex, prefetchPdfiumPage } from "./pdfium-page-operation";
 import type { PdfRangeLoader } from "./range-loader";
 
 interface FixtureOptions {
@@ -94,6 +94,27 @@ describe("PDFium page-size lookup", () => {
 		).toThrow("could not allocate page-size output memory");
 		expect(fixture.getPageSize).not.toHaveBeenCalled();
 		expect(fixture.free).not.toHaveBeenCalled();
+	});
+});
+
+describe("PDFium page-data prefetch", () => {
+	it("loads and closes a page without allocating or rendering a bitmap", () => {
+		const fixture = createFixture();
+
+		expect(prefetchPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 5)).toBe(true);
+		expect(fixture.loadPage).toHaveBeenCalledWith(1, 5);
+		expect(fixture.pdfium.FPDF_ClosePage).toHaveBeenCalledWith(2);
+		expect(fixture.createBitmap).not.toHaveBeenCalled();
+	});
+
+	it("leaves a read miss for the range loader to recover", () => {
+		const fixture = createFixture({ missingRange: true });
+		const result = prefetchPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 5);
+
+		expect(result).toBeNull();
+		expect(fixture.pdfium.FPDF_ClosePage).toHaveBeenCalledWith(2);
+		expect(fixture.createBitmap).not.toHaveBeenCalled();
+		expect(fixture.isPoisoned()).toBe(false);
 	});
 });
 

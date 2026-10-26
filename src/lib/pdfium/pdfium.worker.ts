@@ -16,6 +16,12 @@ interface PageSizeRequest {
 	pageIndex: number;
 }
 
+interface PagePrefetchRequest {
+	id: number;
+	type: "page-prefetch";
+	pageIndex: number;
+}
+
 interface RenderRequest {
 	id: number;
 	type: "render";
@@ -29,7 +35,12 @@ interface ThumbnailRequest {
 	pageIndex: number;
 }
 
-type WorkerRequest = OpenRequest | PageSizeRequest | RenderRequest | ThumbnailRequest;
+type WorkerRequest =
+	| OpenRequest
+	| PageSizeRequest
+	| PagePrefetchRequest
+	| RenderRequest
+	| ThumbnailRequest;
 
 interface OpenedResponse {
 	id: number;
@@ -42,6 +53,11 @@ interface PageSizeResponse {
 	id: number;
 	type: "page-size";
 	pageSize: PageSize;
+}
+
+interface PagePrefetchResponse {
+	id: number;
+	type: "page-prefetch";
 }
 
 interface RenderedResponse {
@@ -66,6 +82,7 @@ interface ErrorResponse {
 type WorkerResponse =
 	| OpenedResponse
 	| PageSizeResponse
+	| PagePrefetchResponse
 	| RenderedResponse
 	| ThumbnailResponse
 	| ErrorResponse;
@@ -120,6 +137,12 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 		if (request.type === "page-size") {
 			const pageSize = await session.getPageSize(request.pageIndex);
 			const response: PageSizeResponse = { id: request.id, type: "page-size", pageSize };
+			workerScope.postMessage(response);
+			return;
+		}
+		if (request.type === "page-prefetch") {
+			await session.prefetchPage(request.pageIndex);
+			const response: PagePrefetchResponse = { id: request.id, type: "page-prefetch" };
 			workerScope.postMessage(response);
 			return;
 		}

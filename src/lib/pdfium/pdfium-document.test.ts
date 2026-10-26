@@ -287,6 +287,11 @@ describe("PdfiumDocumentSession", () => {
 		expect(renderPageBitmap).toHaveBeenCalledTimes(renderCallsBeforeThumbnail);
 		expect(isPageAvailable).toHaveBeenCalledTimes(pageAvailabilityCallsBeforeThumbnail + 2);
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
+		const renderCallsBeforePrefetch = renderPageBitmap.mock.calls.length;
+		const loadCallsBeforePrefetch = loadPage.mock.calls.length;
+		await session.prefetchPage(0);
+		expect(loadPage).toHaveBeenCalledTimes(loadCallsBeforePrefetch + 1);
+		expect(renderPageBitmap).toHaveBeenCalledTimes(renderCallsBeforePrefetch);
 		session.dispose();
 	});
 });

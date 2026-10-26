@@ -119,6 +119,15 @@ export function renderPdfiumPage(
 	);
 }
 
+export function prefetchPdfiumPage(
+	pdfium: WrappedPdfiumModule,
+	availability: PdfiumAvailabilitySession,
+	loader: PdfRangeLoader,
+	pageIndex: number,
+): boolean | null {
+	return runPdfiumPageOperation(pdfium, availability, loader, pageIndex, () => true);
+}
+
 export function getPdfiumHeap(pdfium: WrappedPdfiumModule): Uint8Array {
 	const runtime = pdfium.pdfium as WrappedPdfiumModule["pdfium"] & { HEAPU8: Uint8Array };
 	return runtime.HEAPU8;

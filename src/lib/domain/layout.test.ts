@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateFitScale, parsePageNumber, resolveLayout, visiblePageIndexes } from "./layout";
+import {
+	calculateFitScale,
+	getPrefetchPageIndexes,
+	parsePageNumber,
+	resolveLayout,
+	visiblePageIndexes,
+} from "./layout";
 
 describe("resolveLayout", () => {
 	it("switches to a spread at the configured container width", () => {
@@ -21,6 +27,21 @@ describe("visiblePageIndexes", () => {
 	it("keeps a single page when requested or when the document is empty", () => {
 		expect(visiblePageIndexes(4, 3, "single")).toEqual([2]);
 		expect(visiblePageIndexes(0, 1, "spread")).toEqual([]);
+	});
+});
+
+describe("getPrefetchPageIndexes", () => {
+	it("selects up to two pages in both directions for a single-page layout", () => {
+		expect(getPrefetchPageIndexes(10, [5], "single")).toEqual([3, 4, 6, 7]);
+		expect(getPrefetchPageIndexes(3, [0], "single")).toEqual([1, 2]);
+		expect(getPrefetchPageIndexes(3, [2], "single")).toEqual([0, 1]);
+	});
+
+	it("selects two surrounding spreads while keeping the cover as a single page", () => {
+		expect(getPrefetchPageIndexes(10, [0], "spread")).toEqual([1, 2, 3, 4]);
+		expect(getPrefetchPageIndexes(10, [1, 2], "spread")).toEqual([0, 3, 4, 5, 6]);
+		expect(getPrefetchPageIndexes(10, [5, 6], "spread")).toEqual([1, 2, 3, 4, 7, 8, 9]);
+		expect(getPrefetchPageIndexes(5, [3, 4], "spread")).toEqual([0, 1, 2]);
 	});
 });
 

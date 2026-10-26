@@ -44,6 +44,11 @@ class PdfiumPageSource implements PageSource {
 		return this.client.getPageSize(pageIndex).catch(mapSourceFailure);
 	}
 
+	prefetchPage(pageIndex: number): Promise<void> {
+		this.#assertActive();
+		return this.client.prefetchPage(pageIndex).catch(mapSourceFailure);
+	}
+
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
 		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);

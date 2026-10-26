@@ -11,14 +11,22 @@ export interface PdfFixtureOptions {
 	midDocumentFillerBytes?: number;
 	rotatedCropPageNumber?: number;
 	thumbnailPageNumbers?: readonly number[];
+	imagePageNumbers?: readonly number[];
 }
 
 export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	const chunks: Buffer[] = [Buffer.from("%PDF-1.7\n", "ascii")];
 	const offsets: number[] = [0];
 	const thumbnailPageNumbers = getThumbnailPageNumbers(options.thumbnailPageNumbers);
+	const imagePageNumbers = getImagePageNumbers(options.imagePageNumbers);
 	const thumbnailObjectByPageNumber = new Map(
 		thumbnailPageNumbers.map((pageNumber, index) => [pageNumber, 3 + PAGE_COUNT * 2 + index]),
+	);
+	const imageObjectByPageNumber = new Map(
+		imagePageNumbers.map((pageNumber, index) => [
+			pageNumber,
+			3 + PAGE_COUNT * 2 + thumbnailPageNumbers.length + index,
+		]),
 	);
 	let position = chunks[0].byteLength;
 
@@ -47,9 +55,12 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 				? `/MediaBox [${mediaBox}]`
 				: "/MediaBox [0 0 300 400]";
 		const thumbnailObject = thumbnailObjectByPageNumber.get(index + 1);
+		const imageObject = imageObjectByPageNumber.get(index + 1);
 		const thumbnailReference =
 			thumbnailObject === undefined ? "" : ` /Thumb ${thumbnailObject} 0 R`;
-		const pageBody = `<< /Type /Page /Parent 2 0 R ${pageGeometry} /Resources << >> /Contents ${contentObject} 0 R${thumbnailReference} >>`;
+		const resources =
+			imageObject === undefined ? "<< >>" : `<< /XObject << /Im0 ${imageObject} 0 R >> >>`;
+		const pageBody = `<< /Type /Page /Parent 2 0 R ${pageGeometry} /Resources ${resources} /Contents ${contentObject} 0 R${thumbnailReference} >>`;
 		appendObject(chunks, offsets, pageObject, pageBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}
@@ -73,7 +84,11 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		const color = getPageColor(index);
 		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
 		const rectangle = tinyPage ? "2 2 20 20" : "30 40 240 320";
-		const stream = `q\n${color[0]} ${color[1]} ${color[2]} rg\n${rectangle} re\nf\nQ\n`;
+		const imageObject = imageObjectByPageNumber.get(index + 1);
+		const stream =
+			imageObject === undefined
+				? `q\n${color[0]} ${color[1]} ${color[2]} rg\n${rectangle} re\nf\nQ\n`
+				: "q\n300 0 0 400 0 0 cm\n/Im0 Do\nQ\n";
 		const contentBody = `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}endstream`;
 		appendObject(chunks, offsets, contentObject, contentBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
@@ -91,6 +106,21 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 			"endstream",
 		].join("\n");
 		appendObject(chunks, offsets, thumbnailObject, thumbnailBody, position);
+		position += chunks.at(-1)?.byteLength ?? 0;
+	}
+	for (const [index, pageNumber] of imagePageNumbers.entries()) {
+		const objectNumber = imageObjectByPageNumber.get(pageNumber);
+		if (objectNumber === undefined) continue;
+		const imageBytes = Buffer.alloc(256 * 256 * 3, 0x80 + (index % 64));
+		const imageBody = Buffer.concat([
+			Buffer.from(
+				`<< /Type /XObject /Subtype /Image /Width 256 /Height 256 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${imageBytes.byteLength} >>\nstream\n`,
+				"ascii",
+			),
+			imageBytes,
+			Buffer.from("\nendstream", "ascii"),
+		]);
+		appendObject(chunks, offsets, objectNumber, imageBody, position);
 		position += chunks.at(-1)?.byteLength ?? 0;
 	}
 	appendFiller(chunks, TRAILING_FILLER_BYTES);
@@ -116,6 +146,13 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 }
 
 function getThumbnailPageNumbers(pageNumbers: readonly number[] | undefined): number[] {
+	if (pageNumbers === undefined) return [];
+	return [...new Set(pageNumbers)].filter(
+		(pageNumber) => Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
+	);
+}
+
+function getImagePageNumbers(pageNumbers: readonly number[] | undefined): number[] {
 	if (pageNumbers === undefined) return [];
 	return [...new Set(pageNumbers)].filter(
 		(pageNumber) => Number.isSafeInteger(pageNumber) && pageNumber >= 1 && pageNumber <= PAGE_COUNT,
@@ -176,10 +213,17 @@ function appendObject(
 	chunks: Buffer[],
 	offsets: number[],
 	objectNumber: number,
-	body: string,
+	body: string | Buffer,
 	position: number,
 ): void {
-	const chunk = Buffer.from([`${objectNumber} 0 obj`, body, "endobj", ""].join("\n"), "ascii");
+	const chunk =
+		typeof body === "string"
+			? Buffer.from([`${objectNumber} 0 obj`, body, "endobj", ""].join("\n"), "ascii")
+			: Buffer.concat([
+					Buffer.from(`${objectNumber} 0 obj\n`, "ascii"),
+					body,
+					Buffer.from("\nendobj\n", "ascii"),
+				]);
 	offsets[objectNumber] = position;
 	chunks.push(chunk);
 }

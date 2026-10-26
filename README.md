@@ -41,6 +41,8 @@
 
 `layout="auto"`は、サムネイル一覧の幅を除いた紙面表示領域の有効幅が約760px以上なら見開き、それより狭ければ単ページにします。判定はブラウザーウィンドウではなく、ホスト内の紙面表示領域の幅を使います。見開きの先頭ページは表紙として単独で表示し、2ページ目以降を左右に並べます。これはページめくりアニメーションではありません。
 
+表示が完了すると、単ページでは前後2ページ、見開きでは前後2見開きまでPDFのページデータをRangeで先読みします。先読みでは表示画像を作成せず、表示ページの描画より低い優先度で処理します。
+
 ページ一覧ボタンでサムネイルを開き、ページを選んで移動できます。サムネイルは一覧全体を一度に描画せず、表示範囲のページを必要に応じて作成します。PDFに埋め込みサムネイルがある場合はそれを優先して使い、ない場合や読み取れない場合はページを縮小描画します。狭いホストでは一覧が表示領域を使い、選択後に本文表示へ戻ります。ズームは10%から800%まで変更でき、拡大中はドラッグで紙面を移動できます。タッチ画面では2本指で拡大縮小できます。CtrlまたはMetaキーを押しながらホイールを操作しても拡大縮小します。通常のホイール操作は紙面をスクロールします。
 
 ## 章とブックマーク
@@ -96,7 +98,7 @@ viewer?.addEventListener("pagechange", (event) => {
 
 ## ページ入力方式の拡張
 
-`backend`はHTML属性ではなく要素のプロパティです。`DocumentBackend`は`open(source, signal)`から`PageSource`を返し、`PageSource`は`pageCount`、`getPageSize(pageIndex)`、`renderPage(pageIndex, scale)`、`dispose()`を提供します。`PageVisual`はRGBA pixel bufferまたは`ImageBitmap`です。表示状態とレイアウトはこの契約に依存し、PDFium固有の処理はPDF backendに閉じています。
+`backend`はHTML属性ではなく要素のプロパティです。`DocumentBackend`は`open(source, signal)`から`PageSource`を返し、`PageSource`は`pageCount`、`getPageSize(pageIndex)`、`renderPage(pageIndex, scale)`、`dispose()`を提供します。任意の`prefetchPage(pageIndex)`を実装すると、ページの表示画像を作らずにページデータを先読みできます。`PageVisual`はRGBA pixel bufferまたは`ImageBitmap`です。表示状態とレイアウトはこの契約に依存し、PDFium固有の処理はPDF backendに閉じています。
 
 `PamphletViewerElement.backend`へ独自backendを設定し、そのbackendが解釈する値を`src`へ指定できます。現在用意しているbackendはPDFiumのみです。画像URLやページ画像一覧を読むbackendは、同じ契約を使って後から追加できます。
 

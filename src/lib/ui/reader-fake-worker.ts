@@ -22,6 +22,9 @@ export class ControlledWorker extends EventTarget {
 		if (!isReaderWorkerRequest(message))
 			throw new Error("The viewer sent an invalid worker request.");
 		this.requests.push(message);
+		if (message.type === "page-prefetch") {
+			queueMicrotask(() => this.reply({ id: message.id, type: "page-prefetch" }));
+		}
 	}
 
 	terminate(): void {

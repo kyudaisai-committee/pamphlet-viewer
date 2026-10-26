@@ -3,41 +3,64 @@
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 
-export type PageRenderPriority = "visible" | "thumbnail";
+export type PageRenderPriority = "visible" | "thumbnail" | "prefetch";
 
-interface RenderTask {
+interface TaskBase {
 	sequence: number;
 	pageIndex: number;
-	scale: number;
 	priority: PageRenderPriority;
-	resolve(visual: PageVisual): void;
 	reject(error: unknown): void;
 }
 
+interface RenderTask extends TaskBase {
+	type: "render";
+	scale: number;
+	resolve(visual: PageVisual): void;
+}
+
+interface PrefetchTask extends TaskBase {
+	type: "prefetch";
+	resolve(): void;
+}
+
+type PageTask = RenderTask | PrefetchTask;
+
 export class PageRenderQueue {
-	#tasks: RenderTask[] = [];
+	#tasks: PageTask[] = [];
 	#running = false;
 	#disposed = false;
 	#sequence = 0;
 
 	constructor(private readonly source: PageSource) {}
 
-	render(pageIndex: number, scale: number, priority: PageRenderPriority): Promise<PageVisual> {
+	render(pageIndex: number, scale: number, priority: "visible" | "thumbnail"): Promise<PageVisual> {
 		if (this.#disposed) return Promise.reject(createAbortError());
 		const sequence = this.#sequence + 1;
 		this.#sequence = sequence;
 		return new Promise((resolve, reject) => {
-			this.#tasks.push({ sequence, pageIndex, scale, priority, resolve, reject });
-			this.#tasks.sort((left, right) => {
-				const priorityDifference = getPriorityRank(left.priority) - getPriorityRank(right.priority);
-				return priorityDifference || left.sequence - right.sequence;
+			this.#enqueue({ type: "render", sequence, pageIndex, scale, priority, resolve, reject });
+		});
+	}
+
+	prefetchPage(pageIndex: number): Promise<void> {
+		if (this.source.prefetchPage === undefined) return Promise.resolve();
+		if (this.#disposed) return Promise.reject(createAbortError());
+		const sequence = this.#sequence + 1;
+		this.#sequence = sequence;
+		return new Promise((resolve, reject) => {
+			this.#enqueue({
+				type: "prefetch",
+				sequence,
+				pageIndex,
+				priority: "prefetch",
+				resolve,
+				reject,
 			});
-			void this.#drain();
 		});
 	}
 
 	cancelQueued(priority?: PageRenderPriority): void {
-		const retained: RenderTask[] = [];
+		const retained: PageTask[] = [];
 		for (const task of this.#tasks) {
 			if (priority === undefined || task.priority === priority) task.reject(createAbortError());
 			else retained.push(task);
@@ -50,6 +73,15 @@ export class PageRenderQueue {
 		this.cancelQueued();
 	}
 
+	#enqueue(task: PageTask): void {
+		this.#tasks.push(task);
+		this.#tasks.sort((left, right) => {
+			const priorityDifference = getPriorityRank(left.priority) - getPriorityRank(right.priority);
+			return priorityDifference || left.sequence - right.sequence;
+		});
+		void this.#drain();
+	}
+
 	async #drain(): Promise<void> {
 		if (this.#running || this.#disposed) return;
 		this.#running = true;
@@ -58,6 +90,11 @@ export class PageRenderQueue {
 				const task = this.#tasks.shift();
 				if (task === undefined) continue;
 				try {
+					if (task.type === "prefetch") {
+						await this.source.prefetchPage?.(task.pageIndex);
+						task.resolve();
+						continue;
+					}
 					if (task.priority === "thumbnail" && this.source.renderThumbnail !== undefined) {
 						try {
 							const thumbnail = await this.source.renderThumbnail(task.pageIndex);
@@ -89,7 +126,9 @@ function isUnrecoverableThumbnailError(error: unknown): boolean {
 }
 
 function getPriorityRank(priority: PageRenderPriority): number {
-	return priority === "visible" ? 0 : 1;
+	if (priority === "visible") return 0;
+	if (priority === "thumbnail") return 1;
+	return 2;
 }
 
 function createAbortError(): DOMException {
