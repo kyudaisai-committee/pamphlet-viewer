@@ -197,6 +197,60 @@ test("zoom previews immediately and coalesces deferred raster work at the latest
 	expect(pageChangeEvents).toBe(0);
 });
 
+test.each(["drag", "wheel"] as const)(
+	"a %s scroll during deferred zoom rendering keeps the user's latest viewport position",
+	async (interaction) => {
+		await import("../entry");
+		const tracker: RenderTracker = {
+			renderCalls: 0,
+			completedRenders: 0,
+			renderScales: [],
+			renderPages: [],
+			holdRenders: false,
+			pending: [],
+		};
+		const element = createViewer(createBackend(tracker));
+		element.style.height = "1000px";
+		const firstPage = waitForPageChange(element);
+		document.body.append(element);
+		await firstPage;
+		tracker.holdRenders = true;
+
+		const shadowRoot = getShadowRoot(element);
+		const pageArea = getPageArea(shadowRoot);
+		const zoomSlider = shadowRoot.querySelector<HTMLInputElement>(".zoom-slider");
+		if (zoomSlider === null) throw new Error("The zoom slider was not rendered.");
+		zoomSlider.value = "2";
+		zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+		await expect.poll(() => tracker.renderCalls).toBe(2);
+		const deferredRender = tracker.pending[0];
+		if (deferredRender === undefined) throw new Error("The zoom render was not deferred.");
+
+		if (interaction === "drag") {
+			const point = getAreaPoint(pageArea, 0.5, 0.5);
+			pageArea.dispatchEvent(createPointerEvent("pointerdown", 1, point.x, point.y, "mouse"));
+			pageArea.dispatchEvent(createPointerEvent("pointermove", 1, point.x, point.y - 160, "mouse"));
+			pageArea.dispatchEvent(createPointerEvent("pointerup", 1, point.x, point.y - 160, "mouse"));
+		} else {
+			pageArea.dispatchEvent(
+				new WheelEvent("wheel", {
+					bubbles: true,
+					cancelable: true,
+					deltaY: 120,
+				}),
+			);
+			pageArea.scrollTop = 160;
+		}
+
+		const scrollTopAfterUserInput = pageArea.scrollTop;
+		expect(scrollTopAfterUserInput).toBeGreaterThan(0);
+		deferredRender.resolve(pixelVisual());
+		await expect.poll(() => tracker.completedRenders).toBe(2);
+		await flushUi();
+		expect(pageArea.scrollTop).toBe(scrollTopAfterUserInput);
+	},
+);
+
 test("page changes cancel a pending zoom render and unmount cancels its timer", async () => {
 	await import("../entry");
 	const tracker: RenderTracker = {

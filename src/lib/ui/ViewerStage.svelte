@@ -29,6 +29,7 @@
 		pageArea?: HTMLElement;
 		onViewportChange(viewport: ViewportSize): void;
 		onZoomGesture(zoom: number, center: GesturePoint): void;
+		onUserScroll(): void;
 		onPrevious(): void;
 		onNext(): void;
 		onRetry(): void;
@@ -42,6 +43,7 @@
 		pageArea = $bindable(),
 		onViewportChange,
 		onZoomGesture,
+		onUserScroll,
 		onPrevious,
 		onNext,
 		onRetry,
@@ -147,6 +149,7 @@
 			return;
 		}
 		if (!pointerActive || pageArea === undefined || !hasOverflow(pageArea)) return;
+		onUserScroll();
 		pageArea.scrollBy(update.deltaX, update.deltaY);
 		event.preventDefault();
 	}
@@ -181,7 +184,10 @@
 	}
 
 	function onWheel(event: WheelEvent): void {
-		if (!event.ctrlKey && !event.metaKey) return;
+		if (!event.ctrlKey && !event.metaKey) {
+			onUserScroll();
+			return;
+		}
 		event.preventDefault();
 		const nextZoom = zoom * Math.exp(-event.deltaY * 0.002);
 		onZoomGesture(nextZoom, { x: event.clientX, y: event.clientY });
@@ -189,6 +195,10 @@
 
 	function onKeydown(event: KeyboardEvent): void {
 		if (event.target !== pageArea) return;
+		if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Home" || event.key === "End") {
+			onUserScroll();
+			return;
+		}
 		if (event.key === "ArrowLeft" || event.key === "PageUp") {
 			event.preventDefault();
 			onPrevious();
