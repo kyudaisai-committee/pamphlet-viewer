@@ -22,6 +22,7 @@ interface PagePrerenderTask extends PagePrerenderRequest {
 	state: "queued" | "running";
 	claimed: boolean;
 	desired: boolean;
+	preserveResult: boolean;
 	result: Promise<PageVisual> | null;
 }
 
@@ -60,6 +61,7 @@ export class PagePrerenderScheduler {
 
 		for (const [key, task] of this.#tasksByKey) {
 			task.desired = uniqueRequests.has(key);
+			task.preserveResult = preserveCache;
 			if (task.state === "queued" && !task.desired && !task.claimed) {
 				this.#tasksByKey.delete(key);
 			}
@@ -83,6 +85,7 @@ export class PagePrerenderScheduler {
 				state: "queued",
 				claimed: false,
 				desired: true,
+				preserveResult: false,
 				result: null,
 			};
 			this.#tasksByKey.set(key, task);
@@ -148,7 +151,7 @@ export class PagePrerenderScheduler {
 				// The foreground caller owns the result returned by claim().
 			} else if (task.source !== this.#source || this.#tasksByKey.get(task.key) !== task) {
 				releaseVisual(visual);
-			} else if (task.desired) {
+			} else if (task.desired || task.preserveResult) {
 				this.#store({
 					pageIndex: task.pageIndex,
 					scale: task.scale,

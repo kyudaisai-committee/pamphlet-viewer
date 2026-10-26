@@ -414,6 +414,7 @@ export class ViewerController {
 	}
 
 	async #requestAdjacentPrerenders(request: ScheduledRender, source: PageSource): Promise<void> {
+		if (source.renderPrefetchedPage === undefined) return;
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		const groups = getAdjacentPageGroups(this.pageCount, request.page, layout);
 		try {

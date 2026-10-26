@@ -94,7 +94,7 @@ describe("ViewerController invalid render requests", () => {
 
 			controller.requestRender(waitingInput);
 			await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
-			expect(getPageSize).toHaveBeenCalledTimes(3);
+			expect(getPageSize).toHaveBeenCalledTimes(2);
 			expect(renderPage).toHaveBeenCalledOnce();
 			expect(controller.failure).toBeNull();
 			controller.dispose();

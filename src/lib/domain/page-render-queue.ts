@@ -116,7 +116,12 @@ export class PageRenderQueue {
 				}
 			}
 		}
-		while (!this.#disposed && this.#active < maxConcurrent && this.#tasks.length > 0) {
+		while (
+			!this.#disposed &&
+			this.#active < maxConcurrent &&
+			this.#tasks.length > 0 &&
+			(!this.#prefetchRunning || this.source.supportsConcurrentPageRenders === true)
+		) {
 			const renderIndex = this.#tasks.findIndex((task) => task.type === "render");
 			if (renderIndex === -1) break;
 			const task = this.#tasks.splice(renderIndex, 1)[0];

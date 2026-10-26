@@ -209,6 +209,52 @@ describe("ViewerController", () => {
 		await vi.waitFor(() => expect(closeUnrelated).toHaveBeenCalledOnce());
 	});
 
+	it("retains a prerender that finishes while navigation is still measuring the target page", async () => {
+		const navigationPageSize = createDeferred<{ width: number; height: number }>();
+		const backgroundRender = createDeferred<PageVisual>();
+		const backgroundStarted = createDeferred<void>();
+		let backgroundHasStarted = false;
+		const getPageSize = vi.fn((pageIndex: number) => {
+			if (pageIndex === 1 && backgroundHasStarted) return navigationPageSize.promise;
+			return Promise.resolve({ width: 300, height: 400 });
+		});
+		const prefetchedVisual = pixelVisual();
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderPrefetchedPage = vi.fn((pageIndex: number) => {
+			if (pageIndex !== 1) return Promise.resolve(pixelVisual());
+			backgroundHasStarted = true;
+			backgroundStarted.resolve();
+			return backgroundRender.promise;
+		});
+		const source: PageSource = {
+			...createPageSource(2, pixelVisual),
+			getPageSize,
+			renderPage,
+			renderPrefetchedPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
+		await controller.load("brochure.pdf", createBackend(source));
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		await backgroundStarted.promise;
+
+		controller.requestRender({ ...input, page: 2 });
+		await vi.waitFor(() =>
+			expect(getPageSize.mock.calls.filter(([pageIndex]) => pageIndex === 1)).toHaveLength(2),
+		);
+		backgroundRender.resolve(prefetchedVisual);
+		await flushTasks();
+		expect(controller.renderRevision).toBe(1);
+
+		navigationPageSize.resolve({ width: 300, height: 400 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(controller.pageVisuals[1]).toBe(prefetchedVisual);
+		expect(renderPage).toHaveBeenCalledOnce();
+		expect(renderPrefetchedPage.mock.calls.map(([pageIndex]) => pageIndex)).toEqual([1, 0]);
+		controller.dispose();
+	});
+
 	it("retries a claimed background failure with the foreground renderer", async () => {
 		const failedPrerender = createDeferred<PageVisual>();
 		const started = createDeferred<void>();

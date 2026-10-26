@@ -57,6 +57,32 @@ describe("PageRenderQueue", () => {
 		queue.dispose();
 	});
 
+	it("keeps legacy single-session renders behind a running data prefetch", async () => {
+		let finishPrefetch: () => void = () => undefined;
+		const renderPage = vi.fn(async () => pixelVisual());
+		const prefetchPage = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishPrefetch = resolve;
+				}),
+		);
+		const source: PageSource = {
+			...createPageSource(renderPage),
+			prefetchPage,
+		};
+		const queue = new PageRenderQueue(source);
+		const prefetch = queue.prefetchPage(4);
+		await vi.waitFor(() => expect(prefetchPage).toHaveBeenCalledOnce());
+		const visible = queue.render(5, 1, "visible");
+		await Promise.resolve();
+		expect(renderPage).not.toHaveBeenCalled();
+
+		finishPrefetch();
+		await Promise.all([prefetch, visible]);
+		expect(renderPage).toHaveBeenCalledOnce();
+		queue.dispose();
+	});
+
 	it("prioritizes a visible page over queued thumbnails", async () => {
 		const requests: string[] = [];
 		const pending: Array<(visual: PageVisual) => void> = [];
