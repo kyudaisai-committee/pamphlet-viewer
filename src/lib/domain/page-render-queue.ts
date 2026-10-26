@@ -77,6 +77,9 @@ export class PageRenderQueue {
 	}
 
 	cancelQueued(priority?: PageRenderPriority): void {
+		if (priority === undefined || priority === "prefetch") {
+			this.source.cancelPrefetchPageRequests?.();
+		}
 		const retained: PageTask[] = [];
 		for (const task of this.#tasks) {
 			if (priority === undefined || task.priority === priority)
@@ -151,7 +154,10 @@ export class PageRenderQueue {
 						}
 					}
 				}
-				const pageSize = await this.source.getPageSize(task.pageIndex);
+				const pageSize =
+					this.source.getThumbnailPageSize === undefined
+						? await this.source.getPageSize(task.pageIndex)
+						: await this.source.getThumbnailPageSize(task.pageIndex);
 				task.resolve(
 					await this.source.renderPage(
 						task.pageIndex,

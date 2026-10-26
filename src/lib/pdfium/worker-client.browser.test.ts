@@ -147,6 +147,7 @@ describe("PdfiumWorkerClient terminal state", () => {
 		worker.reply({ id: openRequest.id, type: "opened", pageCount: 2, fileLength: 1024 });
 		const source = await openPromise;
 		const pageSize = source.getPageSize(0);
+		await vi.waitFor(() => expect(worker.requests).toHaveLength(2));
 		const sizeRequest = worker.requests[1];
 		if (sizeRequest === undefined) throw new Error("The page-size request was not posted.");
 		worker.reply({ id: sizeRequest.id, type: "error", message: "Worker trap.", fatal: true });
@@ -164,11 +165,12 @@ describe("PdfiumWorkerClient terminal state", () => {
 		worker.reply({ id: openRequest.id, type: "opened", pageCount: 8, fileLength: 1024 });
 		const source = await openPromise;
 		const prefetch = source.prefetchPage?.(6);
+		if (prefetch === undefined) throw new Error("The page prefetch API was not exposed.");
+		await vi.waitFor(() => expect(worker.requests).toHaveLength(2));
 		const prefetchRequest = worker.requests[1];
-		if (prefetch === undefined || prefetchRequest === undefined) {
-			throw new Error("The page prefetch API was not exposed.");
-		}
+		if (prefetchRequest === undefined) throw new Error("The page prefetch was not queued.");
 		expect(prefetchRequest.type).toBe("page-prefetch");
+		expect(prefetchRequest.pageIndex).toBe(6);
 		worker.reply({ id: prefetchRequest.id, type: "page-prefetch" });
 
 		await expect(prefetch).resolves.toBeUndefined();

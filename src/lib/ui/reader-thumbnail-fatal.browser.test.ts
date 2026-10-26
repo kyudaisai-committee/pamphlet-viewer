@@ -10,6 +10,8 @@ import {
 	resetControlledWorkers,
 	waitForViewerReady,
 	waitForWorkerRequest,
+	waitForWorkerRequestAcrossInstances,
+	answerOpenRequests,
 } from "./reader-fake-worker";
 
 afterEach(() => {
@@ -32,12 +34,17 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	element.src = "./thumbnail-worker-failure.pdf";
 
 	await expect.poll(() => ControlledWorker.instances.length).toBe(1);
-	const failedWorker = getControlledWorker(0);
-	const firstOpen = await waitForWorkerRequest(failedWorker, "open");
-	failedWorker.reply({ id: firstOpen.id, type: "opened", pageCount: 4, fileLength: 8192 });
-	const mainRender = await answerPageSizeRequestsUntilRender(failedWorker);
-	failedWorker.reply({
-		id: mainRender.id,
+	const documentWorker = getControlledWorker(0);
+	const firstOpen = await waitForWorkerRequest(documentWorker, "open");
+	documentWorker.reply({
+		id: firstOpen.id,
+		type: "opened",
+		pageCount: 4,
+		fileLength: 8192,
+	});
+	const mainRender = await answerPageSizeRequestsUntilRender(documentWorker);
+	mainRender.worker.reply({
+		id: mainRender.request.id,
 		type: "rendered",
 		visual: {
 			type: "pixels",
@@ -50,18 +57,19 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
 	await expect.poll(() => shadowRoot.querySelector(".page-frame")).not.toBeNull();
+	const thumbnailWorkerStart = ControlledWorker.instances.length;
 	shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle")?.click();
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).not.toBeNull();
-	await expect.poll(() => ControlledWorker.instances.length).toBe(2);
-	const failedThumbnailWorker = getControlledWorker(1);
-	const failedThumbnailOpen = await waitForWorkerRequest(failedThumbnailWorker, "open");
-	failedThumbnailWorker.reply({
-		id: failedThumbnailOpen.id,
-		type: "opened",
-		pageCount: 4,
-		fileLength: 8192,
-	});
-	const unavailableThumbnail = await waitForWorkerRequest(failedThumbnailWorker, "thumbnail");
+	await expect
+		.poll(() => ControlledWorker.instances.length)
+		.toBeGreaterThan(thumbnailWorkerStart);
+	await answerOpenRequests(thumbnailWorkerStart);
+	const unavailableThumbnailRequest = await waitForWorkerRequestAcrossInstances(
+		"thumbnail",
+		thumbnailWorkerStart,
+	);
+	const failedThumbnailWorker = unavailableThumbnailRequest.worker;
+	const unavailableThumbnail = unavailableThumbnailRequest.request;
 	failedThumbnailWorker.reply({
 		id: unavailableThumbnail.id,
 		type: "error",
@@ -80,20 +88,27 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	await Promise.resolve();
 	expect(failedThumbnailWorker.requests).toHaveLength(failedRequestCount);
 	const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button');
+	const recoveredWorkerStart = ControlledWorker.instances.length;
 	retryButton?.click();
-	await expect.poll(() => ControlledWorker.instances.length).toBe(3);
-	const recoveredWorker = getControlledWorker(2);
-	const recoveredOpen = await waitForWorkerRequest(recoveredWorker, "open");
+	await expect
+		.poll(() => ControlledWorker.instances.length)
+		.toBeGreaterThan(recoveredWorkerStart);
+	const recoveredOpenResponse = await waitForWorkerRequestAcrossInstances(
+		"open",
+		recoveredWorkerStart,
+	);
+	const recoveredDocumentWorker = recoveredOpenResponse.worker;
+	const recoveredOpen = recoveredOpenResponse.request;
 	expect(recoveredOpen.url).toBe(firstOpen.url);
-	recoveredWorker.reply({
+	recoveredDocumentWorker.reply({
 		id: recoveredOpen.id,
 		type: "opened",
 		pageCount: 4,
 		fileLength: 8192,
 	});
-	const recoveredMainRender = await answerPageSizeRequestsUntilRender(recoveredWorker);
-	recoveredWorker.reply({
-		id: recoveredMainRender.id,
+	const recoveredMainRender = await answerPageSizeRequestsUntilRender(recoveredDocumentWorker);
+	recoveredMainRender.worker.reply({
+		id: recoveredMainRender.request.id,
 		type: "rendered",
 		visual: {
 			type: "pixels",
@@ -108,7 +123,7 @@ test("recovers from a thumbnail worker failure in the narrow reader", async () =
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 	await expect.poll(() => shadowRoot.querySelector('[role="alert"]')).toBeNull();
 	expect(failedThumbnailWorker.terminateCalls).toBe(1);
-	expect(recoveredWorker.terminateCalls).toBe(0);
+	expect(recoveredMainRender.worker.terminateCalls).toBe(0);
 });
 
 test("recreates the thumbnail worker after a transient open failure", async () => {
