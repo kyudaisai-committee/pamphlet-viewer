@@ -44,7 +44,7 @@ export class PagePrerenderScheduler {
 
 	setRequests(requests: readonly PagePrerenderRequest[], preserveCache = false): void {
 		const uniqueRequests = new Map<string, PagePrerenderRequest>();
-		if (this.#source?.renderPrefetchedPage !== undefined) {
+		if (this.#source !== null) {
 			for (const request of requests) {
 				if (
 					!Number.isSafeInteger(request.pageIndex) ||
@@ -77,7 +77,7 @@ export class PagePrerenderScheduler {
 			this.#touch(key);
 			if (this.#cache.has(key) || this.#tasksByKey.has(key)) continue;
 			const source = this.#source;
-			if (source?.renderPrefetchedPage === undefined) continue;
+			if (source === null) continue;
 			const task: PagePrerenderTask = {
 				...request,
 				key,
@@ -121,23 +121,13 @@ export class PagePrerenderScheduler {
 	}
 
 	#drain(): void {
-		while (
-			this.#active < MAX_CONCURRENT_PRERENDERS &&
-			this.#queue.length > 0 &&
-			this.#source?.renderPrefetchedPage !== undefined
-		) {
+		while (this.#active < MAX_CONCURRENT_PRERENDERS && this.#queue.length > 0) {
 			const request = this.#queue.shift();
 			if (request === undefined || request.source !== this.#source) continue;
 			this.#active += 1;
 			request.state = "running";
-			const render = request.source.renderPrefetchedPage;
-			if (render === undefined) {
-				this.#tasksByKey.delete(request.key);
-				this.#active -= 1;
-				continue;
-			}
 			request.result = Promise.resolve().then(() =>
-				render.call(request.source, request.pageIndex, request.scale),
+				request.source.renderPrefetchedPage(request.pageIndex, request.scale),
 			);
 			void this.#finish(request);
 		}

@@ -64,6 +64,9 @@ describe("ViewerController", () => {
 				renderedScale = scale;
 				return pixelVisual();
 			},
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		const controller = new ViewerController(() => undefined);
@@ -95,6 +98,9 @@ describe("ViewerController", () => {
 			},
 			async renderPage(_pageIndex, scale) {
 				renderedScale = scale;
+				return pixelVisual();
+			},
+			async renderPrefetchedPage() {
 				return pixelVisual();
 			},
 			dispose() {},
@@ -294,6 +300,9 @@ describe("ViewerController", () => {
 			async renderPage() {
 				throw new Error("The stale page-size request must prevent this render.");
 			},
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		const newVisual = pixelVisual();
@@ -304,6 +313,9 @@ describe("ViewerController", () => {
 				return { width: 300, height: 400 };
 			},
 			renderPage: newRenderPage,
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		const events: string[] = [];
@@ -333,6 +345,9 @@ describe("ViewerController", () => {
 				return { width: 300, height: 400 };
 			},
 			renderPage: oldRenderPage,
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		const closeStaleBitmap = vi.fn();
@@ -345,6 +360,9 @@ describe("ViewerController", () => {
 			},
 			async renderPage() {
 				return newVisual;
+			},
+			async renderPrefetchedPage() {
+				return pixelVisual();
 			},
 			dispose() {},
 		};
@@ -435,6 +453,9 @@ describe("ViewerController", () => {
 				return { width: 300, height: 400 };
 			},
 			renderPage: recoveredRender,
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		let openCount = 0;
@@ -485,6 +506,9 @@ describe("ViewerController", () => {
 				if (renderCount === 1) throw new Error("Temporary render failure.");
 				return pixelVisual();
 			},
+			async renderPrefetchedPage() {
+				return pixelVisual();
+			},
 			dispose() {},
 		};
 		const backend: DocumentBackend = {
@@ -521,6 +545,9 @@ function createPageSource(pageCount: number, renderVisual: () => PageVisual): Pa
 			return { width: 300, height: 400 };
 		},
 		async renderPage() {
+			return renderVisual();
+		},
+		async renderPrefetchedPage() {
 			return renderVisual();
 		},
 		dispose() {},

@@ -884,6 +884,14 @@ function createBackend(pageCount: number, renderedPages: number[] = []): Documen
 						pixels: createPixels(),
 					};
 				},
+				async renderPrefetchedPage(): Promise<PageVisual> {
+					return {
+						type: "pixels",
+						width: 300,
+						height: 400,
+						pixels: createPixels(),
+					};
+				},
 				dispose(): void {},
 			};
 		},

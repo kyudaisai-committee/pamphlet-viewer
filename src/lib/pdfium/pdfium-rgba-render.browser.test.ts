@@ -54,9 +54,6 @@ test("renders visible spread pages and adjacent pages in independent PDFium work
 	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
 	const source = await new PdfiumBackend().open(url, new AbortController().signal);
 	try {
-		if (source.renderPrefetchedPage === undefined) {
-			throw new Error("The PDFium source must support adjacent page prerendering.");
-		}
 		const [left, right, adjacent] = await Promise.all([
 			source.renderPage(0, 1),
 			source.renderPage(1, 1),
@@ -79,9 +76,6 @@ test("finishes visible renders while an unrelated adjacent PDFium worker remains
 			"https://example.test/brochure.pdf",
 			new AbortController().signal,
 		);
-		if (source.renderPrefetchedPage === undefined) {
-			throw new Error("The PDFium source must support adjacent page prerendering.");
-		}
 		let backgroundCompleted = false;
 		const backgroundRender = source.renderPrefetchedPage(23, 1).then(() => {
 			backgroundCompleted = true;

@@ -5,6 +5,8 @@ import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 
+const MAX_CONCURRENT_RENDERS = 2;
+
 export type PageRenderPriority = "visible" | "thumbnail" | "prefetch";
 
 interface TaskBase {
@@ -100,7 +102,6 @@ export class PageRenderQueue {
 	}
 
 	#drain(): void {
-		const maxConcurrent = this.source.supportsConcurrentPageRenders === true ? 2 : 1;
 		if (
 			!this.#disposed &&
 			!this.#prefetchRunning &&
@@ -116,12 +117,7 @@ export class PageRenderQueue {
 				}
 			}
 		}
-		while (
-			!this.#disposed &&
-			this.#active < maxConcurrent &&
-			this.#tasks.length > 0 &&
-			(!this.#prefetchRunning || this.source.supportsConcurrentPageRenders === true)
-		) {
+		while (!this.#disposed && this.#active < MAX_CONCURRENT_RENDERS && this.#tasks.length > 0) {
 			const renderIndex = this.#tasks.findIndex((task) => task.type === "render");
 			if (renderIndex === -1) break;
 			const task = this.#tasks.splice(renderIndex, 1)[0];

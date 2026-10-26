@@ -91,6 +91,9 @@ test.each(["resolve", "reject"] as const)(
 			async renderPage() {
 				throw new PageSourceUnavailableError("The thumbnail source is unavailable.");
 			},
+			async renderPrefetchedPage() {
+				return pageVisual();
+			},
 			dispose() {},
 		};
 		const controller = new ViewerController(() => undefined);
@@ -135,6 +138,9 @@ function createPageSource(renderPage: PageSource["renderPage"]): PageSource {
 			return { width: 300, height: 400 };
 		},
 		renderPage,
+		async renderPrefetchedPage() {
+			return pageVisual();
+		},
 		dispose() {},
 	};
 }

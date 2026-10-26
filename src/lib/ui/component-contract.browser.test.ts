@@ -308,6 +308,14 @@ function createPageSource(
 				pixels: pagePixels(color),
 			};
 		},
+		async renderPrefetchedPage(): Promise<PageVisual> {
+			return {
+				type: "pixels",
+				width: 300,
+				height: 400,
+				pixels: pagePixels(color),
+			};
+		},
 		dispose: onDispose,
 	};
 }

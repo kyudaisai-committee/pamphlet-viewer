@@ -138,6 +138,14 @@ function createBackend(pageCount: number, renderedPages: number[]): DocumentBack
 						pixels: new Uint8Array([70, 80, 90, 255]).buffer,
 					};
 				},
+				async renderPrefetchedPage(): Promise<PageVisual> {
+					return {
+						type: "pixels",
+						width: 1,
+						height: 1,
+						pixels: new Uint8Array([70, 80, 90, 255]).buffer,
+					};
+				},
 				dispose() {},
 			};
 		},

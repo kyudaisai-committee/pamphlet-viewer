@@ -17,6 +17,7 @@ import {
 } from "./layout";
 import type { FitMode, LayoutMode, ViewportSize } from "./layout";
 import { PagePrerenderScheduler } from "./page-prerender-scheduler";
+import type { PagePrerenderRequest } from "./page-prerender-scheduler";
 import { PageRenderQueue } from "./page-render-queue";
 import { createPageRenderPlan } from "./render-plan";
 import type { PageRenderPlan } from "./render-plan";
@@ -414,7 +415,6 @@ export class ViewerController {
 	}
 
 	async #requestAdjacentPrerenders(request: ScheduledRender, source: PageSource): Promise<void> {
-		if (source.renderPrefetchedPage === undefined) return;
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		const groups = getAdjacentPageGroups(this.pageCount, request.page, layout);
 		try {
@@ -447,7 +447,18 @@ export class ViewerController {
 				}),
 			);
 			if (!this.#isCurrent(request, source)) return;
-			this.#prerenderScheduler.setRequests(requestsByGroup.flat());
+			const orderedRequests: PagePrerenderRequest[] = [];
+			for (let groupIndex = 0; ; groupIndex += 1) {
+				let foundRequest = false;
+				for (const groupRequests of requestsByGroup) {
+					const request = groupRequests[groupIndex];
+					if (request === undefined) continue;
+					orderedRequests.push(request);
+					foundRequest = true;
+				}
+				if (!foundRequest) break;
+			}
+			this.#prerenderScheduler.setRequests(orderedRequests);
 		} catch (error) {
 			if (source === this.pageSource && error instanceof PageSourceUnavailableError) {
 				this.#handleSourceUnavailable();
