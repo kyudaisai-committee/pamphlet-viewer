@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 test("does not navigate past the last visible page in spread layout", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const cases = [
 		{ pageCount: 3, page: 2 },
 		{ pageCount: 3, page: 3 },
@@ -58,7 +58,7 @@ test("does not navigate past the last visible page in spread layout", async () =
 });
 
 test("allows advancing from the cover and from a spread before the final page", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const cases = [
 		{ pageCount: 3, page: 1, expectedPage: 2, expectedIndexes: [1, 2] },
 		{ pageCount: 4, page: 2, expectedPage: 4, expectedIndexes: [3] },
@@ -88,7 +88,7 @@ test("allows advancing from the cover and from a spread before the final page", 
 });
 
 test("keeps single-page navigation available until the last page", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer(3, "single");
 	element.page = 2;
 	const opened = waitForPageChange(element);

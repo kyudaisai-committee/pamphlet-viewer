@@ -32,20 +32,20 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	import { parseFit, parseLayout, resolveDocumentSource } from "@/lib/domain/configuration/viewer-options";
 	import type { PageRenderPlan } from "@/lib/domain/rendering/render-plan";
 	import type { PamphletViewerConfig } from "@/lib/public-api";
-	import { resolveViewerLocale } from "../i18n/locale";
-	import type { ViewerLocale } from "../i18n/locale";
+	import { resolveViewerLocale } from "@/lib/i18n/locale";
+	import type { ViewerLocale } from "@/lib/i18n/locale";
 	import { createViewerMessages } from "@/lib/i18n/viewer-messages";
-	import { provideViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { provideViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
-	import ThumbnailPanel from "./ThumbnailPanel.svelte";
-	import ViewerStage from "./ViewerStage.svelte";
-	import ViewerSettingsToolbar from "./ViewerSettingsToolbar.svelte";
-	import ViewerStatusBar from "./ViewerStatusBar.svelte";
-	import ViewerToolbar from "./ViewerToolbar.svelte";
+	import ThumbnailPanel from "@/lib/ui/components/ThumbnailPanel.svelte";
+	import ViewerStage from "@/lib/ui/components/ViewerStage.svelte";
+	import ViewerSettingsToolbar from "@/lib/ui/components/ViewerSettingsToolbar.svelte";
+	import ViewerStatusBar from "@/lib/ui/components/ViewerStatusBar.svelte";
+	import ViewerToolbar from "@/lib/ui/components/ViewerToolbar.svelte";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 	import { observeResponsiveReaderOrder } from "./reader-region-order";
-	import { captureZoomAnchor, restoreZoomAnchor } from "./reader-zoom-anchor";
-	import { ZoomRenderScheduler } from "./zoom-render-scheduler";
+	import { captureZoomAnchor, restoreZoomAnchor } from "@/lib/ui/zoom/reader-zoom-anchor";
+	import { ZoomRenderScheduler } from "@/lib/ui/zoom/zoom-render-scheduler";
 
 	interface Props {
 		src?: string;

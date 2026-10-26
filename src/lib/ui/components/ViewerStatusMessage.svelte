@@ -2,7 +2,7 @@
 
 <script lang="ts">
 	import type { ViewerFailure, ViewerPhase } from "@/lib/domain/viewer/viewer-controller.svelte";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		phase: ViewerPhase;

@@ -2,7 +2,7 @@
 
 <script lang="ts">
 	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		zoom: number;

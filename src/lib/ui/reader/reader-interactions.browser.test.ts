@@ -9,7 +9,7 @@ import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 const BOOKMARKS_STORAGE_KEY = "pamphlet-viewer.bookmarks.v1";
 
 test("prevents selecting UI labels while preserving editable controls", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
 	element.layout = "single";
 	const firstPage = waitForPageChange(element);
@@ -42,7 +42,7 @@ beforeEach(async () => {
 });
 
 test("keeps the thumbnail list virtual and selects a distant page", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const renderedPages: number[] = [];
 	const element = createViewer({ width: 1120, height: 680 }, createBackend(120, renderedPages));
 	element.layout = "single";
@@ -75,7 +75,7 @@ test("keeps the thumbnail list virtual and selects a distant page", async () => 
 });
 
 test("navigates to validated configured chapters", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(12));
 	element.setConfig({
 		chapters: [
@@ -113,7 +113,7 @@ test("navigates to validated configured chapters", async () => {
 });
 
 test("selects fit and page layout together on desktop", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
 	element.layout = "auto";
 	element.fit = "page";
@@ -146,7 +146,7 @@ test("selects fit and page layout together on desktop", async () => {
 });
 
 test("applies shared design tokens to desktop controls", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
 	element.layout = "single";
 	element.setConfig({ chapters: [{ title: "前半", page: 1 }] });
@@ -228,7 +228,7 @@ test("applies shared design tokens to desktop controls", async () => {
 });
 
 test("shares touch target and compact toolbar tokens across mobile bars", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 390, height: 620 }, createBackend(5));
 	element.layout = "single";
 	element.setConfig({ chapters: [{ title: "前半", page: 1 }] });
@@ -282,7 +282,7 @@ test("shares touch target and compact toolbar tokens across mobile bars", async 
 
 test("persists bookmarks per document and restores the saved page list", async () => {
 	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 840, height: 620 }, createBackend(5));
 	element.layout = "single";
 	const firstPage = waitForPageChange(element);
@@ -354,7 +354,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 
 test("synchronizes bookmarks between viewer instances and storage events", async () => {
 	localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
-	await import("../entry");
+	await import("@/lib/entry");
 	const backend = createBackend(5);
 	const first = createViewer({ width: 840, height: 620 }, backend);
 	const second = createViewer({ width: 840, height: 620 }, backend);
@@ -407,7 +407,7 @@ test.each([320, 390])(
 	async (width) => {
 		const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
 		localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3, 8] }));
-		await import("../entry");
+		await import("@/lib/entry");
 		const element = createViewer({ width, height: 620 }, createBackend(12));
 		element.layout = "auto";
 		element.setConfig({
@@ -579,7 +579,7 @@ test.each([320, 390])(
 );
 
 test("uses the host width for mobile thumbnail mode and closes after selection", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 390, height: 620 }, createBackend(24));
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -611,7 +611,7 @@ test("uses the host width for mobile thumbnail mode and closes after selection",
 test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (width) => {
 	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
 	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3] }));
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width, height: 620 }, createBackend(12));
 	element.setConfig({
 		chapters: [
@@ -729,7 +729,7 @@ test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (wi
 });
 
 test("falls back to a top-layer fullscreen reader and restores the embed size on Escape", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 390, height: 600 }, createBackend(2));
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -833,7 +833,7 @@ test("does not apply an old fullscreen request to a reattached reader", async ()
 });
 
 test("supports high zoom and pans the page without a pixel-limit error", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer({ width: 520, height: 520 }, createBackend(1));
 	element.layout = "single";
 	const firstPage = waitForPageChange(element);

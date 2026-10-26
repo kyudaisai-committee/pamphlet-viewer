@@ -209,7 +209,7 @@ test("keeps keyboard focus on the same fullscreen control after closing fallback
 });
 
 async function createLoadedViewer(width: number): Promise<PamphletViewerElement> {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = `${width}px`;
 	element.style.height = "620px";

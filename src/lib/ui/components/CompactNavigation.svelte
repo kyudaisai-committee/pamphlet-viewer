@@ -4,7 +4,7 @@
 	import { BookmarkCheckIcon, BookmarkIcon } from "@lucide/svelte";
 
 	import type { PamphletChapter } from "@/lib/public-api";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 
 	interface Props {
 		chapters: readonly PamphletChapter[];

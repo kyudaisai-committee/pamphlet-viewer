@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 test("renders Square annotation appearances in page and thumbnail canvases", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = "900px";
 	element.style.height = "620px";

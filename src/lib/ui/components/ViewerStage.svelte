@@ -10,7 +10,7 @@
 	import { detectPageSwipeDirection, ReaderGestureController } from "@/lib/domain/navigation/reader-gesture";
 	import { calculateWheelZoom } from "@/lib/domain/navigation/reader-wheel-zoom";
 	import type { GesturePoint } from "@/lib/domain/navigation/reader-gesture";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";
 

@@ -5,7 +5,7 @@
 	import { onMount, untrack } from "svelte";
 
 	import type { PageVisual } from "@/lib/document/page-source";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 
 	const THUMBNAIL_ROW_HEIGHT = 160;

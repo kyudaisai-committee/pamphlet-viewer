@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import PamphletViewer from "./ui/PamphletViewer.svelte";
+import PamphletViewer from "@/lib/ui/reader/PamphletViewer.svelte";
 
 export * from "./public-api";
 

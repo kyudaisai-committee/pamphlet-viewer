@@ -43,7 +43,7 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 		);
 	});
 
-	await import("../entry");
+	await import("@/lib/entry");
 	element.setConfig({ chapters: [{ title: "はじめに", page: 1 }] });
 	await expect.poll(() => openCalls.length).toBe(1);
 	await new Promise<void>((resolve) =>
@@ -97,7 +97,7 @@ test("opens and renders a real ranged PDF through the custom element", async () 
 	const pageChanged = new Promise<void>((resolve) => {
 		element.addEventListener("pagechange", () => resolve(), { once: true });
 	});
-	await import("../entry");
+	await import("@/lib/entry");
 	await pageChanged;
 
 	const canvas = element.shadowRoot?.querySelector<HTMLCanvasElement>(".page-canvas");
@@ -157,7 +157,7 @@ test("keeps an omitted src empty and resolves raw src attributes against the doc
 });
 
 test("aborts a stale source load and only renders the newest source", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const attempts: Array<{
 		source: string;
 		signal: AbortSignal;
@@ -215,7 +215,7 @@ test("aborts a stale source load and only renders the newest source", async () =
 });
 
 test("keeps instances independent and reopens after disconnecting and reconnecting", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const openCalls: Array<{ source: string; signal: AbortSignal }> = [];
 	const disposed = new Map<string, number>();
 	const backend = {

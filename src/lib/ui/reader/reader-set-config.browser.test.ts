@@ -83,7 +83,7 @@ test("retains settings across disconnection and reattachment", async () => {
 });
 
 async function registerViewer(): Promise<CustomElementConstructor> {
-	await import("../entry");
+	await import("@/lib/entry");
 	const constructor = customElements.get("pamphlet-viewer");
 	if (constructor === undefined) throw new Error("The pamphlet viewer was not registered.");
 	return constructor;

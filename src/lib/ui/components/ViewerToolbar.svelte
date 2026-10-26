@@ -2,7 +2,7 @@
 
 <script lang="ts">
 	import type { PamphletChapter } from "@/lib/public-api";
-	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";
 
 	interface Props {

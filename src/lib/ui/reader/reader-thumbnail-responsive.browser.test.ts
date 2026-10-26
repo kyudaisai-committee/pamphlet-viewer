@@ -12,7 +12,7 @@ afterEach(async () => {
 test.each([390, 660, 700, 701, 702, 703, 840])(
 	"matches thumbnail selection behavior to stage visibility at host width %ipx",
 	async (width) => {
-		await import("../entry");
+		await import("@/lib/entry");
 		const element = createViewer(width);
 		const firstPage = waitForPageChange(element);
 		document.body.append(element);
@@ -49,7 +49,7 @@ test.each([390, 660, 700, 701, 702, 703, 840])(
 );
 
 test("uses the resized stage visibility when selecting a thumbnail", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer(660);
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -89,7 +89,7 @@ test("uses the resized stage visibility when selecting a thumbnail", async () =>
 });
 
 test("keeps thumbnails open when fullscreen makes the stage visible", async () => {
-	await import("../entry");
+	await import("@/lib/entry");
 	const element = createViewer(660);
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
