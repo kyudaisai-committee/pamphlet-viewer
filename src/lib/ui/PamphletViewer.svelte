@@ -20,21 +20,21 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from "svelte";
 
-	import type { DocumentBackend, PageVisual } from "../document/page-source";
-	import { PdfiumBackend } from "../document/pdfium-backend";
-	import { resolveLayout, visiblePageIndexes } from "../domain/layout";
-	import type { FitMode, LayoutMode, ViewportSize } from "../domain/layout";
-	import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
-	import { ViewerController } from "../domain/viewer-controller.svelte";
-	import type { RenderInput, ViewerEvent } from "../domain/viewer-controller.svelte";
-import { ViewerBookmarks } from "../domain/viewer-bookmarks.svelte";
-import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
-	import { parseFit, parseLayout, resolveDocumentSource } from "../domain/viewer-options";
-	import type { PageRenderPlan } from "../domain/render-plan";
+	import type { DocumentBackend, PageVisual } from "@/lib/document/page-source";
+	import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+	import { resolveLayout, visiblePageIndexes } from "@/lib/domain/navigation/layout";
+	import type { FitMode, LayoutMode, ViewportSize } from "@/lib/domain/navigation/layout";
+	import type { GesturePoint, ZoomAnchor } from "@/lib/domain/navigation/reader-gesture";
+	import { ViewerController } from "@/lib/domain/viewer/viewer-controller.svelte";
+	import type { RenderInput, ViewerEvent } from "@/lib/domain/viewer/viewer-controller.svelte";
+import { ViewerBookmarks } from "@/lib/domain/bookmarks/viewer-bookmarks.svelte";
+import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/viewer-config";
+	import { parseFit, parseLayout, resolveDocumentSource } from "@/lib/domain/configuration/viewer-options";
+	import type { PageRenderPlan } from "@/lib/domain/rendering/render-plan";
 	import type { PamphletViewerConfig } from "@/lib/public-api";
 	import { resolveViewerLocale } from "../i18n/locale";
 	import type { ViewerLocale } from "../i18n/locale";
-	import { createViewerMessages } from "../i18n/viewer-messages";
+	import { createViewerMessages } from "@/lib/i18n/viewer-messages";
 	import { provideViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
 	import ThumbnailPanel from "./ThumbnailPanel.svelte";

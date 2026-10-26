@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
+import type { FitMode, LayoutMode } from "@/lib/domain/navigation/layout";
+import type { ViewerFailure } from "@/lib/domain/viewer/viewer-controller.svelte";
+
 import type { DocumentBackend, PageSource, PageVisual } from "./document/page-source";
-import type { FitMode, LayoutMode } from "./domain/layout";
-import type { ViewerFailure } from "./domain/viewer-controller.svelte";
 
 export type { FitMode, LayoutMode, ViewerFailure, DocumentBackend, PageSource, PageVisual };
 export { PageSourceUnavailableError } from "./document/page-source";

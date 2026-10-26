@@ -4,9 +4,10 @@ import {
 	PageTaskScheduler,
 	type PageTaskLease,
 	type PageTaskPriority,
-} from "../domain/page-task-scheduler";
-import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
-import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
+} from "@/lib/domain/scheduling/page-task-scheduler";
+import { PdfRangeBroker } from "@/lib/pdfium/pdf-range-broker";
+import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "@/lib/pdfium/worker-client";
+
 import type { PageSize, PageVisual } from "./page-source";
 
 export const PDFIUM_WORKER_LIMIT = 4;

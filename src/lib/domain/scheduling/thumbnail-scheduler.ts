@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageSource, PageVisual } from "../document/page-source";
-import { PageSourceUnavailableError } from "../document/page-source";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+import { PageSourceUnavailableError } from "@/lib/document/page-source";
 
 export const MAX_THUMBNAIL_PIXEL_BYTES = 32 * 1024 * 1024;
 export const MAX_THUMBNAIL_ENTRIES = Number.MAX_SAFE_INTEGER;

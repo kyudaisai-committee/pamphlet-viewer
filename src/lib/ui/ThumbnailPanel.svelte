@@ -4,7 +4,7 @@
 	import { XIcon } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";
 
-	import type { PageVisual } from "../document/page-source";
+	import type { PageVisual } from "@/lib/document/page-source";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 

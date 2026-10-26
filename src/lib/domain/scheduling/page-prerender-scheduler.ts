@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageSource, PageVisual } from "../document/page-source";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
 
 export const MAX_PRERENDER_ENTRIES = 4;
 export const MAX_PRERENDER_PIXEL_BYTES = 128 * 1024 * 1024;

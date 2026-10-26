@@ -3,13 +3,13 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 
-	import type { PageVisual } from "../document/page-source";
-	import type { PageRenderPlan } from "../domain/render-plan";
-	import type { ViewerFailure, ViewerPhase } from "../domain/viewer-controller.svelte";
-	import type { ViewportSize } from "../domain/layout";
-	import { detectPageSwipeDirection, ReaderGestureController } from "../domain/reader-gesture";
-	import { calculateWheelZoom } from "../domain/reader-wheel-zoom";
-	import type { GesturePoint } from "../domain/reader-gesture";
+	import type { PageVisual } from "@/lib/document/page-source";
+	import type { PageRenderPlan } from "@/lib/domain/rendering/render-plan";
+	import type { ViewerFailure, ViewerPhase } from "@/lib/domain/viewer/viewer-controller.svelte";
+	import type { ViewportSize } from "@/lib/domain/navigation/layout";
+	import { detectPageSwipeDirection, ReaderGestureController } from "@/lib/domain/navigation/reader-gesture";
+	import { calculateWheelZoom } from "@/lib/domain/navigation/reader-wheel-zoom";
+	import type { GesturePoint } from "@/lib/domain/navigation/reader-gesture";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
 	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";

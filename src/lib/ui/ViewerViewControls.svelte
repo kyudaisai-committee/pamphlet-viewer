@@ -3,7 +3,7 @@
 <script lang="ts">
 	import { Maximize2Icon, Minimize2Icon } from "@lucide/svelte";
 
-	import type { FitMode, LayoutMode } from "../domain/layout";
+	import type { FitMode, LayoutMode } from "@/lib/domain/navigation/layout";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 
 	interface ViewOption {

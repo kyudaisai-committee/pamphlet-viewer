@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PageSourceUnavailableError } from "../document/page-source";
-import { PdfiumBackend } from "../document/pdfium-backend";
+import { PageSourceUnavailableError } from "@/lib/document/page-source";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-client";
 
 interface WorkerRequestRecord {

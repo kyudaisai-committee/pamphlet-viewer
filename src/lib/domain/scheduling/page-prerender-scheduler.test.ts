@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { PageSource, PageVisual } from "../document/page-source";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+
 import { MAX_PRERENDER_ENTRIES, PagePrerenderScheduler } from "./page-prerender-scheduler";
 
 describe("PagePrerenderScheduler", () => {

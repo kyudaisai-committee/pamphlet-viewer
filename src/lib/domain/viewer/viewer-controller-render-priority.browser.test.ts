@@ -1,10 +1,11 @@
 import { expect, test, vi } from "vitest";
 
-import type { PageSource, PageVisual } from "../document/page-source";
-import { PdfiumBackend } from "../document/pdfium-backend";
-import { PDFIUM_WORKER_LIMIT } from "../document/pdfium-worker-pool";
-import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
-import { PdfiumWorkerClient } from "../pdfium/worker-client";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import { PDFIUM_WORKER_LIMIT } from "@/lib/document/pdfium-worker-pool";
+import { PdfRangeBroker } from "@/lib/pdfium/pdf-range-broker";
+import { PdfiumWorkerClient } from "@/lib/pdfium/worker-client";
+
 import { ViewerController } from "./viewer-controller.svelte";
 
 const FIXTURE_URL = new URL("/__render-priority-fixture.pdf", window.location.href).href;

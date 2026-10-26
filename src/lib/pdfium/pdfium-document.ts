@@ -2,10 +2,10 @@
 
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
+import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
+import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
 
-import type { PageSize, PageVisual } from "../document/page-source";
-import type { PageTaskPriority } from "../domain/page-task-scheduler";
 import {
 	PdfiumAvailabilitySession,
 	PdfiumAvailabilityFatalError,

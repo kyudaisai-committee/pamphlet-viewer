@@ -5,28 +5,29 @@ import {
 	type DocumentBackend,
 	type PageSource,
 	type PageVisual,
-} from "../document/page-source";
-import { createViewerMessages } from "../i18n/viewer-messages";
-import type { ViewerMessages } from "../i18n/viewer-messages";
+} from "@/lib/document/page-source";
+import { createViewerMessages } from "@/lib/i18n/viewer-messages";
+import type { ViewerMessages } from "@/lib/i18n/viewer-messages";
+
 import {
 	calculateFitScale,
 	getAdjacentPageGroups,
 	getPrefetchPageIndexes,
 	resolveLayout,
 	visiblePageIndexes,
-} from "./layout";
-import type { FitMode, LayoutMode, ViewportSize } from "./layout";
-import { PagePrerenderScheduler } from "./page-prerender-scheduler";
-import type { PagePrerenderRequest } from "./page-prerender-scheduler";
-import { PageRenderQueue } from "./page-render-queue";
-import { createPageRenderPlan } from "./render-plan";
-import type { PageRenderPlan } from "./render-plan";
+} from "../navigation/layout";
+import type { FitMode, LayoutMode, ViewportSize } from "../navigation/layout";
+import { createPageRenderPlan } from "../rendering/render-plan";
+import type { PageRenderPlan } from "../rendering/render-plan";
+import { PagePrerenderScheduler } from "../scheduling/page-prerender-scheduler";
+import type { PagePrerenderRequest } from "../scheduling/page-prerender-scheduler";
+import { PageRenderQueue } from "../scheduling/page-render-queue";
 import {
 	MAX_THUMBNAIL_ENTRIES,
 	MAX_THUMBNAIL_PIXEL_BYTES,
 	ThumbnailScheduler,
-} from "./thumbnail-scheduler";
-import type { ThumbnailEntry } from "./thumbnail-scheduler";
+} from "../scheduling/thumbnail-scheduler";
+import type { ThumbnailEntry } from "../scheduling/thumbnail-scheduler";
 
 export type ViewerPhase = "empty" | "loading" | "ready" | "error";
 

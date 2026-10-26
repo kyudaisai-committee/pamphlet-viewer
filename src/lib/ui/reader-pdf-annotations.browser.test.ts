@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 
-import type { PamphletViewerElement } from "../public-api";
+import type { PamphletViewerElement } from "@/lib/public-api";
 
 afterEach(() => {
 	document.body.replaceChildren();

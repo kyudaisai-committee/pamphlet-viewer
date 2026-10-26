@@ -1,9 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
-import { PdfiumBackend } from "../document/pdfium-backend";
-import { calculateFitScale } from "../domain/layout";
-import type { PamphletViewerElement } from "../public-api";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import { calculateFitScale } from "@/lib/domain/navigation/layout";
+import type { PamphletViewerElement } from "@/lib/public-api";
+
 import {
 	answerPageSizeRequestsUntilRender,
 	ControlledWorker,

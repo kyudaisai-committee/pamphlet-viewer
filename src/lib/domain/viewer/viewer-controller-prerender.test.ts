@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 
-import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
+import type { DocumentBackend, PageSource, PageVisual } from "@/lib/document/page-source";
+
 import { ViewerController } from "./viewer-controller.svelte";
 
 it("starts both adjacent spreads before waiting for either first page", async () => {

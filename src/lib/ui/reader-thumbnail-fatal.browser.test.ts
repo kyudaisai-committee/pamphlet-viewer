@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-import type { PageSource } from "../document/page-source";
-import { PdfiumBackend } from "../document/pdfium-backend";
-import type { PamphletViewerElement } from "../public-api";
+import type { PageSource } from "@/lib/document/page-source";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import type { PamphletViewerElement } from "@/lib/public-api";
+
 import {
 	answerPageSizeRequestsUntilRender,
 	ControlledWorker,

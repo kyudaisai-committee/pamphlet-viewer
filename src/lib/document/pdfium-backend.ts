@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-import { PdfRangeBroker } from "../pdfium/pdf-range-broker";
-import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "../pdfium/worker-client";
+import { PdfRangeBroker } from "@/lib/pdfium/pdf-range-broker";
+import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "@/lib/pdfium/worker-client";
+
 import {
 	PageSourceUnavailableError,
 	type DocumentBackend,

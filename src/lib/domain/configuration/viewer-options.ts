@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import type { FitMode, LayoutMode } from "./layout";
+import type { FitMode, LayoutMode } from "../navigation/layout";
 
 export function resolveDocumentSource(value: string, baseUri: string): string | null {
 	try {

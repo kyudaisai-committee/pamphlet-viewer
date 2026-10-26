@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
-import type { PageSize } from "../document/page-source";
+import { MAX_PAGE_RENDER_PIXELS } from "@/lib/document/page-source";
+import type { PageSize } from "@/lib/document/page-source";
 
-export { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
+export { MAX_PAGE_RENDER_PIXELS } from "@/lib/document/page-source";
 
 export interface PageRenderPlan {
 	displayScale: number;

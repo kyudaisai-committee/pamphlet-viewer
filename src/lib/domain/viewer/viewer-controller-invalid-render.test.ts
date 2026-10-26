@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
-import type { PageSource, PageVisual } from "../document/page-source";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+
 import { ViewerController } from "./viewer-controller.svelte";
 
 const invalidRenderScenarios: Array<{

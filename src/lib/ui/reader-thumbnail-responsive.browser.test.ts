@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "vitest";
 import { page as browserPage } from "vitest/browser";
 
-import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
-import type { PamphletViewerElement } from "../public-api";
+import type { DocumentBackend, PageSource, PageVisual } from "@/lib/document/page-source";
+import type { PamphletViewerElement } from "@/lib/public-api";
 
 afterEach(async () => {
 	document.body.replaceChildren();

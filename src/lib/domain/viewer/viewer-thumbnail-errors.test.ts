@@ -5,7 +5,8 @@ import {
 	type DocumentBackend,
 	type PageSource,
 	type PageVisual,
-} from "../document/page-source";
+} from "@/lib/document/page-source";
+
 import { ViewerController } from "./viewer-controller.svelte";
 
 test("keeps the document ready after an ordinary thumbnail failure", async () => {

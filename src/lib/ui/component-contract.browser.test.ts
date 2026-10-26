@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 
-import type { PageSource, PageVisual } from "../document/page-source";
-import type { PamphletViewerElement } from "../public-api";
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+import type { PamphletViewerElement } from "@/lib/public-api";
 
 afterEach(() => {
 	document.body.replaceChildren();

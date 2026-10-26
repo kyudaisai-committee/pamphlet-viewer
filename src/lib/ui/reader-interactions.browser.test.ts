@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { page as browserPage, userEvent } from "vitest/browser";
 
-import type { DocumentBackend, PageSource, PageVisual } from "../document/page-source";
-import type { PamphletViewerElement } from "../public-api";
+import type { DocumentBackend, PageSource, PageVisual } from "@/lib/document/page-source";
+import type { PamphletViewerElement } from "@/lib/public-api";
+
 import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 
 const BOOKMARKS_STORAGE_KEY = "pamphlet-viewer.bookmarks.v1";

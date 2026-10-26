@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageTaskPriority } from "../domain/page-task-scheduler";
+import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
+
 import type { PdfRangeResponse } from "./range-request";
 
 export interface RangeTransportRequest {

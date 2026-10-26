@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-import { PageTaskScheduler, type PageTaskPriority } from "../domain/page-task-scheduler";
+import {
+	PageTaskScheduler,
+	type PageTaskPriority,
+} from "@/lib/domain/scheduling/page-task-scheduler";
+
 import { RangeChunkCache } from "./range-chunk-cache";
 import {
 	RANGE_CHUNK_SIZE,

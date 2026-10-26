@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 
-import type { PageVisual } from "../document/page-source";
-import { PdfiumBackend } from "../document/pdfium-backend";
-import { PageRenderQueue } from "../domain/page-render-queue";
+import type { PageVisual } from "@/lib/document/page-source";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import { PageRenderQueue } from "@/lib/domain/scheduling/page-render-queue";
 
 test("uses a PDFium-rendered color thumbnail without rendering the full page", async () => {
 	const resetResponse = await fetch("/__pdfium-range-reset");

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+import type { PageSource, PageVisual } from "@/lib/document/page-source";
+import { PageSourceUnavailableError } from "@/lib/document/page-source";
 import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
-
-import type { PageSource, PageVisual } from "../document/page-source";
-import { PageSourceUnavailableError } from "../document/page-source";
 
 const MAX_CONCURRENT_RENDERS = 2;
 

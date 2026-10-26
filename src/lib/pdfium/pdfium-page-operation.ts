@@ -2,8 +2,9 @@
 
 import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 
-import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
-import type { PageSize, PageVisual } from "../document/page-source";
+import { MAX_PAGE_RENDER_PIXELS } from "@/lib/document/page-source";
+import type { PageSize, PageVisual } from "@/lib/document/page-source";
+
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
 import { runPdfiumPageOperation } from "./pdfium-page-lifecycle";
 import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";

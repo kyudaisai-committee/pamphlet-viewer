@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
-import { calculateFitScale, visiblePageIndexes } from "../domain/layout";
+import { calculateFitScale, visiblePageIndexes } from "@/lib/domain/navigation/layout";
+
 import { PdfiumWorkerClient } from "./worker-client";
 
 interface FixtureMetrics {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PdfiumBackend } from "../document/pdfium-backend";
-import { PageRenderQueue } from "../domain/page-render-queue";
+import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import { PageRenderQueue } from "@/lib/domain/scheduling/page-render-queue";
 
 interface WorkerRequestRecord {
 	id: number;

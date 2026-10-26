@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 
 <script lang="ts">
-	import type { FitMode, LayoutMode } from "../domain/layout";
+	import type { FitMode, LayoutMode } from "@/lib/domain/navigation/layout";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
 	import ZoomControls from "./ZoomControls.svelte";

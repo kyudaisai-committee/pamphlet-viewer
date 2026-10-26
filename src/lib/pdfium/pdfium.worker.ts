@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageSize, PageVisual } from "../document/page-source";
-import type { PageTaskPriority } from "../domain/page-task-scheduler";
+import type { PageSize, PageVisual } from "@/lib/document/page-source";
+import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
+
 import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
 import { PdfRepresentationChangedError } from "./range-request";
 import type { PdfRangeResponse } from "./range-request";

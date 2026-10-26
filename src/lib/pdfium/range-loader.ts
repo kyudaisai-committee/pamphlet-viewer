@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import type { PageTaskPriority } from "../domain/page-task-scheduler";
+import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
+
 import { createRangeBatchPlan, type RangeBatch } from "./range-batch";
 import { RangeChunkCache } from "./range-chunk-cache";
 import { PdfRepresentationChangedError, requestPdfRange } from "./range-request";

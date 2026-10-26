@@ -2,8 +2,9 @@
 
 import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
-import type { PageSize, PageVisual } from "../document/page-source";
-import type { PageTaskPriority } from "../domain/page-task-scheduler";
+import type { PageSize, PageVisual } from "@/lib/document/page-source";
+import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
+
 import { PdfRangeBroker } from "./pdf-range-broker";
 import pdfiumWorkerAssetUrl from "./pdfium.worker.ts?worker&url";
 import { PdfRepresentationChangedError } from "./range-request";
