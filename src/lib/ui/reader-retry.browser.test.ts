@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";

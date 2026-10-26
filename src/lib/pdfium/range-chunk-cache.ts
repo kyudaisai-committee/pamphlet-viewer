@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 export class RangeChunkCache {
 	#chunks = new Map<number, Uint8Array>();

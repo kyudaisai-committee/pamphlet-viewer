@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 const FILE_ACCESS_SIZE = 12;
 const FILE_AVAIL_SIZE = 8;

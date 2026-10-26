@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize } from "../document/page-source";

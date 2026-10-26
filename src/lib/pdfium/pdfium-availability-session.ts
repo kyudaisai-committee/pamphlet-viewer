@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import { PdfiumFileAccess, type PdfiumRuntimeApi } from "./pdfium-file-access";
 import type { PdfRangeLoader } from "./range-loader";

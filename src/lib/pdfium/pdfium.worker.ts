@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 

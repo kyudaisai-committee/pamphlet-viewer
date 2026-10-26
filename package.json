@@ -1,7 +1,7 @@
 {
 	"name": "@kyudaisai/pamphlet-viewer",
 	"version": "0.1.0-alpha.7",
-	"license": "MPL-2.0",
+	"license": "MIT",
 	"author": "九大祭実行委員会, kurage (@umitsukidev)",
 	"repository": {
 		"type": "git",

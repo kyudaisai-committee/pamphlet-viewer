@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import { sourceAlias } from "./vite.source-alias.js";
 
 const LICENSE_BANNER = `/*!
- * SPDX-License-Identifier: MPL-2.0
+ * SPDX-License-Identifier: MIT
  * Source code: https://github.com/kyudaisai-committee/pamphlet-viewer
  */`;
 

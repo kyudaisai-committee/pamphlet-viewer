@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MIT
 
 import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import { expect, test } from "vitest";
