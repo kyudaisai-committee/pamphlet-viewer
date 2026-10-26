@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PdfRangeLoader, RANGE_CHUNK_SIZE, RANGE_REQUEST_TIMEOUT_MS } from "./range-loader";
+import { PdfRepresentationChangedError } from "./range-request";
 
 const ETAG = '"test-document"';
 
@@ -16,7 +17,7 @@ describe("PdfRangeLoader response validation", () => {
 		vi.stubGlobal("fetch", async () => new Response(body, { status: 200 }));
 
 		const loader = createLoader();
-		await expect(loader.initialize()).rejects.toThrow("HTTP 200");
+		await expect(loader.initialize()).rejects.toBeInstanceOf(PdfRepresentationChangedError);
 		expect(cancel).toHaveBeenCalledOnce();
 		loader.dispose();
 	});
@@ -179,7 +180,9 @@ describe("PdfRangeLoader response validation", () => {
 		try {
 			await loader.initialize();
 			expect(loader.readInto(RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1)).toBe(false);
-			await expect(loader.fetchMissingChunks()).rejects.toThrow("representation changed");
+			await expect(loader.fetchMissingChunks()).rejects.toBeInstanceOf(
+				PdfRepresentationChangedError,
+			);
 			expect(cancel).toHaveBeenCalledOnce();
 			expect(requests).toEqual([
 				{ range: `bytes=0-${RANGE_CHUNK_SIZE - 1}`, ifRange: null },
@@ -188,6 +191,54 @@ describe("PdfRangeLoader response validation", () => {
 					ifRange: ETAG,
 				},
 			]);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("treats an HTTP 200 after a validator was established as a changed representation", async () => {
+		const requests: string[] = [];
+		vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const range = new Headers(init?.headers).get("Range");
+			if (range === null) throw new Error("A byte range was not requested.");
+			requests.push(range);
+			if (requests.length > 1) return new Response(null, { status: 200 });
+			return createRangeResponse(0, RANGE_CHUNK_SIZE - 1, RANGE_CHUNK_SIZE * 2, ETAG);
+		});
+
+		const loader = createLoader();
+		try {
+			await loader.initialize();
+			loader.readInto(RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1);
+			await expect(loader.fetchMissingChunks()).rejects.toBeInstanceOf(
+				PdfRepresentationChangedError,
+			);
+			expect(requests).toHaveLength(2);
+			expect(loader.cachedByteLength).toBe(RANGE_CHUNK_SIZE);
+		} finally {
+			loader.dispose();
+		}
+	});
+
+	it("treats a changed total length as an invalidated representation", async () => {
+		let requestCount = 0;
+		vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const range = new Headers(init?.headers).get("Range");
+			if (range === null) throw new Error("A byte range was not requested.");
+			requestCount += 1;
+			const start = requestCount === 1 ? 0 : RANGE_CHUNK_SIZE;
+			const totalLength = requestCount === 1 ? RANGE_CHUNK_SIZE * 2 : RANGE_CHUNK_SIZE * 3;
+			return createRangeResponse(start, start + RANGE_CHUNK_SIZE - 1, totalLength, ETAG);
+		});
+
+		const loader = createLoader();
+		try {
+			await loader.initialize();
+			loader.readInto(RANGE_CHUNK_SIZE, new Uint8Array(1), 0, 1);
+			await expect(loader.fetchMissingChunks()).rejects.toBeInstanceOf(
+				PdfRepresentationChangedError,
+			);
+			expect(loader.cachedByteLength).toBe(RANGE_CHUNK_SIZE);
 		} finally {
 			loader.dispose();
 		}
