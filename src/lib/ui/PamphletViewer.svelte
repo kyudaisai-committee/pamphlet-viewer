@@ -674,6 +674,8 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 	.viewer-shell {
 		box-sizing: border-box;
 		display: grid;
+		-webkit-user-select: none;
+		user-select: none;
 		grid-template-columns: minmax(0, 1fr) auto;
 		grid-template-rows: auto auto minmax(0, 1fr) auto auto;
 		width: 100%;
@@ -684,6 +686,11 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 		overflow: hidden;
 		border: var(--pamphlet-viewer-border-width) solid var(--pamphlet-viewer-border);
 		background: var(--pamphlet-viewer-stage);
+
+		:global(:is(input, textarea, select, [contenteditable]:not([contenteditable="false"]))) {
+			-webkit-user-select: text;
+			user-select: text;
+		}
 
 		.settings-region,
 		.navigation-region {
