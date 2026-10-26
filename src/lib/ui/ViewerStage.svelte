@@ -8,6 +8,7 @@
 	import type { ViewerFailure, ViewerPhase } from "../domain/viewer-controller.svelte";
 	import type { ViewportSize } from "../domain/layout";
 	import { detectPageSwipeDirection, ReaderGestureController } from "../domain/reader-gesture";
+	import { calculateWheelZoom } from "../domain/reader-wheel-zoom";
 	import type { GesturePoint } from "../domain/reader-gesture";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
@@ -183,7 +184,12 @@
 	function onWheel(event: WheelEvent): void {
 		if (!event.ctrlKey && !event.metaKey) return;
 		event.preventDefault();
-		const nextZoom = zoom * Math.exp(-event.deltaY * 0.002);
+		const nextZoom = calculateWheelZoom(
+			zoom,
+			event.deltaY,
+			event.deltaMode,
+			pageArea?.clientHeight ?? 0,
+		);
 		onZoomGesture(nextZoom, { x: event.clientX, y: event.clientY });
 	}
 

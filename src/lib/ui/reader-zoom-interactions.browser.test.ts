@@ -86,7 +86,20 @@ test.each([390, 520, 700])(
 		const point = getAreaPoint(pageArea, 0.63, 0.55);
 		const initialRatio = measurePageRatio(pageArea, point);
 		const initialWidth = getFrame(pageArea).getBoundingClientRect().width;
-		pageArea.dispatchEvent(createWheel(point, 1, 1.8));
+		const ordinaryWheel = new WheelEvent("wheel", {
+			bubbles: true,
+			cancelable: true,
+			deltaY: 100,
+			clientX: point.x,
+			clientY: point.y,
+		});
+		pageArea.dispatchEvent(ordinaryWheel);
+		expect(ordinaryWheel.defaultPrevented).toBe(false);
+		expect(readZoom(shadowRoot)).toBe("100%");
+
+		const pinchWheel = createWheel(point, 1, 1.8);
+		pageArea.dispatchEvent(pinchWheel);
+		expect(pinchWheel.defaultPrevented).toBe(true);
 		await expect.poll(() => readZoom(shadowRoot)).toBe("180%");
 		await expect
 			.poll(() => getFrame(pageArea).getBoundingClientRect().width)
@@ -484,7 +497,7 @@ function createWheel(point: Point, currentZoom: number, nextZoom: number): Wheel
 		bubbles: true,
 		cancelable: true,
 		ctrlKey: true,
-		deltaY: -Math.log(nextZoom / currentZoom) / 0.002,
+		deltaY: -100 * Math.log(nextZoom / currentZoom),
 		clientX: point.x,
 		clientY: point.y,
 	});
