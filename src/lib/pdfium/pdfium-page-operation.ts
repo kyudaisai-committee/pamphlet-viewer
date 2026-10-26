@@ -5,6 +5,7 @@ import type { WrappedPdfiumModule } from "@embedpdf/pdfium";
 import { MAX_PAGE_RENDER_PIXELS } from "../document/page-source";
 import type { PageSize, PageVisual } from "../document/page-source";
 import type { PdfiumAvailabilitySession } from "./pdfium-availability-session";
+import { runPdfiumPageOperation } from "./pdfium-page-lifecycle";
 import { copyRgbaBitmapPixels } from "./pdfium-pixel-buffer";
 import { combinePdfiumRenderFlags } from "./pdfium-render-flags";
 import type { PdfiumRenderFlags } from "./pdfium-render-flags";
@@ -44,7 +45,7 @@ export function getPageSizeByIndex(
 		if (gotSize && !loader.hasMissingChunks) {
 			result = readPageSizeBuffer(pdfium, sizePointer);
 		} else if (!loader.hasMissingChunks && allowPageLoadFallback) {
-			result = runPageOperation(pdfium, availability, loader, pageIndex, (page) =>
+			result = runPdfiumPageOperation(pdfium, availability, loader, pageIndex, (page) =>
 				getLoadedPageSize(pdfium, availability, page),
 			);
 		}
@@ -113,7 +114,7 @@ export function renderPdfiumPage(
 	pageIndex: number,
 	scale: number,
 ): PageVisual | null {
-	return runPageOperation(pdfium, availability, loader, pageIndex, (page) =>
+	return runPdfiumPageOperation(pdfium, availability, loader, pageIndex, (page) =>
 		renderLoadedPage(pdfium, availability, loader, page, scale),
 	);
 }
@@ -121,58 +122,6 @@ export function renderPdfiumPage(
 export function getPdfiumHeap(pdfium: WrappedPdfiumModule): Uint8Array {
 	const runtime = pdfium.pdfium as WrappedPdfiumModule["pdfium"] & { HEAPU8: Uint8Array };
 	return runtime.HEAPU8;
-}
-
-function runPageOperation<T>(
-	pdfium: WrappedPdfiumModule,
-	availability: PdfiumAvailabilitySession,
-	loader: PdfRangeLoader,
-	pageIndex: number,
-	operation: (page: number) => T | null,
-): T | null {
-	let page = 0;
-	let result: T | null = null;
-	let operationError: unknown;
-	let hasOperationError = false;
-	try {
-		page = availability.runNative(
-			() => pdfium.FPDF_LoadPage(availability.documentHandle, pageIndex),
-			(loadedPage) => {
-				page = loadedPage;
-			},
-		);
-		if (page === 0) {
-			if (!loader.hasMissingChunks) {
-				const errorCode = availability.runNative(() => pdfium.FPDF_GetLastError());
-				throw new Error(`PDFium could not load page ${pageIndex} (error ${errorCode}).`);
-			}
-		} else if (!loader.hasMissingChunks) {
-			const value = operation(page);
-			if (!loader.hasMissingChunks && value !== null) result = value;
-		}
-	} catch (error) {
-		operationError = error;
-		hasOperationError = true;
-		availability.markNativeFailure(error);
-	}
-
-	if (page !== 0 && !availability.isPoisoned) {
-		try {
-			availability.runNative(() => pdfium.FPDF_ClosePage(page));
-		} catch (cleanupError) {
-			availability.markNativeFailure(cleanupError);
-			if (!hasOperationError) {
-				operationError = cleanupError;
-				hasOperationError = true;
-			}
-		}
-	}
-
-	if (hasOperationError) throw operationError;
-	if (result === null && !loader.hasMissingChunks) {
-		throw new Error("PDFium did not complete the page render.");
-	}
-	return result;
 }
 
 function renderLoadedPage(

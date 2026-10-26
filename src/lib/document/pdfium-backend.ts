@@ -49,6 +49,11 @@ class PdfiumPageSource implements PageSource {
 		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);
 	}
 
+	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		this.#assertActive();
+		return this.client.renderThumbnail(pageIndex).catch(mapSourceFailure);
+	}
+
 	dispose(): void {
 		if (this.#disposed) return;
 		this.#disposed = true;

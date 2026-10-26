@@ -139,6 +139,17 @@ describe("PdfiumDocumentSession", () => {
 		const loadPage = vi.fn(() => 3);
 		const isPageAvailable = vi.fn(() => 1);
 		let missFirstSizeRead = true;
+		let missFirstThumbnailRead = false;
+		const getThumbnail = vi.fn(() => {
+			if (missFirstThumbnailRead) {
+				missFirstThumbnailRead = false;
+				rangeLoaderMocks.hasMissingChunks = true;
+				return 0;
+			}
+			return 5;
+		});
+		const renderPageBitmap = vi.fn();
+		const destroyBitmap = vi.fn();
 		const getPageSizeByIndex = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
 			if (missFirstSizeRead) {
 				missFirstSizeRead = false;
@@ -190,15 +201,25 @@ describe("PdfiumDocumentSession", () => {
 			FPDFBitmap_Create() {
 				return 4;
 			},
+			FPDFPage_GetThumbnailAsBitmap: getThumbnail,
+			FPDFBitmap_GetWidth() {
+				return 1;
+			},
+			FPDFBitmap_GetHeight() {
+				return 1;
+			},
+			FPDFBitmap_GetFormat() {
+				return 4;
+			},
 			FPDFBitmap_FillRect() {},
-			FPDF_RenderPageBitmap() {},
+			FPDF_RenderPageBitmap: renderPageBitmap,
 			FPDFBitmap_GetStride() {
 				return 4;
 			},
 			FPDFBitmap_GetBuffer() {
 				return 0;
 			},
-			FPDFBitmap_Destroy() {},
+			FPDFBitmap_Destroy: destroyBitmap,
 			pdfium: {
 				wasmExports: { malloc, free },
 				addFunction() {
@@ -248,7 +269,23 @@ describe("PdfiumDocumentSession", () => {
 			width: 1,
 			height: 1,
 		});
-		expect(isPageAvailable).toHaveBeenCalledOnce();
+		rangeLoaderMocks.fetchMissingChunks.mockImplementationOnce(async () => {
+			rangeLoaderMocks.hasMissingChunks = false;
+			rangeLoaderMocks.cacheEpoch += 1;
+			return 1;
+		});
+		const renderCallsBeforeThumbnail = renderPageBitmap.mock.calls.length;
+		const pageAvailabilityCallsBeforeThumbnail = isPageAvailable.mock.calls.length;
+		missFirstThumbnailRead = true;
+		expect(await session.renderThumbnail(0)).toMatchObject({
+			type: "pixels",
+			width: 1,
+			height: 1,
+		});
+		expect(getThumbnail).toHaveBeenCalledTimes(2);
+		expect(destroyBitmap).toHaveBeenCalledWith(5);
+		expect(renderPageBitmap).toHaveBeenCalledTimes(renderCallsBeforeThumbnail);
+		expect(isPageAvailable).toHaveBeenCalledTimes(pageAvailabilityCallsBeforeThumbnail + 2);
 		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
 		session.dispose();
 	});
