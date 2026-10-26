@@ -99,7 +99,7 @@ jobs:
             -f target_commitish="${GITHUB_SHA}" \
             --jq .body > "${notes_file}"
 
-          node scripts/create-release-archive.mjs "${archive_file}"
+          pnpm exec node scripts/create-release-archive.mjs "${archive_file}"
 
           release_args=(
             --draft
