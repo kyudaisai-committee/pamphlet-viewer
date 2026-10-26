@@ -10,7 +10,12 @@ export interface ReaderWorkerRequest {
 
 export class ControlledWorker extends EventTarget {
 	static instances: ControlledWorker[] = [];
+	static lastOpenedDocumentInfo: {
+		pageCount: number;
+		fileLength: number;
+	} | null = null;
 	readonly requests: ReaderWorkerRequest[] = [];
+	readonly repliedRequestIds = new Set<number>();
 	terminateCalls = 0;
 
 	constructor() {
@@ -27,7 +32,11 @@ export class ControlledWorker extends EventTarget {
 		}
 		if (message.type === "thumbnail-prefetch") {
 			queueMicrotask(() =>
-				this.reply({ id: message.id, type: "thumbnail-prefetch", visual: null }),
+				this.reply({
+					id: message.id,
+					type: "thumbnail-prefetch",
+					visual: null,
+				}),
 			);
 		}
 	}
@@ -37,12 +46,28 @@ export class ControlledWorker extends EventTarget {
 	}
 
 	reply(message: unknown): void {
+		if (isReaderWorkerRequest(message)) {
+			this.repliedRequestIds.add(message.id);
+			if (
+				message.type === "opened" &&
+				"pageCount" in message &&
+				typeof message.pageCount === "number" &&
+				"fileLength" in message &&
+				typeof message.fileLength === "number"
+			) {
+				ControlledWorker.lastOpenedDocumentInfo = {
+					pageCount: message.pageCount,
+					fileLength: message.fileLength,
+				};
+			}
+		}
 		this.dispatchEvent(new MessageEvent("message", { data: message }));
 	}
 }
 
 export function resetControlledWorkers(): void {
 	ControlledWorker.instances = [];
+	ControlledWorker.lastOpenedDocumentInfo = null;
 }
 
 export async function waitForWorkerRequest(
@@ -73,38 +98,107 @@ export async function waitForWorkerRequest(
 export async function answerPageSizeRequestsUntilRender(
 	worker: ControlledWorker,
 	startIndex = 0,
-): Promise<ReaderWorkerRequest> {
-	const requests = worker.requests.slice(startIndex);
-	const handledRequestIds = new Set<number>();
-	for (let attempt = 0; attempt < 8; attempt += 1) {
-		const pendingRequests = worker.requests.slice(startIndex);
-		const nextPageSize = pendingRequests.find(
-			(request) => request.type === "page-size" && !handledRequestIds.has(request.id),
-		);
-		if (nextPageSize !== undefined) {
-			handledRequestIds.add(nextPageSize.id);
-			worker.reply({
-				id: nextPageSize.id,
-				type: "page-size",
-				pageSize: { width: 300, height: 400 },
-			});
-			continue;
+): Promise<{ worker: ControlledWorker; request: ReaderWorkerRequest }> {
+	for (let attempt = 0; attempt < 16; attempt += 1) {
+		for (const candidate of ControlledWorker.instances) {
+			if (candidate.terminateCalls > 0) continue;
+			const requests =
+				candidate === worker ? candidate.requests.slice(startIndex) : candidate.requests;
+			const nextOpen = requests.find(
+				(request) =>
+					request.type === "open" && !candidate.repliedRequestIds.has(request.id),
+			);
+			if (nextOpen !== undefined && ControlledWorker.lastOpenedDocumentInfo !== null) {
+				candidate.reply({
+					id: nextOpen.id,
+					type: "opened",
+					...ControlledWorker.lastOpenedDocumentInfo,
+				});
+				continue;
+			}
+			const nextPageSize = requests.find(
+				(request) =>
+					request.type === "page-size" && !candidate.repliedRequestIds.has(request.id),
+			);
+			if (nextPageSize !== undefined) {
+				candidate.reply({
+					id: nextPageSize.id,
+					type: "page-size",
+					pageSize: { width: 300, height: 400 },
+				});
+				continue;
+			}
+			const render = requests.find(
+				(request) =>
+					request.type === "render" && !candidate.repliedRequestIds.has(request.id),
+			);
+			if (render !== undefined) return { worker: candidate, request: render };
 		}
-		const render = pendingRequests.find((request) => request.type === "render");
-		if (render !== undefined) return render;
 		await expect
 			.poll(() =>
-				worker.requests
-					.slice(startIndex)
-					.some(
-						(request) =>
-							request.type === "render" ||
-							(request.type === "page-size" && !handledRequestIds.has(request.id)),
-					),
+				ControlledWorker.instances.some(
+					(candidate) =>
+						candidate.terminateCalls === 0 &&
+						candidate.requests.some(
+							(request) =>
+								!candidate.repliedRequestIds.has(request.id) &&
+								(request.type === "open" ||
+									request.type === "page-size" ||
+									request.type === "render"),
+						),
+				),
 			)
 			.toBe(true);
 	}
-	throw new Error(`Render did not start after page-size responses: ${JSON.stringify(requests)}.`);
+	throw new Error("Render did not start after page-size responses.");
+}
+
+export async function answerOpenRequests(startIndex: number): Promise<void> {
+	await expect
+		.poll(() => {
+			const pendingWorkers = ControlledWorker.instances.slice(startIndex);
+			if (pendingWorkers.length === 0 || ControlledWorker.lastOpenedDocumentInfo === null) {
+				return false;
+			}
+			for (const worker of pendingWorkers) {
+				const open = worker.requests.find(
+					(request) =>
+						request.type === "open" && !worker.repliedRequestIds.has(request.id),
+				);
+				if (open === undefined) continue;
+				worker.reply({
+					id: open.id,
+					type: "opened",
+					...ControlledWorker.lastOpenedDocumentInfo,
+				});
+			}
+			return pendingWorkers.some((worker) =>
+				worker.requests.some((request) => request.type === "open"),
+			);
+		})
+		.toBe(true);
+}
+
+export async function waitForWorkerRequestAcrossInstances(
+	type: string,
+	startIndex = 0,
+): Promise<{ worker: ControlledWorker; request: ReaderWorkerRequest }> {
+	let found: { worker: ControlledWorker; request: ReaderWorkerRequest } | undefined;
+	await expect
+		.poll(() => {
+			found = undefined;
+			for (const worker of ControlledWorker.instances.slice(startIndex)) {
+				const request = worker.requests.find((candidate) => candidate.type === type);
+				if (request !== undefined) {
+					found = { worker, request };
+					return true;
+				}
+			}
+			return false;
+		})
+		.toBe(true);
+	if (found === undefined) throw new Error(`The ${type} request was not sent.`);
+	return found;
 }
 
 export function waitForViewerReady(element: HTMLElement): Promise<void> {

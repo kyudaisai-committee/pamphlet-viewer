@@ -11,6 +11,7 @@ import {
 	resetControlledWorkers,
 	waitForViewerReady,
 	waitForWorkerRequest,
+	waitForWorkerRequestAcrossInstances,
 } from "./reader-fake-worker";
 
 afterEach(() => {
@@ -21,7 +22,10 @@ afterEach(() => {
 
 test("reopens an updated PDF after a fatal range request and renders its new document", async () => {
 	const dprDescriptor = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
-	Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 2 });
+	Object.defineProperty(window, "devicePixelRatio", {
+		configurable: true,
+		value: 2,
+	});
 	vi.stubGlobal("Worker", ControlledWorker);
 	try {
 		await import("../entry");
@@ -40,12 +44,17 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 		element.src = "./fatal-worker-retry.pdf";
 
 		await expect.poll(() => ControlledWorker.instances.length).toBe(1);
-		const failedWorker = getControlledWorker(0);
-		const firstOpen = await waitForWorkerRequest(failedWorker, "open");
-		failedWorker.reply({ id: firstOpen.id, type: "opened", pageCount: 4, fileLength: 8192 });
-		const failedRender = await answerPageSizeRequestsUntilRender(failedWorker);
-		failedWorker.reply({
-			id: failedRender.id,
+		const documentWorker = getControlledWorker(0);
+		const firstOpen = await waitForWorkerRequest(documentWorker, "open");
+		documentWorker.reply({
+			id: firstOpen.id,
+			type: "opened",
+			pageCount: 4,
+			fileLength: 8192,
+		});
+		const failedRender = await answerPageSizeRequestsUntilRender(documentWorker);
+		failedRender.worker.reply({
+			id: failedRender.request.id,
 			type: "error",
 			message: "The PDF representation changed.",
 			fatal: true,
@@ -64,22 +73,27 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 
 		const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button');
 		if (retryButton === null) throw new Error("The retry button was not rendered.");
+		const recoveredWorkerStart = ControlledWorker.instances.length;
 		await userEvent.click(retryButton);
-		await expect.poll(() => ControlledWorker.instances.length).toBeGreaterThan(1);
-		const recoveredWorker = ControlledWorker.instances.at(-1);
-		if (recoveredWorker === undefined)
-			throw new Error("The recovered page worker was not created.");
-		const recoveredOpen = await waitForWorkerRequest(recoveredWorker, "open");
+		await expect
+			.poll(() => ControlledWorker.instances.length)
+			.toBeGreaterThan(recoveredWorkerStart);
+		const recoveredOpenResponse = await waitForWorkerRequestAcrossInstances(
+			"open",
+			recoveredWorkerStart,
+		);
+		const recoveredOpenWorker = recoveredOpenResponse.worker;
+		const recoveredOpen = recoveredOpenResponse.request;
 		expect(recoveredOpen.url).toBe(firstOpen.url);
-		recoveredWorker.reply({
+		recoveredOpenWorker.reply({
 			id: recoveredOpen.id,
 			type: "opened",
 			pageCount: 5,
 			fileLength: 10240,
 		});
-		const recoveredRender = await answerPageSizeRequestsUntilRender(recoveredWorker);
+		const recoveredRender = await answerPageSizeRequestsUntilRender(recoveredOpenWorker);
 		expect(
-			recoveredWorker.requests.filter((request) => request.type === "page-size").at(-1)
+			recoveredRender.worker.requests.filter((request) => request.type === "page-size").at(-1)
 				?.pageIndex,
 		).toBe(1);
 		const pageArea = shadowRoot.querySelector<HTMLElement>(".page-area");
@@ -92,10 +106,10 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 				"page",
 				2,
 			) * 2;
-		expect(recoveredRender.pageIndex).toBe(1);
-		expect(recoveredRender.scale).toBeCloseTo(expectedRasterScale, 4);
-		recoveredWorker.reply({
-			id: recoveredRender.id,
+		expect(recoveredRender.request.pageIndex).toBe(1);
+		expect(recoveredRender.request.scale).toBeCloseTo(expectedRasterScale, 4);
+		recoveredRender.worker.reply({
+			id: recoveredRender.request.id,
 			type: "rendered",
 			visual: {
 				type: "pixels",
@@ -114,8 +128,8 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 		if (canvas === null) throw new Error("The updated PDF page was not rendered.");
 		const renderedPixel = canvas.getContext("2d")?.getImageData(0, 0, 1, 1).data;
 		expect(renderedPixel?.[2]).toBe(105);
-		expect(failedWorker.terminateCalls).toBe(1);
-		expect(recoveredWorker.terminateCalls).toBe(0);
+		expect(failedRender.worker.terminateCalls).toBe(1);
+		expect(recoveredRender.worker.terminateCalls).toBe(0);
 	} finally {
 		if (dprDescriptor === undefined) Reflect.deleteProperty(window, "devicePixelRatio");
 		else Object.defineProperty(window, "devicePixelRatio", dprDescriptor);
