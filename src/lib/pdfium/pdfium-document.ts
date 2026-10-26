@@ -2,8 +2,9 @@
 
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
+
 import type { PageSize, PageVisual } from "../document/page-source";
-import { calculateThumbnailScale } from "../document/thumbnail-scale";
 import {
 	PdfiumAvailabilitySession,
 	PdfiumAvailabilityFatalError,

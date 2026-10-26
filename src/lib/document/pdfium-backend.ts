@@ -47,6 +47,7 @@ export class PdfiumBackend implements DocumentBackend {
 
 class PdfiumPageSource implements PageSource {
 	#disposed = false;
+	readonly propagateThumbnailErrors = true;
 
 	constructor(
 		readonly pageCount: number,

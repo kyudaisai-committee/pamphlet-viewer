@@ -127,6 +127,27 @@ describe("PageRenderQueue", () => {
 		},
 	);
 
+	it("propagates source-owned thumbnail errors without falling back to body rendering", async () => {
+		const failure = new Error("The thumbnail worker could not decode this page.");
+		const getPageSize = vi.fn(async () => ({ width: 300, height: 400 }));
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderThumbnail = vi.fn(async () => {
+			throw failure;
+		});
+		const source = createPageSource(renderPage);
+		source.getPageSize = getPageSize;
+		source.renderThumbnail = renderThumbnail;
+		source.propagateThumbnailErrors = true;
+		const queue = new PageRenderQueue(source);
+
+		await expect(queue.render(4, 0.3, "thumbnail")).rejects.toBe(failure);
+
+		expect(renderThumbnail).toHaveBeenCalledWith(4);
+		expect(getPageSize).not.toHaveBeenCalled();
+		expect(renderPage).not.toHaveBeenCalled();
+		queue.dispose();
+	});
+
 	it.each([
 		new DOMException("cancelled", "AbortError"),
 		new PageSourceUnavailableError("The PDF worker stopped."),

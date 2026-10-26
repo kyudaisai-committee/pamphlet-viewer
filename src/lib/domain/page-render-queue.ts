@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
+
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
-import { calculateThumbnailScale } from "../document/thumbnail-scale";
 
 export type PageRenderPriority = "visible" | "thumbnail" | "prefetch";
 
@@ -105,7 +106,12 @@ export class PageRenderQueue {
 									continue;
 								}
 							} catch (error) {
-								if (isUnrecoverableThumbnailError(error)) throw error;
+								if (
+									this.source.propagateThumbnailErrors === true ||
+									isUnrecoverableThumbnailError(error)
+								) {
+									throw error;
+								}
 							}
 						}
 						const pageSize = await this.source.getPageSize(task.pageIndex);

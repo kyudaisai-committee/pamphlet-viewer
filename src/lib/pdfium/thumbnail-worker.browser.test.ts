@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PdfiumBackend } from "../document/pdfium-backend";
+import { PageRenderQueue } from "../domain/page-render-queue";
 
 interface WorkerRequestRecord {
 	id: number;
@@ -94,6 +95,35 @@ describe("PDFium thumbnail worker", () => {
 		});
 		await expect(thumbnail).resolves.toMatchObject({ type: "pixels", width: 1 });
 		await source.dispose();
+	});
+
+	it("does not fall back to the body worker after an ordinary thumbnail error", async () => {
+		const source = await openSource();
+		const queue = new PageRenderQueue(source);
+		const documentWorker = getWorker(0);
+		try {
+			const rendering = queue.render(1, 0.3, "thumbnail");
+			const thumbnailWorker = getWorker(1);
+			await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(1));
+			const open = thumbnailWorker.requests[0];
+			if (open === undefined) throw new Error("The thumbnail worker did not open.");
+			thumbnailWorker.reply({ id: open.id, type: "opened", pageCount: 2, fileLength: 1024 });
+			await vi.waitFor(() => expect(thumbnailWorker.requests).toHaveLength(2));
+			const request = thumbnailWorker.requests[1];
+			if (request === undefined) throw new Error("The thumbnail request was not posted.");
+			expect(request.type).toBe("thumbnail");
+			thumbnailWorker.reply({
+				id: request.id,
+				type: "error",
+				message: "The thumbnail could not be decoded.",
+			});
+
+			await expect(rendering).rejects.toThrow("could not be decoded");
+			expect(documentWorker.requests).toHaveLength(1);
+		} finally {
+			queue.dispose();
+			await source.dispose();
+		}
 	});
 });
 

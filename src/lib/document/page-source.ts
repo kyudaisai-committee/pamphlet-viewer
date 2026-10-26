@@ -13,6 +13,7 @@ export type PageVisual =
 
 export interface PageSource {
 	readonly pageCount: number;
+	readonly propagateThumbnailErrors?: boolean;
 	getPageSize(pageIndex: number): Promise<PageSize>;
 	prefetchPage?(pageIndex: number): Promise<void>;
 	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
