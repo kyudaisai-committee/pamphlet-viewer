@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.0-alpha.11
+
+### Patch Changes
+
+- a46d11c: 埋め込みサムネイルのカラー表示を修正し、本文表示と独立して取得・描画するようにします。埋め込みサムネイルを背景で先読みし、取得済み画像をメモリ予算内で保持します。
+
 ## 0.1.0-alpha.10
 
 ### Patch Changes
