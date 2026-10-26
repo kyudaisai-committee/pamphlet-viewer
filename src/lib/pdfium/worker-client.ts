@@ -44,12 +44,18 @@ interface ThumbnailRequest {
 	pageIndex: number;
 }
 
+interface ThumbnailPrefetchRequest {
+	type: "thumbnail-prefetch";
+	pageIndex: number;
+}
+
 type WorkerRequest =
 	| OpenRequest
 	| PageSizeRequest
 	| PagePrefetchRequest
 	| RenderRequest
-	| ThumbnailRequest;
+	| ThumbnailRequest
+	| ThumbnailPrefetchRequest;
 
 interface OpenedResponse {
 	id: number;
@@ -81,6 +87,12 @@ interface ThumbnailResponse {
 	visual: PageVisual | null;
 }
 
+interface ThumbnailPrefetchResponse {
+	id: number;
+	type: "thumbnail-prefetch";
+	visual: PageVisual | null;
+}
+
 interface ErrorResponse {
 	id: number;
 	type: "error";
@@ -94,6 +106,7 @@ type WorkerResponse =
 	| PagePrefetchResponse
 	| RenderedResponse
 	| ThumbnailResponse
+	| ThumbnailPrefetchResponse
 	| ErrorResponse;
 type WorkerMessage = WorkerResponse | { type: "bootstrap-ready" };
 type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
@@ -104,7 +117,9 @@ type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 			? PagePrefetchResponse
 			: Request extends ThumbnailRequest
 				? ThumbnailResponse
-				: RenderedResponse;
+				: Request extends ThumbnailPrefetchRequest
+					? ThumbnailPrefetchResponse
+					: RenderedResponse;
 
 interface PendingRequest {
 	resolve(response: WorkerResponse): void;
@@ -171,6 +186,14 @@ export class PdfiumWorkerClient {
 
 	async renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
 		const response = await this.#request<ThumbnailRequest>({ type: "thumbnail", pageIndex });
+		return response.visual;
+	}
+
+	async prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
+		const response = await this.#request<ThumbnailPrefetchRequest>({
+			type: "thumbnail-prefetch",
+			pageIndex,
+		});
 		return response.visual;
 	}
 

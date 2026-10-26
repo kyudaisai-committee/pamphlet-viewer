@@ -76,6 +76,7 @@ export class ViewerController {
 	#backend: DocumentBackend | null = null;
 	#sourceUnavailable = false;
 	#renderQueue: PageRenderQueue | null = null;
+	#thumbnailRenderQueue: PageRenderQueue | null = null;
 	#thumbnailScheduler: ThumbnailScheduler;
 	#reportCleanupError: (error: unknown) => void;
 	#messages: ViewerMessages;
@@ -89,13 +90,13 @@ export class ViewerController {
 		this.#messages = messages;
 		this.#thumbnailScheduler = new ThumbnailScheduler(
 			(pageIndex, scale) => {
-				const queue = this.#renderQueue;
+				const queue = this.#thumbnailRenderQueue;
 				return queue === null
 					? Promise.reject(new DOMException("The document is not open.", "AbortError"))
 					: queue.render(pageIndex, scale, "thumbnail");
 			},
 			(entries) => this.#updateThumbnailVisuals(entries),
-			() => this.#renderQueue?.cancelQueued("thumbnail"),
+			() => this.#thumbnailRenderQueue?.cancelQueued("thumbnail"),
 			MAX_THUMBNAIL_ENTRIES,
 			MAX_THUMBNAIL_PIXEL_BYTES,
 			() => this.#handleSourceUnavailable(),
@@ -142,6 +143,7 @@ export class ViewerController {
 			}
 			this.pageSource = pageSource;
 			this.#renderQueue = new PageRenderQueue(pageSource);
+			this.#thumbnailRenderQueue = new PageRenderQueue(pageSource);
 			this.#thumbnailScheduler.setSource(pageSource);
 			this.pageCount = pageSource.pageCount;
 			this.phase = "ready";
@@ -395,6 +397,8 @@ export class ViewerController {
 		this.#failedRenderKey = "";
 		this.#renderQueue?.dispose();
 		this.#renderQueue = null;
+		this.#thumbnailRenderQueue?.dispose();
+		this.#thumbnailRenderQueue = null;
 		this.#thumbnailScheduler.setSource(null);
 		this.#abortController?.abort();
 		this.#abortController = null;

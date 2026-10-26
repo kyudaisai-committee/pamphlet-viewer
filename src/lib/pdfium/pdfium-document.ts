@@ -2,6 +2,8 @@
 
 import { init, type WrappedPdfiumModule } from "@embedpdf/pdfium";
 
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
+
 import type { PageSize, PageVisual } from "../document/page-source";
 import {
 	PdfiumAvailabilitySession,
@@ -113,7 +115,14 @@ export class PdfiumDocumentSession {
 		);
 	}
 
-	async renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
+	async renderThumbnail(pageIndex: number): Promise<PageVisual> {
+		const thumbnail = await this.prefetchThumbnail(pageIndex);
+		if (thumbnail !== null) return thumbnail;
+		const pageSize = await this.getPageSize(pageIndex);
+		return this.renderPage(pageIndex, calculateThumbnailScale(pageSize.width, pageSize.height));
+	}
+
+	async prefetchThumbnail(pageIndex: number): Promise<PageVisual | null> {
 		this.#assertPageIndex(pageIndex);
 		const result = await this.#runDocumentOperation(
 			pageIndex,

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
+
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 
@@ -95,16 +97,31 @@ export class PageRenderQueue {
 						task.resolve();
 						continue;
 					}
-					if (task.priority === "thumbnail" && this.source.renderThumbnail !== undefined) {
-						try {
-							const thumbnail = await this.source.renderThumbnail(task.pageIndex);
-							if (thumbnail !== null) {
-								task.resolve(thumbnail);
-								continue;
+					if (task.priority === "thumbnail") {
+						if (this.source.renderThumbnail !== undefined) {
+							try {
+								const thumbnail = await this.source.renderThumbnail(task.pageIndex);
+								if (thumbnail !== null) {
+									task.resolve(thumbnail);
+									continue;
+								}
+							} catch (error) {
+								if (
+									this.source.propagateThumbnailErrors === true ||
+									isUnrecoverableThumbnailError(error)
+								) {
+									throw error;
+								}
 							}
-						} catch (error) {
-							if (isUnrecoverableThumbnailError(error)) throw error;
 						}
+						const pageSize = await this.source.getPageSize(task.pageIndex);
+						task.resolve(
+							await this.source.renderPage(
+								task.pageIndex,
+								calculateThumbnailScale(pageSize.width, pageSize.height),
+							),
+						);
+						continue;
 					}
 					task.resolve(await this.source.renderPage(task.pageIndex, task.scale));
 				} catch (error) {

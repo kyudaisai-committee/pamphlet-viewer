@@ -5,6 +5,7 @@ import {
 	type PageSource,
 	type PageVisual,
 } from "@/lib/document/page-source";
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 
 import { PageRenderQueue } from "./page-render-queue";
 
@@ -121,10 +122,33 @@ describe("PageRenderQueue", () => {
 			await queue.render(4, 0.3, "thumbnail");
 
 			expect(renderThumbnail).toHaveBeenCalledWith(4);
-			expect(renderPage).toHaveBeenCalledWith(4, 0.3);
+			expect(renderPage).toHaveBeenCalledWith(4, calculateThumbnailScale(300, 400));
 			queue.dispose();
 		},
 	);
+
+	it("propagates source-owned thumbnail errors without falling back to body rendering", async () => {
+		const failure = new Error("The thumbnail worker could not decode this page.");
+		const getPageSize = vi.fn(async () => ({ width: 300, height: 400 }));
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderThumbnail = vi.fn(async () => {
+			throw failure;
+		});
+		const source: PageSource = {
+			...createPageSource(renderPage),
+			getPageSize,
+			renderThumbnail,
+			propagateThumbnailErrors: true,
+		};
+		const queue = new PageRenderQueue(source);
+
+		await expect(queue.render(4, 0.3, "thumbnail")).rejects.toBe(failure);
+
+		expect(renderThumbnail).toHaveBeenCalledWith(4);
+		expect(getPageSize).not.toHaveBeenCalled();
+		expect(renderPage).not.toHaveBeenCalled();
+		queue.dispose();
+	});
 
 	it.each([
 		new DOMException("cancelled", "AbortError"),

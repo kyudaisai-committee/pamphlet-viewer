@@ -155,24 +155,6 @@ describe("PdfiumWorkerClient terminal state", () => {
 		await source.dispose();
 	});
 
-	it("exposes an embedded thumbnail on the PDF page source", async () => {
-		const backend = new PdfiumBackend();
-		const openPromise = backend.open("brochure.pdf", new AbortController().signal);
-		const worker = getWorker();
-		const openRequest = worker.requests[0];
-		if (openRequest === undefined) throw new Error("The open request was not posted.");
-		worker.reply({ id: openRequest.id, type: "opened", pageCount: 2, fileLength: 1024 });
-		const source = await openPromise;
-		if (source.renderThumbnail === undefined) throw new Error("The thumbnail API was not exposed.");
-		const thumbnail = source.renderThumbnail(0);
-		const thumbnailRequest = worker.requests[1];
-		if (thumbnailRequest === undefined) throw new Error("The thumbnail request was not posted.");
-		worker.reply({ id: thumbnailRequest.id, type: "thumbnail", visual: null });
-
-		await expect(thumbnail).resolves.toBeNull();
-		await source.dispose();
-	});
-
 	it("exposes range-only page prefetch on the PDF page source", async () => {
 		const backend = new PdfiumBackend();
 		const openPromise = backend.open("brochure.pdf", new AbortController().signal);

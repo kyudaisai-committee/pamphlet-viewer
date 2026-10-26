@@ -31,6 +31,56 @@ describe("ThumbnailScheduler", () => {
 		scheduler.setSource(null);
 	});
 
+	it("prefetches and keeps every embedded thumbnail within the pixel budget", async () => {
+		const prefetchCalls: number[] = [];
+		const render = vi.fn(async () => pixelVisual());
+		const source = createPageSource(30, {
+			prefetchThumbnail: async (pageIndex) => {
+				prefetchCalls.push(pageIndex);
+				return pixelVisual();
+			},
+		});
+		const scheduler = new ThumbnailScheduler(render, () => undefined);
+		scheduler.setSource(source);
+		scheduler.setVisiblePages([29]);
+
+		await vi.waitFor(() => expect(scheduler.entries).toHaveLength(30));
+		expect(prefetchCalls).toHaveLength(29);
+		expect(render).toHaveBeenCalledOnce();
+		expect(scheduler.get(0)?.pageIndex).toBe(0);
+		scheduler.close();
+		expect(scheduler.entries).toHaveLength(30);
+		scheduler.setSource(null);
+		expect(scheduler.entries).toHaveLength(0);
+	});
+
+	it("prioritizes visible fallback when an in-flight embedded thumbnail is absent", async () => {
+		const firstPrefetch = deferred<PageVisual | null>();
+		const events: string[] = [];
+		const source = createPageSource(8, {
+			prefetchThumbnail: async (pageIndex) => {
+				events.push(`embedded:${pageIndex}`);
+				return pageIndex === 0 ? firstPrefetch.promise : null;
+			},
+		});
+		const scheduler = new ThumbnailScheduler(
+			async (pageIndex) => {
+				events.push(`visible:${pageIndex}`);
+				return pixelVisual();
+			},
+			() => undefined,
+		);
+		scheduler.setSource(source);
+		scheduler.setVisiblePages([]);
+		await vi.waitFor(() => expect(events).toEqual(["embedded:0"]));
+		scheduler.setVisiblePages([0]);
+		firstPrefetch.resolve(null);
+
+		await vi.waitFor(() => expect(events).toContain("visible:0"));
+		expect(events.slice(0, 2)).toEqual(["embedded:0", "visible:0"]);
+		scheduler.setSource(null);
+	});
+
 	it("drops and closes a stale render when the visible range changes", async () => {
 		const pending: Array<(visual: PageVisual) => void> = [];
 		const staleClose = vi.fn();
@@ -55,30 +105,30 @@ describe("ThumbnailScheduler", () => {
 		scheduler.setSource(null);
 	});
 
-	it("starts the current source while the old page-size request is pending", async () => {
-		const oldPageSize = deferred<{ width: number; height: number }>();
-		const oldPageSizeRequested = deferred<void>();
+	it("starts the current source while an old embedded lookup is pending", async () => {
+		const oldThumbnail = deferred<PageVisual | null>();
+		const oldThumbnailRequested = deferred<void>();
 		const oldSource = createPageSource(1, {
-			getPageSize: () => {
-				oldPageSizeRequested.resolve();
-				return oldPageSize.promise;
+			prefetchThumbnail: () => {
+				oldThumbnailRequested.resolve();
+				return oldThumbnail.promise;
 			},
 		});
 		const render = vi.fn(async () => pixelVisual());
+		const staleClose = vi.fn();
 		const changes: ThumbnailEntry[][] = [];
 		const scheduler = new ThumbnailScheduler(render, (entries) => changes.push([...entries]));
 		scheduler.setSource(oldSource);
-		scheduler.setVisiblePages([0]);
-		await oldPageSizeRequested.promise;
+		scheduler.setVisiblePages([]);
+		await oldThumbnailRequested.promise;
 
 		scheduler.setSource(createPageSource(1));
 		scheduler.setVisiblePages([0]);
 		await vi.waitFor(() => expect(scheduler.entries).toHaveLength(1));
 		const currentEntry = scheduler.entries[0];
 		const currentChangeCount = changes.length;
-		oldPageSize.resolve({ width: 300, height: 400 });
-		await Promise.resolve();
-		await Promise.resolve();
+		oldThumbnail.resolve(bitmapVisual(staleClose));
+		await vi.waitFor(() => expect(staleClose).toHaveBeenCalledOnce());
 
 		expect(render).toHaveBeenCalledOnce();
 		expect(scheduler.entries[0]).toBe(currentEntry);
@@ -260,11 +310,17 @@ describe("ThumbnailScheduler", () => {
 
 function createPageSource(
 	pageCount: number,
-	options: { getPageSize?: PageSource["getPageSize"] } = {},
+	options: {
+		getPageSize?: PageSource["getPageSize"];
+		prefetchThumbnail?: NonNullable<PageSource["prefetchThumbnail"]>;
+	} = {},
 ): PageSource {
 	return {
 		pageCount,
 		getPageSize: options.getPageSize ?? (async () => ({ width: 300, height: 400 })),
+		...(options.prefetchThumbnail === undefined
+			? {}
+			: { prefetchThumbnail: options.prefetchThumbnail }),
 		async renderPage() {
 			return pixelVisual();
 		},

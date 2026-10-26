@@ -3,10 +3,8 @@
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 
-export const MAX_THUMBNAIL_ENTRIES = 24;
 export const MAX_THUMBNAIL_PIXEL_BYTES = 32 * 1024 * 1024;
-const THUMBNAIL_MAX_WIDTH = 144;
-const THUMBNAIL_MAX_PIXELS = 160_000;
+export const MAX_THUMBNAIL_ENTRIES = Number.MAX_SAFE_INTEGER;
 
 export interface ThumbnailEntry {
 	pageIndex: number;
@@ -17,7 +15,8 @@ export interface ThumbnailEntry {
 interface ThumbnailTask {
 	pageIndex: number;
 	sourceGeneration: number;
-	demandGeneration: number;
+	kind: "visible" | "embedded";
+	demandGeneration: number | null;
 }
 
 export type ThumbnailRenderer = (pageIndex: number, scale: number) => Promise<PageVisual>;
@@ -30,6 +29,8 @@ export class ThumbnailScheduler {
 	#sourceGeneration = 0;
 	#demandGeneration = 0;
 	#unavailableSourceGeneration: number | null = null;
+	#embeddedPrefetchIndex = 0;
+	#willPrefetchEmbeddedThumbnails = false;
 	#desired = new Set<number>();
 	#queue: ThumbnailTask[] = [];
 	#runningPagesBySource = new Map<number, Set<number>>();
@@ -58,10 +59,14 @@ export class ThumbnailScheduler {
 		this.#sourceGeneration += 1;
 		this.#demandGeneration += 1;
 		this.#unavailableSourceGeneration = null;
+		this.#embeddedPrefetchIndex = 0;
+		this.#willPrefetchEmbeddedThumbnails = source?.prefetchThumbnail !== undefined;
 		this.#source = source;
 		this.#desired.clear();
 		this.#queue = [];
-		if (source !== null) this.#runningPagesBySource.set(this.#sourceGeneration, new Set());
+		if (source !== null) {
+			this.#runningPagesBySource.set(this.#sourceGeneration, new Set());
+		}
 		this.onDemandChange();
 		this.#clearCache();
 		this.#notify();
@@ -80,10 +85,16 @@ export class ThumbnailScheduler {
 		}
 		this.#desired = nextDesired;
 		this.onDemandChange();
-		this.#queue = this.#queue
-			.filter((task) => nextDesired.has(task.pageIndex))
-			.map((task) => ({ ...task, demandGeneration: this.#demandGeneration }));
+		this.#queue = [];
 		this.#enqueueDesiredPages();
+		const desiredOrder = new Map(Array.from(nextDesired, (pageIndex, index) => [pageIndex, index]));
+		this.#queue.sort((left, right) => {
+			if (left.kind !== right.kind) return left.kind === "visible" ? -1 : 1;
+			if (left.kind === "embedded" || right.kind === "embedded") {
+				return left.pageIndex - right.pageIndex;
+			}
+			return (desiredOrder.get(left.pageIndex) ?? 0) - (desiredOrder.get(right.pageIndex) ?? 0);
+		});
 		if (source !== null) void this.#drain(this.#sourceGeneration, source);
 	}
 
@@ -106,7 +117,7 @@ export class ThumbnailScheduler {
 			if (
 				this.#cache.has(pageIndex) ||
 				runningPages?.has(pageIndex) === true ||
-				this.#queue.some((task) => task.pageIndex === pageIndex)
+				this.#queue.some((task) => task.pageIndex === pageIndex && task.kind === "visible")
 			) {
 				this.get(pageIndex);
 				continue;
@@ -114,6 +125,7 @@ export class ThumbnailScheduler {
 			this.#queue.push({
 				pageIndex,
 				sourceGeneration: this.#sourceGeneration,
+				kind: "visible",
 				demandGeneration: this.#demandGeneration,
 			});
 		}
@@ -134,25 +146,44 @@ export class ThumbnailScheduler {
 			while (
 				sourceGeneration === this.#sourceGeneration &&
 				source === this.#source &&
-				this.#queue.length > 0
+				(this.#queue.length > 0 ||
+					(this.#willPrefetchEmbeddedThumbnails && this.#embeddedPrefetchIndex < source.pageCount))
 			) {
-				const task = this.#queue.shift();
+				let task = this.#queue.shift();
+				if (task === undefined) {
+					const pageIndex = this.#embeddedPrefetchIndex;
+					this.#embeddedPrefetchIndex += 1;
+					if (this.#cache.has(pageIndex)) continue;
+					task = {
+						pageIndex,
+						sourceGeneration,
+						kind: "embedded",
+						demandGeneration: null,
+					};
+				}
 				if (
-					task === undefined ||
 					task.sourceGeneration !== sourceGeneration ||
-					task.demandGeneration !== this.#demandGeneration ||
-					!this.#desired.has(task.pageIndex)
+					(task.kind === "visible" &&
+						(task.demandGeneration !== this.#demandGeneration ||
+							!this.#desired.has(task.pageIndex)))
 				) {
 					continue;
 				}
+				if (task.kind === "embedded" && this.#cache.has(task.pageIndex)) continue;
 
 				runningPages.add(task.pageIndex);
 				try {
-					const pageSize = await source.getPageSize(task.pageIndex);
-					if (!this.#isCurrent(task, source)) continue;
-					const scale = calculateThumbnailScale(pageSize.width, pageSize.height);
-					const visual = await this.render(task.pageIndex, scale);
-					if (!this.#isCurrent(task, source)) {
+					const visual =
+						task.kind === "embedded"
+							? await source.prefetchThumbnail?.(task.pageIndex)
+							: await this.render(task.pageIndex, 1);
+					if (visual === null || visual === undefined) continue;
+					if (
+						!this.#isSourceCurrent(task.sourceGeneration, source) ||
+						(task.kind === "visible" &&
+							(task.demandGeneration !== this.#demandGeneration ||
+								!this.#desired.has(task.pageIndex)))
+					) {
 						releaseVisual(visual);
 						continue;
 					}
@@ -167,6 +198,7 @@ export class ThumbnailScheduler {
 						this.#isSourceCurrent(sourceGeneration, source)
 					) {
 						this.#unavailableSourceGeneration = sourceGeneration;
+						this.#willPrefetchEmbeddedThumbnails = false;
 						this.#desired.clear();
 						this.#queue = [];
 						this.onDemandChange();
@@ -199,32 +231,25 @@ export class ThumbnailScheduler {
 		}
 	}
 
-	#isCurrent(task: ThumbnailTask, source: PageSource): boolean {
-		return (
-			this.#isSourceCurrent(task.sourceGeneration, source) &&
-			task.demandGeneration === this.#demandGeneration &&
-			this.#desired.has(task.pageIndex)
-		);
-	}
-
 	#isSourceCurrent(sourceGeneration: number, source: PageSource): boolean {
 		return sourceGeneration === this.#sourceGeneration && source === this.#source;
 	}
 
 	#enqueueAfterInvalidation(task: ThumbnailTask, source: PageSource): void {
 		if (
-			task.demandGeneration === this.#demandGeneration ||
 			!this.#isSourceCurrent(task.sourceGeneration, source) ||
 			this.#unavailableSourceGeneration === task.sourceGeneration ||
+			(task.kind === "visible" && task.demandGeneration === this.#demandGeneration) ||
 			!this.#desired.has(task.pageIndex) ||
 			this.#cache.has(task.pageIndex) ||
 			this.#queue.some((queuedTask) => queuedTask.pageIndex === task.pageIndex)
 		) {
 			return;
 		}
-		this.#queue.push({
+		this.#queue.unshift({
 			pageIndex: task.pageIndex,
 			sourceGeneration: this.#sourceGeneration,
+			kind: "visible",
 			demandGeneration: this.#demandGeneration,
 		});
 	}
@@ -261,15 +286,6 @@ export class ThumbnailScheduler {
 	#notify(): void {
 		this.onChange(this.entries);
 	}
-}
-
-export function calculateThumbnailScale(width: number, height: number): number {
-	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
-	return Math.min(
-		1,
-		THUMBNAIL_MAX_WIDTH / width,
-		Math.sqrt(THUMBNAIL_MAX_PIXELS / (width * height)),
-	);
 }
 
 function releaseVisual(visual: PageVisual): void {
