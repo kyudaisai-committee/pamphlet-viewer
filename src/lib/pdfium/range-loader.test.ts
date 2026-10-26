@@ -57,6 +57,33 @@ describe("PdfRangeLoader", () => {
 		}
 	});
 
+	it("can re-request a range after stale missing markers are discarded", async () => {
+		const fileLength = RANGE_CHUNK_SIZE * 2;
+		const fetchMetrics = stubRangeFetch(fileLength, false, [RANGE_CHUNK_SIZE]);
+		const loader = new PdfRangeLoader(
+			"https://example.test/document.pdf",
+			new AbortController().signal,
+		);
+		try {
+			await loader.initialize();
+			expect(loader.isRangeAvailable(RANGE_CHUNK_SIZE, 1)).toBe(false);
+			await expect(loader.fetchMissingChunks()).rejects.toThrow("HTTP 503");
+			expect(loader.hasMissingChunks).toBe(true);
+
+			loader.clearMissingChunks();
+			expect(loader.hasMissingChunks).toBe(false);
+			expect(loader.isRangeAvailable(RANGE_CHUNK_SIZE, 1)).toBe(false);
+			expect(await loader.fetchMissingChunks()).toBe(1);
+			expect(fetchMetrics.ranges).toEqual([
+				`bytes=0-${RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${RANGE_CHUNK_SIZE}-${2 * RANGE_CHUNK_SIZE - 1}`,
+				`bytes=${RANGE_CHUNK_SIZE}-${2 * RANGE_CHUNK_SIZE - 1}`,
+			]);
+		} finally {
+			loader.dispose();
+		}
+	});
+
 	it("rejects negative offsets and sizes at the reader boundary", async () => {
 		stubRangeFetch(4);
 		const loader = new PdfRangeLoader(
@@ -263,9 +290,14 @@ interface RangeFetchMetrics {
 	maxActiveRequests: number;
 }
 
-function stubRangeFetch(fileLength: number, delayResponses = false): RangeFetchMetrics {
+function stubRangeFetch(
+	fileLength: number,
+	delayResponses = false,
+	failedStarts: readonly number[] = [],
+): RangeFetchMetrics {
 	const metrics: RangeFetchMetrics = { ranges: [], maxActiveRequests: 0 };
 	let activeRequests = 0;
+	const failuresRemaining = new Set(failedStarts);
 	vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
 		const rangeHeader = new Headers(init?.headers).get("Range");
 		const match = rangeHeader === null ? null : /^bytes=(\d+)-(\d+)$/.exec(rangeHeader);
@@ -277,6 +309,7 @@ function stubRangeFetch(fileLength: number, delayResponses = false): RangeFetchM
 		metrics.maxActiveRequests = Math.max(metrics.maxActiveRequests, activeRequests);
 		if (delayResponses) await new Promise<void>((resolve) => setTimeout(resolve, 0));
 		activeRequests -= 1;
+		if (failuresRemaining.delete(start)) return new Response(null, { status: 503 });
 
 		const end = Math.min(requestedEnd, fileLength - 1);
 		const bytes = new Uint8Array(end - start + 1);

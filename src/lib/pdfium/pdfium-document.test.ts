@@ -32,6 +32,10 @@ vi.mock("./range-loader", () => ({
 
 		clearRangeHints(): void {}
 
+		clearMissingChunks(): void {
+			rangeLoaderMocks.hasMissingChunks = false;
+		}
+
 		async fetchMissingChunks(includeHints?: boolean): Promise<number> {
 			return rangeLoaderMocks.fetchMissingChunks(includeHints);
 		}
@@ -126,7 +130,7 @@ describe("PdfiumDocumentSession", () => {
 		expect(trappedSession.isPoisoned).toBe(true);
 	});
 
-	it("retries page operations after a temporary range failure while reopening", async () => {
+	it("recovers cached page renders after a failed adjacent page prefetch", async () => {
 		const { PdfiumDocumentSession } = await import("./pdfium-document");
 		let nextPointer = 100;
 		const heap = new Uint8Array(256);
@@ -136,9 +140,17 @@ describe("PdfiumDocumentSession", () => {
 			return pointer;
 		});
 		const free = vi.fn();
-		const loadPage = vi.fn(() => 3);
+		let missAdjacentPage = false;
+		const loadPage = vi.fn((_document: number, pageIndex: number) => {
+			if (missAdjacentPage && pageIndex === 1) rangeLoaderMocks.hasMissingChunks = true;
+			return 3;
+		});
 		const isPageAvailable = vi.fn(() => 1);
+		const createAvailability = vi.fn(() => 1);
+		const destroyAvailability = vi.fn();
+		const closeDocument = vi.fn();
 		let missFirstSizeRead = true;
+		let missNextSizeRead = false;
 		let missFirstThumbnailRead = false;
 		const getThumbnail = vi.fn(() => {
 			if (missFirstThumbnailRead) {
@@ -151,8 +163,9 @@ describe("PdfiumDocumentSession", () => {
 		const renderPageBitmap = vi.fn();
 		const destroyBitmap = vi.fn();
 		const getPageSizeByIndex = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
-			if (missFirstSizeRead) {
+			if (missFirstSizeRead || missNextSizeRead) {
 				missFirstSizeRead = false;
+				missNextSizeRead = false;
 				rangeLoaderMocks.hasMissingChunks = true;
 				return false;
 			}
@@ -168,10 +181,8 @@ describe("PdfiumDocumentSession", () => {
 		});
 		const pdfium = {
 			PDFiumExt_Init() {},
-			FPDFAvail_Create() {
-				return 1;
-			},
-			FPDFAvail_Destroy() {},
+			FPDFAvail_Create: createAvailability,
+			FPDFAvail_Destroy: destroyAvailability,
 			FPDFAvail_IsDocAvail() {
 				return 1;
 			},
@@ -182,13 +193,13 @@ describe("PdfiumDocumentSession", () => {
 				return 2;
 			},
 			FPDFAvail_IsPageAvail: isPageAvailable,
-			FPDF_CloseDocument() {},
+			FPDF_CloseDocument: closeDocument,
 			FPDF_ClosePage() {},
 			FPDF_GetLastError() {
 				return 0;
 			},
 			FPDF_GetPageCount() {
-				return 1;
+				return 2;
 			},
 			FPDF_LoadPage: loadPage,
 			FPDF_GetPageSizeByIndexF: getPageSizeByIndex,
@@ -214,7 +225,7 @@ describe("PdfiumDocumentSession", () => {
 			FPDFBitmap_FillRect() {},
 			FPDF_RenderPageBitmap: renderPageBitmap,
 			FPDFBitmap_GetStride() {
-				return 4;
+				return 8;
 			},
 			FPDFBitmap_GetBuffer() {
 				return 0;
@@ -244,7 +255,7 @@ describe("PdfiumDocumentSession", () => {
 			"https://example.test/pdfium.wasm",
 			new AbortController().signal,
 		);
-		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
+		expect(session.info).toEqual({ pageCount: 2, fileLength: 256 });
 		expect(await session.getPageSize(0)).toEqual({ width: 1, height: 1 });
 		expect(loadPage).not.toHaveBeenCalled();
 		expect(isPageAvailable).not.toHaveBeenCalled();
@@ -253,12 +264,12 @@ describe("PdfiumDocumentSession", () => {
 		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledOnce();
 
 		rangeLoaderMocks.cacheEpoch = 1;
-		rangeLoaderMocks.hasMissingChunks = true;
+		missNextSizeRead = true;
 		rangeLoaderMocks.fetchMissingChunks.mockRejectedValueOnce(
 			new Error("PDF range request failed (HTTP 503)."),
 		);
 		await expect(session.getPageSize(0)).rejects.toThrow("HTTP 503");
-		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
+		expect(session.info).toEqual({ pageCount: 2, fileLength: 256 });
 		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledWith(false);
 
 		rangeLoaderMocks.hasMissingChunks = false;
@@ -286,12 +297,35 @@ describe("PdfiumDocumentSession", () => {
 		expect(destroyBitmap).toHaveBeenCalledWith(5);
 		expect(renderPageBitmap).toHaveBeenCalledTimes(renderCallsBeforeThumbnail);
 		expect(isPageAvailable).toHaveBeenCalledTimes(pageAvailabilityCallsBeforeThumbnail + 2);
-		expect(session.info).toEqual({ pageCount: 1, fileLength: 256 });
+		expect(session.info).toEqual({ pageCount: 2, fileLength: 256 });
 		const renderCallsBeforePrefetch = renderPageBitmap.mock.calls.length;
 		const loadCallsBeforePrefetch = loadPage.mock.calls.length;
 		await session.prefetchPage(0);
 		expect(loadPage).toHaveBeenCalledTimes(loadCallsBeforePrefetch + 1);
 		expect(renderPageBitmap).toHaveBeenCalledTimes(renderCallsBeforePrefetch);
+
+		missAdjacentPage = true;
+		rangeLoaderMocks.fetchMissingChunks.mockImplementation(async () => {
+			throw new Error("PDF range request failed (HTTP 503).");
+		});
+		await expect(session.prefetchPage(1)).rejects.toThrow("HTTP 503");
+		expect(rangeLoaderMocks.hasMissingChunks).toBe(true);
+
+		const closesBeforeRecovery = closeDocument.mock.calls.length;
+		const destroysBeforeRecovery = destroyAvailability.mock.calls.length;
+		rangeLoaderMocks.fetchMissingChunks.mockClear();
+		expect(await session.renderPage(0, 2)).toMatchObject({
+			type: "pixels",
+			width: 2,
+			height: 2,
+		});
+		expect(rangeLoaderMocks.fetchMissingChunks).not.toHaveBeenCalled();
+		expect(rangeLoaderMocks.hasMissingChunks).toBe(false);
+		expect(closeDocument).toHaveBeenCalledTimes(closesBeforeRecovery + 1);
+		expect(destroyAvailability).toHaveBeenCalledTimes(destroysBeforeRecovery + 1);
+
+		await expect(session.renderPage(1, 1)).rejects.toThrow("HTTP 503");
+		expect(rangeLoaderMocks.fetchMissingChunks).toHaveBeenCalledWith(false);
 		session.dispose();
 	});
 });

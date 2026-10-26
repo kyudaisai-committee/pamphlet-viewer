@@ -10,6 +10,7 @@ import type { PdfRangeLoader } from "./range-loader";
 interface FakeLoaderOptions {
 	getMissing?: () => boolean;
 	getCacheEpoch?: () => number;
+	clearMissingChunks?: () => void;
 	fetchMissingChunks?: () => Promise<number>;
 }
 
@@ -37,6 +38,7 @@ function createFakeLoader(options: FakeLoaderOptions = {}): PdfRangeLoader {
 		isRangeAvailable: vi.fn(() => true),
 		hintRange: vi.fn(),
 		clearRangeHints: vi.fn(),
+		clearMissingChunks: options.clearMissingChunks ?? vi.fn(),
 		fetchMissingChunks: options.fetchMissingChunks ?? vi.fn(async () => 1),
 		dispose: vi.fn(),
 	};
@@ -135,6 +137,9 @@ describe("PdfiumAvailabilitySession", () => {
 		});
 		const loader = createFakeLoader({
 			getMissing: () => missing,
+			clearMissingChunks: () => {
+				missing = false;
+			},
 			fetchMissingChunks,
 		});
 		const pdfium = createFakePdfium();
@@ -216,8 +221,8 @@ describe("PdfiumAvailabilitySession", () => {
 			new AbortController().signal,
 		);
 		pdfium.setPageAvailability(0);
-		missing = true;
 		session.beginPageOperation();
+		missing = true;
 		const pending = session.ensurePageAvailable(0);
 		await vi.waitFor(() => expect(fetchMissingChunks).toHaveBeenCalledOnce());
 		const availabilityCount = pdfium.getAvailabilityCount();
@@ -236,6 +241,9 @@ describe("PdfiumAvailabilitySession", () => {
 		let pdfium: FakePdfium | null = null;
 		const loader = createFakeLoader({
 			getMissing: () => missing,
+			clearMissingChunks: () => {
+				missing = false;
+			},
 			fetchMissingChunks: async () => {
 				fetchCount += 1;
 				if (fetchCount === 100) missing = false;
@@ -253,8 +261,8 @@ describe("PdfiumAvailabilitySession", () => {
 			new AbortController().signal,
 		);
 		try {
-			missing = true;
 			session.beginPageOperation();
+			missing = true;
 			await session.recoverAfterReadMiss();
 
 			pdfium.setPageAvailability(0);
