@@ -11,16 +11,11 @@ const execFileAsync = promisify(execFile);
 
 const LICENSE_FILES = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.txt"];
 
-/**
- * @param {string} archivePath
- * @param {string} [libraryPath]
- * @param {string} [projectRoot]
- */
 export async function createReleaseArchive(
-	archivePath,
+	archivePath: string,
 	libraryPath = resolve("dist/library"),
 	projectRoot = process.cwd(),
-) {
+): Promise<void> {
 	const absoluteArchivePath = resolve(archivePath);
 	const absoluteLibraryPath = resolve(libraryPath);
 	const absoluteProjectRoot = resolve(projectRoot);
@@ -47,7 +42,7 @@ if (
 ) {
 	const archivePath = process.argv[2];
 	if (archivePath === undefined) {
-		throw new Error("Usage: node scripts/create-release-archive.mjs <archive-path>");
+		throw new Error("Usage: node scripts/create-release-archive.ts <archive-path>");
 	}
 	await createReleaseArchive(archivePath);
 }

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import { expect, test } from "vitest";
 
-import { createReleaseArchive } from "../scripts/create-release-archive.mjs";
+import { createReleaseArchive } from "../scripts/create-release-archive.ts";
 
 const execFileAsync = promisify(execFile);
 
