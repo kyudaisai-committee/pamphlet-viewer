@@ -8,7 +8,12 @@ import {
 	PdfiumAvailabilityFatalError,
 	type PdfiumAvailabilityApi,
 } from "./pdfium-availability-session";
-import { getPageSizeByIndex, getPdfiumHeap, renderPdfiumPage } from "./pdfium-page-operation";
+import {
+	getPageSizeByIndex,
+	getPdfiumHeap,
+	prefetchPdfiumPage,
+	renderPdfiumPage,
+} from "./pdfium-page-operation";
 import { getPdfiumThumbnailByIndex } from "./pdfium-thumbnail-operation";
 import { PdfRangeLoader, RANGE_CACHE_LIMIT } from "./range-loader";
 
@@ -95,6 +100,15 @@ export class PdfiumDocumentSession {
 			pageIndex,
 			(pdfium, availability) =>
 				renderPdfiumPage(pdfium, availability, this.loader, pageIndex, scale),
+			"page",
+		);
+	}
+
+	async prefetchPage(pageIndex: number): Promise<void> {
+		this.#assertPageIndex(pageIndex);
+		await this.#runDocumentOperation(
+			pageIndex,
+			(pdfium, availability) => prefetchPdfiumPage(pdfium, availability, this.loader, pageIndex),
 			"page",
 		);
 	}

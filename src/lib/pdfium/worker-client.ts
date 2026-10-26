@@ -28,6 +28,11 @@ interface PageSizeRequest {
 	pageIndex: number;
 }
 
+interface PagePrefetchRequest {
+	type: "page-prefetch";
+	pageIndex: number;
+}
+
 interface RenderRequest {
 	type: "render";
 	pageIndex: number;
@@ -39,7 +44,12 @@ interface ThumbnailRequest {
 	pageIndex: number;
 }
 
-type WorkerRequest = OpenRequest | PageSizeRequest | RenderRequest | ThumbnailRequest;
+type WorkerRequest =
+	| OpenRequest
+	| PageSizeRequest
+	| PagePrefetchRequest
+	| RenderRequest
+	| ThumbnailRequest;
 
 interface OpenedResponse {
 	id: number;
@@ -52,6 +62,11 @@ interface PageSizeResponse {
 	id: number;
 	type: "page-size";
 	pageSize: PageSize;
+}
+
+interface PagePrefetchResponse {
+	id: number;
+	type: "page-prefetch";
 }
 
 interface RenderedResponse {
@@ -76,6 +91,7 @@ interface ErrorResponse {
 type WorkerResponse =
 	| OpenedResponse
 	| PageSizeResponse
+	| PagePrefetchResponse
 	| RenderedResponse
 	| ThumbnailResponse
 	| ErrorResponse;
@@ -84,9 +100,11 @@ type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 	? OpenedResponse
 	: Request extends PageSizeRequest
 		? PageSizeResponse
-		: Request extends ThumbnailRequest
-			? ThumbnailResponse
-			: RenderedResponse;
+		: Request extends PagePrefetchRequest
+			? PagePrefetchResponse
+			: Request extends ThumbnailRequest
+				? ThumbnailResponse
+				: RenderedResponse;
 
 interface PendingRequest {
 	resolve(response: WorkerResponse): void;
@@ -140,6 +158,10 @@ export class PdfiumWorkerClient {
 	async getPageSize(pageIndex: number): Promise<PageSize> {
 		const response = await this.#request<PageSizeRequest>({ type: "page-size", pageIndex });
 		return response.pageSize;
+	}
+
+	async prefetchPage(pageIndex: number): Promise<void> {
+		await this.#request<PagePrefetchRequest>({ type: "page-prefetch", pageIndex });
 	}
 
 	async renderPage(pageIndex: number, scale: number): Promise<PageVisual> {

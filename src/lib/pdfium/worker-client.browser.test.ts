@@ -122,6 +122,21 @@ describe("PdfiumWorkerClient terminal state", () => {
 		client.terminate();
 	});
 
+	it("prefetches page data through the worker without returning a visual", async () => {
+		const client = new PdfiumWorkerClient();
+		const worker = getWorker();
+		const prefetch = client.prefetchPage(7);
+		const request = worker.requests[0];
+		if (request === undefined) throw new Error("The page prefetch request was not posted.");
+		expect(request.type).toBe("page-prefetch");
+		expect(request.pageIndex).toBe(7);
+
+		worker.reply({ id: request.id, type: "page-prefetch" });
+
+		await expect(prefetch).resolves.toBeUndefined();
+		client.terminate();
+	});
+
 	it("maps a dead PDFium worker to the document-level unavailable contract", async () => {
 		const backend = new PdfiumBackend();
 		const openPromise = backend.open("brochure.pdf", new AbortController().signal);
@@ -154,6 +169,26 @@ describe("PdfiumWorkerClient terminal state", () => {
 		worker.reply({ id: thumbnailRequest.id, type: "thumbnail", visual: null });
 
 		await expect(thumbnail).resolves.toBeNull();
+		await source.dispose();
+	});
+
+	it("exposes range-only page prefetch on the PDF page source", async () => {
+		const backend = new PdfiumBackend();
+		const openPromise = backend.open("brochure.pdf", new AbortController().signal);
+		const worker = getWorker();
+		const openRequest = worker.requests[0];
+		if (openRequest === undefined) throw new Error("The open request was not posted.");
+		worker.reply({ id: openRequest.id, type: "opened", pageCount: 8, fileLength: 1024 });
+		const source = await openPromise;
+		const prefetch = source.prefetchPage?.(6);
+		const prefetchRequest = worker.requests[1];
+		if (prefetch === undefined || prefetchRequest === undefined) {
+			throw new Error("The page prefetch API was not exposed.");
+		}
+		expect(prefetchRequest.type).toBe("page-prefetch");
+		worker.reply({ id: prefetchRequest.id, type: "page-prefetch" });
+
+		await expect(prefetch).resolves.toBeUndefined();
 		await source.dispose();
 	});
 
