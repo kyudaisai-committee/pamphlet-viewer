@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 import { describe, expect, test, vi } from "vitest";
 
 import type { PageSource, PageVisual } from "../document/page-source";

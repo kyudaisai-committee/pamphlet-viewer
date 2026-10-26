@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 import { afterEach, expect, test } from "vitest";
 
 import type { PamphletViewerElement } from "../public-api";
