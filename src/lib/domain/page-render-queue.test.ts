@@ -19,8 +19,8 @@ describe("PageRenderQueue", () => {
 		});
 		source.prefetchPage = vi.fn((pageIndex) => {
 			requests.push(`prefetch-${pageIndex}`);
-			return new Promise((resolve) => {
-				finishPrefetch = resolve;
+			return new Promise<void>((resolve) => {
+				finishPrefetch = () => resolve();
 			});
 		});
 		const queue = new PageRenderQueue(source);

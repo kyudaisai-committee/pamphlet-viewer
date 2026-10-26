@@ -7,6 +7,7 @@ import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-clien
 interface WorkerRequestRecord {
 	id: number;
 	type: string;
+	pageIndex?: number;
 }
 
 class ControlledWorker extends EventTarget {
