@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import type { PageVisual } from "../document/page-source";
+import { PdfiumBackend } from "../document/pdfium-backend";
 import { PdfiumWorkerClient } from "./worker-client";
 
 test("renders RGBA channels, alpha, white background, and an independent pixel buffer", async () => {
@@ -46,6 +47,26 @@ test("keeps RGBA channels and alpha on rotated CropBox pages", async () => {
 		expectPixelAlpha(visual, 150, 100);
 	} finally {
 		worker.terminate();
+	}
+}, 120_000);
+
+test("renders visible spread pages and adjacent pages in independent PDFium workers", async () => {
+	const url = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
+	const source = await new PdfiumBackend().open(url, new AbortController().signal);
+	try {
+		if (source.renderPrefetchedPage === undefined) {
+			throw new Error("The PDFium source must support adjacent page prerendering.");
+		}
+		const [left, right, adjacent] = await Promise.all([
+			source.renderPage(0, 1),
+			source.renderPage(1, 1),
+			source.renderPrefetchedPage(23, 1),
+		]);
+		expectPixelColor(left, 150, 200, "blue");
+		expectPixelColor(right, 150, 200, "blue");
+		expectPixelColor(adjacent, 150, 200, "red");
+	} finally {
+		await source.dispose();
 	}
 }, 120_000);
 

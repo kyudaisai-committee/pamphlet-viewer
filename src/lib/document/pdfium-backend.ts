@@ -14,7 +14,9 @@ export class PdfiumBackend implements DocumentBackend {
 		if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
 		const client = new PdfiumWorkerClient();
 		let thumbnailClient: PdfiumWorkerClient | null = null;
+		let pageSource: PdfiumPageSource | null = null;
 		const abort = function terminateWorker(): void {
+			pageSource?.dispose();
 			client.terminate();
 			thumbnailClient?.terminate();
 		};
@@ -22,7 +24,7 @@ export class PdfiumBackend implements DocumentBackend {
 		try {
 			const info = await client.open(source);
 			if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-			return new PdfiumPageSource(
+			pageSource = new PdfiumPageSource(
 				info.pageCount,
 				client,
 				source,
@@ -37,6 +39,7 @@ export class PdfiumBackend implements DocumentBackend {
 					thumbnailClient = null;
 				},
 			);
+			return pageSource;
 		} catch (error) {
 			signal.removeEventListener("abort", abort);
 			client.terminate();
@@ -47,6 +50,16 @@ export class PdfiumBackend implements DocumentBackend {
 
 class PdfiumPageSource implements PageSource {
 	#disposed = false;
+	readonly supportsConcurrentPageRenders = true;
+	#foregroundClients: [PdfiumWorkerClient | null, PdfiumWorkerClient | null];
+	#foregroundOpen: [Promise<PdfiumWorkerClient> | null, Promise<PdfiumWorkerClient> | null];
+	#foregroundLoads: [number, number] = [0, 0];
+	#prefetchClients: [PdfiumWorkerClient | null, PdfiumWorkerClient | null] = [null, null];
+	#prefetchOpen: [Promise<PdfiumWorkerClient> | null, Promise<PdfiumWorkerClient> | null] = [
+		null,
+		null,
+	];
+	#prefetchLoads: [number, number] = [0, 0];
 	readonly propagateThumbnailErrors = true;
 
 	constructor(
@@ -57,7 +70,10 @@ class PdfiumPageSource implements PageSource {
 		private readonly abortListener: () => void,
 		private readonly getThumbnailClient: () => PdfiumWorkerClient,
 		private readonly terminateThumbnailClient: () => void,
-	) {}
+	) {
+		this.#foregroundClients = [client, null];
+		this.#foregroundOpen = [Promise.resolve(client), null];
+	}
 
 	getPageSize(pageIndex: number): Promise<PageSize> {
 		this.#assertActive();
@@ -71,7 +87,24 @@ class PdfiumPageSource implements PageSource {
 
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual> {
 		this.#assertActive();
-		return this.client.renderPage(pageIndex, scale).catch(mapSourceFailure);
+		return this.#renderFromPool(
+			this.#foregroundClients,
+			this.#foregroundOpen,
+			this.#foregroundLoads,
+			pageIndex,
+			scale,
+		).catch(mapSourceFailure);
+	}
+
+	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual> {
+		this.#assertActive();
+		return this.#renderFromPool(
+			this.#prefetchClients,
+			this.#prefetchOpen,
+			this.#prefetchLoads,
+			pageIndex,
+			scale,
+		).catch(mapSourceFailure);
 	}
 
 	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {
@@ -89,6 +122,8 @@ class PdfiumPageSource implements PageSource {
 		this.#disposed = true;
 		this.signal.removeEventListener("abort", this.abortListener);
 		this.client.terminate();
+		this.#terminatePool(this.#foregroundClients);
+		this.#terminatePool(this.#prefetchClients);
 		this.terminateThumbnailClient();
 	}
 
@@ -133,6 +168,53 @@ class PdfiumPageSource implements PageSource {
 				});
 		}
 		return this.#thumbnailOpen;
+	}
+
+	async #renderFromPool(
+		clients: [PdfiumWorkerClient | null, PdfiumWorkerClient | null],
+		openings: [Promise<PdfiumWorkerClient> | null, Promise<PdfiumWorkerClient> | null],
+		loads: [number, number],
+		pageIndex: number,
+		scale: number,
+	): Promise<PageVisual> {
+		const slot = loads[0] <= loads[1] ? 0 : 1;
+		loads[slot] += 1;
+		try {
+			const client = await this.#openPoolClient(clients, openings, slot);
+			return await client.renderPage(pageIndex, scale);
+		} finally {
+			loads[slot] -= 1;
+		}
+	}
+
+	async #openPoolClient(
+		clients: [PdfiumWorkerClient | null, PdfiumWorkerClient | null],
+		openings: [Promise<PdfiumWorkerClient> | null, Promise<PdfiumWorkerClient> | null],
+		slot: 0 | 1,
+	): Promise<PdfiumWorkerClient> {
+		if (openings[slot] === null) {
+			const client = new PdfiumWorkerClient();
+			clients[slot] = client;
+			const opening = client.open(this.source).then((info) => {
+				if (info.pageCount !== this.pageCount) {
+					throw new PdfiumWorkerUnavailableError(
+						"The PDF source changed while its pages were rendering.",
+					);
+				}
+				return client;
+			});
+			openings[slot] = opening.catch((error: unknown) => {
+				client.terminate();
+				if (clients[slot] === client) clients[slot] = null;
+				openings[slot] = null;
+				throw error;
+			});
+		}
+		return openings[slot] as Promise<PdfiumWorkerClient>;
+	}
+
+	#terminatePool(clients: [PdfiumWorkerClient | null, PdfiumWorkerClient | null]): void {
+		for (const client of clients) client?.terminate();
 	}
 }
 

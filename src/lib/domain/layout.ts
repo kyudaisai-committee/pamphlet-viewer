@@ -70,6 +70,30 @@ export function getPrefetchPageIndexes(
 	);
 }
 
+export function getAdjacentPageGroups(
+	pageCount: number,
+	pageNumber: number,
+	layout: ResolvedLayout,
+): number[][] {
+	const currentIndexes = visiblePageIndexes(pageCount, pageNumber, layout);
+	const first = currentIndexes[0];
+	if (first === undefined) return [];
+	if (layout === "single") {
+		return [first - 1, first + 1]
+			.filter((pageIndex) => pageIndex >= 0 && pageIndex < pageCount)
+			.map((pageIndex) => [pageIndex]);
+	}
+
+	const currentSpread = first === 0 ? 0 : Math.floor((first + 1) / 2);
+	return [currentSpread - 1, currentSpread + 1].flatMap((spread) => {
+		if (spread < 0) return [];
+		if (spread === 0) return [[0]];
+		const firstPageIndex = spread * 2 - 1;
+		if (firstPageIndex >= pageCount) return [];
+		return [[firstPageIndex, firstPageIndex + 1].filter((pageIndex) => pageIndex < pageCount)];
+	});
+}
+
 export function parsePageNumber(value: string, pageCount: number): number | null {
 	if (!/^\d+$/.test(value)) return null;
 	const pageNumber = Number(value);

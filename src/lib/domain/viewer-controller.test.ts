@@ -116,6 +116,129 @@ describe("ViewerController", () => {
 		controller.dispose();
 	});
 
+	it("reuses an adjacent prerendered page when the target scale matches", async () => {
+		const prefetchedVisual = pixelVisual();
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderPrefetchedPage = vi.fn(async () => prefetchedVisual);
+		const source: PageSource = {
+			...createPageSource(3, pixelVisual),
+			renderPage,
+			renderPrefetchedPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		await vi.waitFor(() => expect(renderPrefetchedPage).toHaveBeenCalledWith(1, 1));
+		await flushTasks();
+
+		controller.requestRender({ ...input, page: 2 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(controller.pageVisuals[1]).toBe(prefetchedVisual);
+		expect(renderPage).toHaveBeenCalledTimes(1);
+		controller.dispose();
+	});
+
+	it("renders again and releases an adjacent image when the scale changes", async () => {
+		const closePrefetched = vi.fn();
+		const prefetchedVisual = bitmapVisual(closePrefetched);
+		const renderedScales: number[] = [];
+		const renderPage = vi.fn(async (_pageIndex: number, scale: number) => {
+			renderedScales.push(scale);
+			return pixelVisual();
+		});
+		const renderPrefetchedPage = vi.fn(async () => prefetchedVisual);
+		const source: PageSource = {
+			...createPageSource(3, pixelVisual),
+			renderPage,
+			renderPrefetchedPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		await vi.waitFor(() => expect(renderPrefetchedPage).toHaveBeenCalledOnce());
+		await flushTasks();
+
+		controller.requestRender({ ...input, page: 2, zoom: 2 });
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(controller.pageVisuals[1]).not.toBe(prefetchedVisual);
+		expect(renderedScales).toContain(2);
+		await vi.waitFor(() => expect(closePrefetched).toHaveBeenCalledOnce());
+		controller.dispose();
+	});
+
+	it("promotes an in-flight adjacent render without waiting for another prerender", async () => {
+		const unrelatedRender = createDeferred<PageVisual>();
+		const unrelatedStarted = createDeferred<void>();
+		const visibleRender = createDeferred<PageVisual>();
+		const visibleStarted = createDeferred<void>();
+		const closeUnrelated = vi.fn();
+		const renderPage = vi.fn(async () => pixelVisual());
+		const renderPrefetchedPage = vi.fn((pageIndex: number) => {
+			if (pageIndex === 0) {
+				unrelatedStarted.resolve();
+				return unrelatedRender.promise;
+			}
+			visibleStarted.resolve();
+			return visibleRender.promise;
+		});
+		const source: PageSource = {
+			...createPageSource(4, pixelVisual),
+			renderPage,
+			renderPrefetchedPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		controller.requestRender(renderInput(2));
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		await Promise.all([unrelatedStarted.promise, visibleStarted.promise]);
+
+		controller.requestRender(renderInput(3));
+		visibleRender.resolve(pixelVisual());
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+		expect(renderPrefetchedPage.mock.calls.map(([pageIndex]) => pageIndex)).toEqual([
+			0, 2, 1, 3,
+		]);
+		expect(renderPage).toHaveBeenCalledTimes(1);
+
+		controller.dispose();
+		unrelatedRender.resolve(bitmapVisual(closeUnrelated));
+		await vi.waitFor(() => expect(closeUnrelated).toHaveBeenCalledOnce());
+	});
+
+	it("retries a claimed background failure with the foreground renderer", async () => {
+		const failedPrerender = createDeferred<PageVisual>();
+		const started = createDeferred<void>();
+		const fallbackVisual = pixelVisual();
+		const renderPage = vi.fn(async () => fallbackVisual);
+		const renderPrefetchedPage = vi.fn(() => {
+			started.resolve();
+			return failedPrerender.promise;
+		});
+		const source: PageSource = {
+			...createPageSource(2, pixelVisual),
+			renderPage,
+			renderPrefetchedPage,
+		};
+		const controller = new ViewerController(() => undefined);
+		await controller.load("brochure.pdf", createBackend(source));
+		const input = { ...renderInput(1), viewport: { width: 300, height: 400 } };
+		controller.requestRender(input);
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+		await started.promise;
+		controller.requestRender({ ...input, page: 2 });
+		failedPrerender.reject(new Error("The prerender worker failed."));
+		await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+
+		expect(renderPage).toHaveBeenCalledTimes(2);
+		expect(controller.pageVisuals[1]).toBe(fallbackVisual);
+		expect(controller.phase).toBe("ready");
+		controller.dispose();
+	});
+
 	it("renders a replacement document while the previous page-size request is pending", async () => {
 		const oldPageSize = createDeferred<{ width: number; height: number }>();
 		const oldGetPageSize = vi.fn(() => oldPageSize.promise);
@@ -375,15 +498,22 @@ function pixelVisual(): PageVisual {
 function createDeferred<T>(): {
 	promise: Promise<T>;
 	resolve(value: T): void;
+	reject(error: unknown): void;
 } {
 	let resolve: (value: T) => void = () => undefined;
-	const promise = new Promise<T>((complete) => {
+	let reject: (error: unknown) => void = () => undefined;
+	const promise = new Promise<T>((complete, fail) => {
 		resolve = complete;
+		reject = fail;
 	});
-	return { promise, resolve };
+	return { promise, resolve, reject };
 }
 
 function bitmapVisual(close: () => void): PageVisual {
 	const bitmap = { close } as unknown as ImageBitmap;
 	return { type: "bitmap", width: 1, height: 1, bitmap };
+}
+
+async function flushTasks(): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, 0));
 }

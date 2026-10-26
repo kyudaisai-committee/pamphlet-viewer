@@ -43,6 +43,8 @@
 
 表示が完了すると、単ページでは前後2ページ、見開きでは前後2見開きまでPDFのページデータをRangeで先読みします。先読みでは表示画像を作成せず、表示ページの描画より低い優先度で処理します。
 
+同時に、単ページでは前後1ページ、見開きでは前後1見開きの表示画像を先読みします。表示ページと見開きの各ページ、先読み画像は独立した描画Workerで処理し、先読み画像は描画スケールが一致するときだけページ移動時に再利用します。先読み画像は最大4ページ・合計64 MiBまで保持します。
+
 ページ一覧ボタンでサムネイルを開き、ページを選んで移動できます。サムネイルは一覧全体を一度に描画せず、表示範囲のページを必要に応じて作成します。PDFに埋め込みサムネイルがある場合はそれを優先して使い、ない場合や読み取れない場合はページを縮小描画します。狭いホストでは一覧が表示領域を使い、選択後に本文表示へ戻ります。ズームは10%から800%まで変更でき、拡大中はドラッグで紙面を移動できます。タッチ画面では2本指で拡大縮小できます。CtrlまたはMetaキーを押しながらホイールを操作しても拡大縮小します。通常のホイール操作は紙面をスクロールします。
 
 ## 章とブックマーク
@@ -98,7 +100,7 @@ viewer?.addEventListener("pagechange", (event) => {
 
 ## ページ入力方式の拡張
 
-`backend`はHTML属性ではなく要素のプロパティです。`DocumentBackend`は`open(source, signal)`から`PageSource`を返し、`PageSource`は`pageCount`、`getPageSize(pageIndex)`、`renderPage(pageIndex, scale)`、`dispose()`を提供します。任意の`prefetchPage(pageIndex)`を実装すると、ページの表示画像を作らずにページデータを先読みできます。`PageVisual`はRGBA pixel bufferまたは`ImageBitmap`です。表示状態とレイアウトはこの契約に依存し、PDFium固有の処理はPDF backendに閉じています。
+`backend`はHTML属性ではなく要素のプロパティです。`DocumentBackend`は`open(source, signal)`から`PageSource`を返し、`PageSource`は`pageCount`、`getPageSize(pageIndex)`、`renderPage(pageIndex, scale)`、`dispose()`を提供します。任意の`prefetchPage(pageIndex)`を実装すると、ページの表示画像を作らずにページデータを先読みできます。任意の`renderPrefetchedPage(pageIndex, scale)`を実装すると、表示描画から独立して周辺ページの画像を先読みできます。`supportsConcurrentPageRenders`を`true`にすると表示描画を最大2件まで並行して呼び出します。`PageVisual`はRGBA pixel bufferまたは`ImageBitmap`です。表示状態とレイアウトはこの契約に依存し、PDFium固有の処理はPDF backendに閉じています。
 
 `PamphletViewerElement.backend`へ独自backendを設定し、そのbackendが解釈する値を`src`へ指定できます。現在用意しているbackendはPDFiumのみです。画像URLやページ画像一覧を読むbackendは、同じ契約を使って後から追加できます。
 

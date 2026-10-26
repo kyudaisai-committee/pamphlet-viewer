@@ -10,6 +10,53 @@ import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 import { PageRenderQueue } from "./page-render-queue";
 
 describe("PageRenderQueue", () => {
+	it("renders visible spread pages independently when the source supports concurrent work", async () => {
+		const requests: number[] = [];
+		const pending: Array<(visual: PageVisual) => void> = [];
+		const source: PageSource = {
+			...createPageSource((pageIndex) => {
+				requests.push(pageIndex);
+				return new Promise((resolve) => pending.push(resolve));
+			}),
+			supportsConcurrentPageRenders: true,
+		};
+		const queue = new PageRenderQueue(source);
+		const first = queue.render(1, 1, "visible");
+		const second = queue.render(2, 1, "visible");
+
+		await vi.waitFor(() => expect(requests).toEqual([1, 2]));
+		pending[1]?.(pixelVisual());
+		await second;
+		pending[0]?.(pixelVisual());
+		await first;
+		queue.dispose();
+	});
+
+	it("keeps a running data prefetch out of the visible render slots", async () => {
+		let finishPrefetch: () => void = () => undefined;
+		const renderCalls: number[] = [];
+		const source: PageSource = {
+			...createPageSource(async (pageIndex) => {
+				renderCalls.push(pageIndex);
+				return pixelVisual();
+			}),
+			supportsConcurrentPageRenders: true,
+		};
+		source.prefetchPage = () =>
+			new Promise<void>((resolve) => {
+				finishPrefetch = resolve;
+			});
+		const queue = new PageRenderQueue(source);
+		const prefetch = queue.prefetchPage(5);
+		await vi.waitFor(() => expect(finishPrefetch).toBeTypeOf("function"));
+
+		await queue.render(6, 1, "visible");
+		expect(renderCalls).toEqual([6]);
+		finishPrefetch();
+		await prefetch;
+		queue.dispose();
+	});
+
 	it("prioritizes a visible page over queued thumbnails", async () => {
 		const requests: string[] = [];
 		const pending: Array<(visual: PageVisual) => void> = [];
