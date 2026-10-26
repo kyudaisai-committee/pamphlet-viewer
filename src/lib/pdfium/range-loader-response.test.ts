@@ -165,7 +165,9 @@ describe("PdfRangeLoader response validation", () => {
 			const start = requests.length === 1 ? 0 : RANGE_CHUNK_SIZE;
 			const end = start + RANGE_CHUNK_SIZE - 1;
 			return new Response(
-				requests.length === 1 ? new Uint8Array(RANGE_CHUNK_SIZE) : new ReadableStream({ cancel }),
+				requests.length === 1
+					? new Uint8Array(RANGE_CHUNK_SIZE)
+					: new ReadableStream({ cancel }),
 				{
 					status: 206,
 					headers: {
@@ -250,7 +252,8 @@ describe("PdfRangeLoader response validation", () => {
 		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
 			const range = new Headers(init?.headers).get("Range");
 			const match = range === null ? null : /^bytes=(\d+)-(\d+)$/.exec(range);
-			if (range === null || match === null) throw new Error("A byte range was not requested.");
+			if (range === null || match === null)
+				throw new Error("A byte range was not requested.");
 			const start = Number(match[1]);
 			const end = Number(match[2]);
 			if (start === 0) return createRangeResponse(start, end, fileLength);
@@ -267,14 +270,16 @@ describe("PdfRangeLoader response validation", () => {
 			await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
 
 			const resolveFirst = pendingResponses.get(RANGE_CHUNK_SIZE);
-			if (resolveFirst === undefined) throw new Error("The first range request did not start.");
+			if (resolveFirst === undefined)
+				throw new Error("The first range request did not start.");
 			resolveFirst(
 				createRangeResponse(RANGE_CHUNK_SIZE, 2 * RANGE_CHUNK_SIZE - 1, fileLength, ETAG),
 			);
 			await vi.waitFor(() => expect(loader.cachedByteLength).toBe(2 * RANGE_CHUNK_SIZE));
 
 			const resolveSecond = pendingResponses.get(3 * RANGE_CHUNK_SIZE);
-			if (resolveSecond === undefined) throw new Error("The second range request did not start.");
+			if (resolveSecond === undefined)
+				throw new Error("The second range request did not start.");
 			resolveSecond(
 				createRangeResponse(
 					3 * RANGE_CHUNK_SIZE,
@@ -291,7 +296,9 @@ describe("PdfRangeLoader response validation", () => {
 	});
 
 	it("does not restore cache state when disposed during a range request", async () => {
-		const responseResolver: { current: ((response: Response) => void) | null } = { current: null };
+		const responseResolver: { current: ((response: Response) => void) | null } = {
+			current: null,
+		};
 		vi.stubGlobal(
 			"fetch",
 			() =>

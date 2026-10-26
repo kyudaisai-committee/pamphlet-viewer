@@ -54,7 +54,9 @@ export async function waitForWorkerRequest(
 	try {
 		await expect
 			.poll(() => {
-				request = worker.requests.slice(startIndex).find((candidate) => candidate.type === type);
+				request = worker.requests
+					.slice(startIndex)
+					.find((candidate) => candidate.type === type);
 				return request !== undefined;
 			})
 			.toBe(true);

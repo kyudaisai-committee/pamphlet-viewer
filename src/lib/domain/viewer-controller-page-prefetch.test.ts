@@ -105,7 +105,10 @@ describe("ViewerController page-data prefetch", () => {
 		controller.requestRender(renderInput(1));
 		await vi.waitFor(() => expect(oldPrefetchIndexes).toEqual([1]));
 
-		await controller.load("new.pdf", createBackend(createPageSource(1, async () => pixelVisual())));
+		await controller.load(
+			"new.pdf",
+			createBackend(createPageSource(1, async () => pixelVisual())),
+		);
 		activePrefetch.resolve(undefined);
 		await flushMicrotasks();
 

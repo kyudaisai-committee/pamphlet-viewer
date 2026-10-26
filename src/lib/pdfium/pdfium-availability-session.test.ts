@@ -193,7 +193,9 @@ describe("PdfiumAvailabilitySession", () => {
 
 		const documentClose = pdfium.events.indexOf("document-close");
 		const availabilityDestroy = pdfium.events.indexOf("availability-destroy", documentClose);
-		const firstCallbackRemoval = pdfium.events.findIndex((event) => event.startsWith("remove:"));
+		const firstCallbackRemoval = pdfium.events.findIndex((event) =>
+			event.startsWith("remove:"),
+		);
 		const firstMemoryFree = pdfium.events.findIndex((event) => event.startsWith("free:"));
 		expect(documentClose).toBeGreaterThanOrEqual(0);
 		expect(availabilityDestroy).toBeGreaterThan(documentClose);
@@ -290,7 +292,9 @@ describe("PdfiumAvailabilitySession", () => {
 			new AbortController().signal,
 		);
 		session.beginPageOperation();
-		await expect(session.ensurePageAvailable(0)).rejects.toBeInstanceOf(WebAssembly.RuntimeError);
+		await expect(session.ensurePageAvailable(0)).rejects.toBeInstanceOf(
+			WebAssembly.RuntimeError,
+		);
 		expect(session.isPoisoned).toBe(true);
 
 		const eventCount = pdfium.events.length;

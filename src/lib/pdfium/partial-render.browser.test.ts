@@ -133,7 +133,9 @@ test("renders tiny pages at a fit scale above eight without exceeding the pixel 
 		const scale = calculateFitScale(pageSizes, { width: 1120, height: 500 }, "page", 1);
 		expect(scale).toBeGreaterThan(8);
 
-		const visuals = await Promise.all(pageIndexes.map((index) => worker.renderPage(index, scale)));
+		const visuals = await Promise.all(
+			pageIndexes.map((index) => worker.renderPage(index, scale)),
+		);
 		expect(visuals).toHaveLength(2);
 		for (const visual of visuals) {
 			if (visual.type !== "pixels") throw new Error("PDFium should render a pixel buffer.");

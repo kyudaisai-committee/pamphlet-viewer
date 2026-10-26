@@ -140,9 +140,9 @@ describe("PdfRangeLoader", () => {
 
 			const data = new Uint8Array(8 * RANGE_CHUNK_SIZE);
 			expect(loader.readInto(RANGE_CHUNK_SIZE, data, 0, data.byteLength)).toBe(true);
-			expect(Array.from({ length: 8 }, (_value, index) => data[index * RANGE_CHUNK_SIZE])).toEqual([
-				1, 2, 3, 4, 5, 6, 7, 8,
-			]);
+			expect(
+				Array.from({ length: 8 }, (_value, index) => data[index * RANGE_CHUNK_SIZE]),
+			).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
 			expect(loader.cachedByteLength).toBe(9 * RANGE_CHUNK_SIZE);
 		} finally {
 			loader.dispose();
@@ -301,7 +301,8 @@ function stubRangeFetch(
 	vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
 		const rangeHeader = new Headers(init?.headers).get("Range");
 		const match = rangeHeader === null ? null : /^bytes=(\d+)-(\d+)$/.exec(rangeHeader);
-		if (match === null || rangeHeader === null) throw new Error("A byte range was not requested.");
+		if (match === null || rangeHeader === null)
+			throw new Error("A byte range was not requested.");
 		const start = Number(match[1]);
 		const requestedEnd = Number(match[2]);
 		metrics.ranges.push(rangeHeader);

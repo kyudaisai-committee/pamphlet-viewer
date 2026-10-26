@@ -181,7 +181,8 @@ export class ViewerController {
 
 	requestRender(input: RenderInput): number | null {
 		if (this.pageSource === null || this.#sourceUnavailable) return null;
-		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0) return null;
+		if (this.pageCount < 1 || input.viewport.width <= 0 || input.viewport.height <= 0)
+			return null;
 		if (!Number.isSafeInteger(input.page) || input.page < 1 || input.page > this.pageCount) {
 			this.#invalidateRenderRequests();
 			this.#setFailure({
@@ -235,7 +236,10 @@ export class ViewerController {
 		this.requestRender(input);
 	}
 
-	setThumbnailPages(pageIndexes: readonly number[], prefetchIndexes: readonly number[] = []): void {
+	setThumbnailPages(
+		pageIndexes: readonly number[],
+		prefetchIndexes: readonly number[] = [],
+	): void {
 		this.#thumbnailScheduler.setVisiblePages(pageIndexes, prefetchIndexes);
 	}
 
@@ -282,7 +286,9 @@ export class ViewerController {
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		const pageIndexes = visiblePageIndexes(this.pageCount, request.page, layout);
 		try {
-			const pageSizes = await Promise.all(pageIndexes.map((index) => source.getPageSize(index)));
+			const pageSizes = await Promise.all(
+				pageIndexes.map((index) => source.getPageSize(index)),
+			);
 			if (!this.#isCurrent(request, source)) return;
 			const displayScale = calculateFitScale(
 				pageSizes,
@@ -291,7 +297,12 @@ export class ViewerController {
 				request.zoom,
 			);
 			const plans = pageSizes.map((pageSize) =>
-				createPageRenderPlan(pageSize, displayScale, undefined, request.devicePixelRatio ?? 1),
+				createPageRenderPlan(
+					pageSize,
+					displayScale,
+					undefined,
+					request.devicePixelRatio ?? 1,
+				),
 			);
 			const visualResults = await Promise.allSettled(
 				pageIndexes.map(async (pageIndex, localIndex) => {
@@ -372,7 +383,8 @@ export class ViewerController {
 		const layout = resolveLayout(request.layout, request.viewport.width);
 		for (const pageIndex of getPrefetchPageIndexes(this.pageCount, pageIndexes, layout)) {
 			void renderQueue.prefetchPage(pageIndex).catch((error: unknown) => {
-				if (source !== this.pageSource || !(error instanceof PageSourceUnavailableError)) return;
+				if (source !== this.pageSource || !(error instanceof PageSourceUnavailableError))
+					return;
 				this.#handleSourceUnavailable();
 			});
 		}

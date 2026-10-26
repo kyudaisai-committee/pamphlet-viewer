@@ -12,7 +12,10 @@ describe("ViewerController", () => {
 	it("emits one error for repeated requests with the same invalid page", async () => {
 		const events: string[] = [];
 		const controller = new ViewerController((event) => events.push(event.type));
-		await controller.load("brochure.pdf", createBackend(createPageSource(2, () => pixelVisual())));
+		await controller.load(
+			"brochure.pdf",
+			createBackend(createPageSource(2, () => pixelVisual())),
+		);
 
 		const input = {
 			page: 3,

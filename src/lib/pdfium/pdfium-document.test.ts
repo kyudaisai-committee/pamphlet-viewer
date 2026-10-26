@@ -162,18 +162,20 @@ describe("PdfiumDocumentSession", () => {
 		});
 		const renderPageBitmap = vi.fn();
 		const destroyBitmap = vi.fn();
-		const getPageSizeByIndex = vi.fn((_document: number, _pageIndex: number, pointer: number) => {
-			if (missFirstSizeRead || missNextSizeRead) {
-				missFirstSizeRead = false;
-				missNextSizeRead = false;
-				rangeLoaderMocks.hasMissingChunks = true;
-				return false;
-			}
-			const view = new DataView(heap.buffer);
-			view.setFloat32(pointer, 1, true);
-			view.setFloat32(pointer + Float32Array.BYTES_PER_ELEMENT, 1, true);
-			return true;
-		});
+		const getPageSizeByIndex = vi.fn(
+			(_document: number, _pageIndex: number, pointer: number) => {
+				if (missFirstSizeRead || missNextSizeRead) {
+					missFirstSizeRead = false;
+					missNextSizeRead = false;
+					rangeLoaderMocks.hasMissingChunks = true;
+					return false;
+				}
+				const view = new DataView(heap.buffer);
+				view.setFloat32(pointer, 1, true);
+				view.setFloat32(pointer + Float32Array.BYTES_PER_ELEMENT, 1, true);
+				return true;
+			},
+		);
 		rangeLoaderMocks.fetchMissingChunks.mockImplementationOnce(async () => {
 			rangeLoaderMocks.hasMissingChunks = false;
 			rangeLoaderMocks.cacheEpoch += 1;

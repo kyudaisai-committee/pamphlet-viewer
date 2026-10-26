@@ -47,7 +47,10 @@ export class ReaderGestureController {
 		const [first, second] = this.#pointers.values();
 		if (first === undefined || second === undefined) return true;
 		this.#previousPoint = null;
-		this.#pinchStart = { distance: distanceBetween(first, second), zoom: clampReaderZoom(zoom) };
+		this.#pinchStart = {
+			distance: distanceBetween(first, second),
+			zoom: clampReaderZoom(zoom),
+		};
 		return true;
 	}
 
@@ -59,7 +62,8 @@ export class ReaderGestureController {
 			if (first === undefined || second === undefined) return null;
 			const center = midpoint(first, second);
 			const nextDistance = distanceBetween(first, second);
-			const ratio = this.#pinchStart.distance === 0 ? 1 : nextDistance / this.#pinchStart.distance;
+			const ratio =
+				this.#pinchStart.distance === 0 ? 1 : nextDistance / this.#pinchStart.distance;
 			return {
 				type: "zoom",
 				zoom: clampReaderZoom(this.#pinchStart.zoom * ratio),

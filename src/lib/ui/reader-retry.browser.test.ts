@@ -79,7 +79,8 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 		});
 		const recoveredRender = await answerPageSizeRequestsUntilRender(recoveredWorker);
 		expect(
-			recoveredWorker.requests.filter((request) => request.type === "page-size").at(-1)?.pageIndex,
+			recoveredWorker.requests.filter((request) => request.type === "page-size").at(-1)
+				?.pageIndex,
 		).toBe(1);
 		const pageArea = shadowRoot.querySelector<HTMLElement>(".page-area");
 		if (pageArea === null) throw new Error("The page area was not rendered.");

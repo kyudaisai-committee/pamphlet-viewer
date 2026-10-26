@@ -35,12 +35,24 @@ export class PageRenderQueue {
 
 	constructor(private readonly source: PageSource) {}
 
-	render(pageIndex: number, scale: number, priority: "visible" | "thumbnail"): Promise<PageVisual> {
+	render(
+		pageIndex: number,
+		scale: number,
+		priority: "visible" | "thumbnail",
+	): Promise<PageVisual> {
 		if (this.#disposed) return Promise.reject(createAbortError());
 		const sequence = this.#sequence + 1;
 		this.#sequence = sequence;
 		return new Promise((resolve, reject) => {
-			this.#enqueue({ type: "render", sequence, pageIndex, scale, priority, resolve, reject });
+			this.#enqueue({
+				type: "render",
+				sequence,
+				pageIndex,
+				scale,
+				priority,
+				resolve,
+				reject,
+			});
 		});
 	}
 
@@ -64,7 +76,8 @@ export class PageRenderQueue {
 	cancelQueued(priority?: PageRenderPriority): void {
 		const retained: PageTask[] = [];
 		for (const task of this.#tasks) {
-			if (priority === undefined || task.priority === priority) task.reject(createAbortError());
+			if (priority === undefined || task.priority === priority)
+				task.reject(createAbortError());
 			else retained.push(task);
 		}
 		this.#tasks = retained;
@@ -78,7 +91,8 @@ export class PageRenderQueue {
 	#enqueue(task: PageTask): void {
 		this.#tasks.push(task);
 		this.#tasks.sort((left, right) => {
-			const priorityDifference = getPriorityRank(left.priority) - getPriorityRank(right.priority);
+			const priorityDifference =
+				getPriorityRank(left.priority) - getPriorityRank(right.priority);
 			return priorityDifference || left.sequence - right.sequence;
 		});
 		void this.#drain();

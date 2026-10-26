@@ -5,7 +5,8 @@ import { copyPdfiumThumbnailPixels, copyRgbaBitmapPixels } from "./pdfium-pixel-
 describe("PDFium RGBA bitmap copying", () => {
 	it("packs rows without padding into an independent pixel buffer", () => {
 		const heap = new Uint8Array([
-			0, 0, 0, 0, 11, 12, 13, 14, 21, 22, 23, 24, 90, 90, 90, 90, 31, 32, 33, 34, 41, 42, 43, 44,
+			0, 0, 0, 0, 11, 12, 13, 14, 21, 22, 23, 24, 90, 90, 90, 90, 31, 32, 33, 34, 41, 42, 43,
+			44,
 		]);
 		const output = copyRgbaBitmapPixels(heap, 4, 2, 2, 12);
 
@@ -40,7 +41,14 @@ describe("PDFium thumbnail bitmap conversion", () => {
 		{ format: 4, bytes: [30, 20, 10, 40], expected: [10, 20, 30, 40] },
 		{ format: 5, bytes: [32, 64, 96, 128], expected: [191, 128, 64, 128] },
 	])("converts PDFium bitmap format $format to RGBA", ({ format, bytes, expected }) => {
-		const pixels = copyPdfiumThumbnailPixels(new Uint8Array(bytes), 0, 1, 1, bytes.length, format);
+		const pixels = copyPdfiumThumbnailPixels(
+			new Uint8Array(bytes),
+			0,
+			1,
+			1,
+			bytes.length,
+			format,
+		);
 
 		expect(Array.from(new Uint8Array(pixels))).toEqual(expected);
 	});

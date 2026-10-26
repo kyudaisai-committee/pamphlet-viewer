@@ -47,7 +47,9 @@ test.each([
 				continue;
 			}
 			if (region !== nextRegion) {
-				throw new Error(`Tab moved from ${firstRegion} to ${region ?? "outside the viewer"}.`);
+				throw new Error(
+					`Tab moved from ${firstRegion} to ${region ?? "outside the viewer"}.`,
+				);
 			}
 			nextRegionFirst = active;
 			break;
@@ -104,7 +106,9 @@ test("keeps chapter and bookmark menu keyboard order within mobile navigation", 
 	const summary = menu?.querySelector<HTMLElement>("summary");
 	const chapterSelect = menu?.querySelector<HTMLSelectElement>('[aria-label="章へ移動"]');
 	const bookmarkToggle = menu?.querySelector<HTMLButtonElement>(".bookmark-toggle");
-	const bookmarkSelect = menu?.querySelector<HTMLSelectElement>('[aria-label="ブックマーク一覧"]');
+	const bookmarkSelect = menu?.querySelector<HTMLSelectElement>(
+		'[aria-label="ブックマーク一覧"]',
+	);
 	if (
 		menu === null ||
 		menu === undefined ||

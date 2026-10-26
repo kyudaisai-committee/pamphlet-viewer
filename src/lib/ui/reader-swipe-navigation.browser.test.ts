@@ -47,7 +47,14 @@ test("vertical, short, mouse, pinch, canceled, lost-capture, interactive, and zo
 	pageArea.dispatchEvent(createPointerEvent("pointerup", 4, 170, 160, "touch"));
 
 	dispatchSwipe(pageArea, 6, { x: 250, y: 160 }, { x: 170, y: 160 }, "touch", "pointercancel");
-	dispatchSwipe(pageArea, 7, { x: 250, y: 160 }, { x: 170, y: 160 }, "touch", "lostpointercapture");
+	dispatchSwipe(
+		pageArea,
+		7,
+		{ x: 250, y: 160 },
+		{ x: 170, y: 160 },
+		"touch",
+		"lostpointercapture",
+	);
 
 	const button = document.createElement("button");
 	pageArea.append(button);
@@ -111,7 +118,9 @@ function dispatchSwipe(
 	pointerType: string,
 	endType = "pointerup",
 ): void {
-	target.dispatchEvent(createPointerEvent("pointerdown", pointerId, start.x, start.y, pointerType));
+	target.dispatchEvent(
+		createPointerEvent("pointerdown", pointerId, start.x, start.y, pointerType),
+	);
 	target.dispatchEvent(createPointerEvent("pointermove", pointerId, end.x, end.y, pointerType));
 	target.dispatchEvent(createPointerEvent(endType, pointerId, end.x, end.y, pointerType));
 }

@@ -77,7 +77,9 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	element.addEventListener("error", (event) => errors.push(event.detail.code));
 	element.page = 9;
 	await expect.poll(() => errors).toEqual(["invalid-page"]);
-	shadowRoot?.querySelector<HTMLButtonElement>('.zoom-controls button[aria-label="拡大"]')?.click();
+	shadowRoot
+		?.querySelector<HTMLButtonElement>('.zoom-controls button[aria-label="拡大"]')
+		?.click();
 	await new Promise((resolve) => setTimeout(resolve, 50));
 	expect(errors).toEqual(["invalid-page"]);
 });
@@ -281,7 +283,8 @@ function canvasPixel(element: PamphletViewerElement): number[] {
 		throw new Error("The custom element did not render a page canvas.");
 	}
 	return [
-		...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data,
+		...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1)
+			.data,
 	];
 }
 

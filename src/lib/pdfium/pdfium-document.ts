@@ -28,7 +28,8 @@ export interface PdfiumDocumentInfo {
 
 export class PdfiumFatalError extends Error {
 	constructor(cause: unknown) {
-		const message = cause instanceof Error ? cause.message : "PDFium entered an unusable state.";
+		const message =
+			cause instanceof Error ? cause.message : "PDFium entered an unusable state.";
 		super(message, { cause });
 		this.name = "PdfiumFatalError";
 	}
@@ -87,7 +88,13 @@ export class PdfiumDocumentSession {
 		return this.#runDocumentOperation(
 			pageIndex,
 			(pdfium, availability, allowPageLoadFallback) =>
-				getPageSizeByIndex(pdfium, availability, this.loader, pageIndex, allowPageLoadFallback),
+				getPageSizeByIndex(
+					pdfium,
+					availability,
+					this.loader,
+					pageIndex,
+					allowPageLoadFallback,
+				),
 			"document",
 		);
 	}
@@ -110,7 +117,8 @@ export class PdfiumDocumentSession {
 		this.#assertPageIndex(pageIndex);
 		await this.#runDocumentOperation(
 			pageIndex,
-			(pdfium, availability) => prefetchPdfiumPage(pdfium, availability, this.loader, pageIndex),
+			(pdfium, availability) =>
+				prefetchPdfiumPage(pdfium, availability, this.loader, pageIndex),
 			"page",
 		);
 	}
@@ -127,7 +135,12 @@ export class PdfiumDocumentSession {
 		const result = await this.#runDocumentOperation(
 			pageIndex,
 			(pdfium, availability) => {
-				const thumbnail = getPdfiumThumbnailByIndex(pdfium, availability, this.loader, pageIndex);
+				const thumbnail = getPdfiumThumbnailByIndex(
+					pdfium,
+					availability,
+					this.loader,
+					pageIndex,
+				);
 				return thumbnail === null ? null : { thumbnail };
 			},
 			"page",
@@ -182,8 +195,10 @@ export class PdfiumDocumentSession {
 		availability.beginPageOperation();
 		let pageAvailabilityCacheEpoch: number | null = null;
 		for (let attempt = 0; attempt < MAX_OPERATION_ATTEMPTS; attempt += 1) {
-			if (this.signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-			if (availabilityRequirement === "page") await availability.ensurePageAvailable(pageIndex);
+			if (this.signal.aborted)
+				throw new DOMException("PDF loading was cancelled.", "AbortError");
+			if (availabilityRequirement === "page")
+				await availability.ensurePageAvailable(pageIndex);
 			else await availability.ensureDocumentAvailable();
 			if (this.#disposed) {
 				throw new DOMException("PDF loading was cancelled.", "AbortError");
@@ -241,7 +256,8 @@ function createAvailabilityApi(pdfium: WrappedPdfiumModule): PdfiumAvailabilityA
 		FPDFAvail_Destroy: (availability) => pdfium.FPDFAvail_Destroy(availability),
 		FPDFAvail_GetDocument: (availability, password) =>
 			pdfium.FPDFAvail_GetDocument(availability, password),
-		FPDFAvail_IsDocAvail: (availability, hints) => pdfium.FPDFAvail_IsDocAvail(availability, hints),
+		FPDFAvail_IsDocAvail: (availability, hints) =>
+			pdfium.FPDFAvail_IsDocAvail(availability, hints),
 		FPDFAvail_IsLinearized: (availability) => pdfium.FPDFAvail_IsLinearized(availability),
 		FPDFAvail_IsPageAvail: (availability, pageIndex, hints) =>
 			pdfium.FPDFAvail_IsPageAvail(availability, pageIndex, hints),
@@ -268,7 +284,8 @@ function getPdfium(wasmUrl: string): Promise<WrappedPdfiumModule> {
 
 async function loadPdfium(wasmUrl: string): Promise<WrappedPdfiumModule> {
 	const response = await fetch(wasmUrl);
-	if (!response.ok) throw new Error(`Could not load PDFium WebAssembly (HTTP ${response.status}).`);
+	if (!response.ok)
+		throw new Error(`Could not load PDFium WebAssembly (HTTP ${response.status}).`);
 	const wasmBinary = await response.arrayBuffer();
 	const pdfium = await init({ wasmBinary, locateFile: () => wasmUrl });
 	pdfium.PDFiumExt_Init();

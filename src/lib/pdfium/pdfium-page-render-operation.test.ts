@@ -20,7 +20,9 @@ describe("PDFium page rendering", () => {
 	] as const)("skips the remaining raster work after a read miss during %s", (_label, phase) => {
 		const fixture = createFixture({ readMissPhase: phase });
 
-		expect(renderPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 0, 1)).toBeNull();
+		expect(
+			renderPdfiumPage(fixture.pdfium, fixture.availability, fixture.loader, 0, 1),
+		).toBeNull();
 		expect(fixture.closePage).toHaveBeenCalledWith(2);
 		expect(fixture.isPoisoned()).toBe(false);
 		if (phase === "load" || phase === "size") {

@@ -34,9 +34,9 @@ describe("PDFium embedded thumbnail extraction", () => {
 
 	it("reports no embedded image only after all thumbnail reads are available", () => {
 		const absent = createFixture({ thumbnailBitmap: 0 });
-		expect(getPdfiumThumbnailByIndex(absent.pdfium, absent.availability, absent.loader, 0)).toEqual(
-			{ type: "none" },
-		);
+		expect(
+			getPdfiumThumbnailByIndex(absent.pdfium, absent.availability, absent.loader, 0),
+		).toEqual({ type: "none" });
 		expect(absent.closePage).toHaveBeenCalledWith(2);
 
 		const missing = createFixture({ thumbnailBitmap: 0, missDuringThumbnail: true });

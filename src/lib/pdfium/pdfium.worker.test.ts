@@ -61,7 +61,10 @@ describe("PDF worker document lifecycle", () => {
 		const closeWorker = vi.fn();
 		let dispatch: ((request: OpenRequest) => void) | null = null;
 		const workerScope = {
-			addEventListener(_type: "message", listener: (event: MessageEvent<OpenRequest>) => void) {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<OpenRequest>) => void,
+			) {
 				dispatch = (request) => listener({ data: request } as MessageEvent<OpenRequest>);
 			},
 			postMessage(message: WorkerResponse): void {
@@ -114,7 +117,10 @@ describe("PDF worker document lifecycle", () => {
 		const responses: WorkerResponse[] = [];
 		let dispatch: ((request: WorkerRequest) => void) | null = null;
 		const workerScope = {
-			addEventListener(_type: "message", listener: (event: MessageEvent<WorkerRequest>) => void) {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerRequest>) => void,
+			) {
 				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerRequest>);
 			},
 			postMessage(message: WorkerResponse): void {
@@ -167,7 +173,10 @@ describe("PDF worker document lifecycle", () => {
 		const closeWorker = vi.fn();
 		let dispatch: ((request: WorkerRequest) => void) | null = null;
 		const workerScope = {
-			addEventListener(_type: "message", listener: (event: MessageEvent<WorkerRequest>) => void) {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerRequest>) => void,
+			) {
 				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerRequest>);
 			},
 			postMessage(message: WorkerResponse): void {

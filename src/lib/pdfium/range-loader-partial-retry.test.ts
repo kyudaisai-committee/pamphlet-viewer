@@ -89,7 +89,8 @@ function stubRetryableRangeFetch(fileLength: number, failedStarts: number[]): st
 	vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
 		const rangeHeader = new Headers(init?.headers).get("Range");
 		const match = rangeHeader === null ? null : /^bytes=(\d+)-(\d+)$/.exec(rangeHeader);
-		if (rangeHeader === null || match === null) throw new Error("A byte range was not requested.");
+		if (rangeHeader === null || match === null)
+			throw new Error("A byte range was not requested.");
 		const start = Number(match[1]);
 		const requestedEnd = Number(match[2]);
 		ranges.push(rangeHeader);

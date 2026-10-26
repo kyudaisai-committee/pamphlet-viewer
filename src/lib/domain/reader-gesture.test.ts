@@ -9,7 +9,9 @@ import {
 describe("detectPageSwipeDirection", () => {
 	it("maps quick horizontal swipes to page direction after distance and axis checks", () => {
 		expect(detectPageSwipeDirection({ x: 180, y: 100 }, { x: 120, y: 105 }, 200)).toBe("next");
-		expect(detectPageSwipeDirection({ x: 120, y: 100 }, { x: 180, y: 105 }, 200)).toBe("previous");
+		expect(detectPageSwipeDirection({ x: 120, y: 100 }, { x: 180, y: 105 }, 200)).toBe(
+			"previous",
+		);
 		expect(detectPageSwipeDirection({ x: 180, y: 100 }, { x: 133, y: 100 }, 200)).toBeNull();
 		expect(detectPageSwipeDirection({ x: 180, y: 100 }, { x: 100, y: 160 }, 200)).toBeNull();
 		expect(detectPageSwipeDirection({ x: 180, y: 100 }, { x: 120, y: 100 }, 701)).toBeNull();
