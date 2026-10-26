@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: MIT
-
 import { Buffer } from "node:buffer";
 
 const PAGE_COUNT = 24;
