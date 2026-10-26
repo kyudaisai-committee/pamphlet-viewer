@@ -196,6 +196,43 @@ test("keeps an aborting background task inside the reserved-slot count until it 
 	scheduler.dispose();
 });
 
+test("promotes running work and frees its reserved background slot", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 2, reservedVisible: 1 });
+	const runningResult = createDeferred<string>();
+	const changes: string[] = [];
+	const started: string[] = [];
+	const runningTask = scheduler.schedule({
+		key: "render:1:1",
+		priority: "prerender",
+		execute: (_signal, priority) => {
+			started.push(priority);
+			return runningResult.promise;
+		},
+		onPriorityChange: (priority) => changes.push(priority),
+	});
+	const queuedBackground = scheduler.schedule({
+		key: "data:2",
+		priority: "data",
+		execute: async () => {
+			started.push("background");
+			return "background";
+		},
+	});
+	expect(started).toEqual(["prerender"]);
+
+	expect(scheduler.promote("render:1:1", "visible")).toBe(true);
+	const backgroundLease = await queuedBackground;
+	expect(changes).toEqual(["visible"]);
+	expect(started).toEqual(["prerender", "background"]);
+	backgroundLease.release();
+
+	runningResult.resolve("rendered");
+	const runningLease = await runningTask;
+	expect(runningLease.value).toBe("rendered");
+	runningLease.release();
+	scheduler.dispose();
+});
+
 test("rejects a task whose executor throws synchronously", async () => {
 	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
 	const failure = new Error("synchronous executor failure");

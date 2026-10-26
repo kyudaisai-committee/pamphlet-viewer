@@ -103,11 +103,24 @@ export class PdfRangeBroker {
 		if (request.start > effectiveEnd)
 			throw new Error("The requested PDF range starts beyond EOF.");
 		const lastIndex = Math.floor(effectiveEnd / RANGE_CHUNK_SIZE);
-		const chunks = await Promise.all(
-			Array.from({ length: lastIndex - firstIndex + 1 }, (_value, offset) =>
-				this.#getChunk(firstIndex + offset, request.priority, signal),
-			),
-		);
+		const requestController = new AbortController();
+		const abortRequest = function abortRequestWaiters(): void {
+			requestController.abort();
+		};
+		signal.addEventListener("abort", abortRequest, { once: true });
+		let chunks: CachedChunk[];
+		try {
+			chunks = await Promise.all(
+				Array.from({ length: lastIndex - firstIndex + 1 }, (_value, offset) =>
+					this.#getChunk(firstIndex + offset, request.priority, requestController.signal),
+				),
+			);
+		} catch (error) {
+			requestController.abort();
+			throw error;
+		} finally {
+			signal.removeEventListener("abort", abortRequest);
+		}
 		this.#throwIfAborted(signal);
 
 		const totalLength = chunks[0]?.response.totalLength ?? this.#totalLength;
@@ -131,6 +144,43 @@ export class PdfRangeBroker {
 		const responseMetadata = chunks[0]?.response;
 		if (responseMetadata === undefined) throw new Error("The requested PDF range was empty.");
 		return { bytes, ...responseMetadata };
+	}
+
+	promoteRequest(request: RangeTransportRequest, priority: PageTaskPriority): boolean {
+		this.#assertActive();
+		const firstIndex = Math.floor(request.start / RANGE_CHUNK_SIZE);
+		const effectiveEnd =
+			this.#totalLength === null
+				? request.requestedEnd
+				: Math.min(request.requestedEnd, this.#totalLength - 1);
+		if (request.start > effectiveEnd) return false;
+		const lastIndex = Math.floor(effectiveEnd / RANGE_CHUNK_SIZE);
+		const batches = new Set<FetchBatch>();
+		let promoted = false;
+		for (let index = firstIndex; index <= lastIndex; index += 1) {
+			const pending = this.#pending.get(index);
+			if (
+				pending === undefined ||
+				getPriorityRank(priority) >= getPriorityRank(pending.priority)
+			) {
+				continue;
+			}
+			pending.priority = priority;
+			promoted = true;
+			if (pending.batchKey === null) continue;
+			const batch = this.#batches.get(pending.batchKey);
+			if (batch !== undefined) batches.add(batch);
+		}
+		for (const batch of batches) {
+			batch.priority = batch.indexes.reduce<PageTaskPriority>((best, index) => {
+				const candidate = batch.pendingChunks.get(index)?.priority;
+				return candidate !== undefined && getPriorityRank(candidate) < getPriorityRank(best)
+					? candidate
+					: best;
+			}, "thumbnail");
+			this.#scheduler.promote(batch.key, batch.priority);
+		}
+		return promoted;
 	}
 
 	dispose(): void {
@@ -185,7 +235,7 @@ export class PdfRangeBroker {
 		const batch = pending.batchKey === null ? undefined : this.#batches.get(pending.batchKey);
 		if (batch !== undefined && getPriorityRank(priority) < getPriorityRank(batch.priority)) {
 			batch.priority = priority;
-			if (batch.state === "queued") this.#promoteBatch(batch);
+			this.#promoteBatch(batch);
 		}
 		this.#scheduleDrain();
 		return waitWithSignal(pending.promise, signal).finally(() => {
@@ -264,6 +314,10 @@ export class PdfRangeBroker {
 	}
 
 	#promoteBatch(batch: FetchBatch): void {
+		if (batch.scheduled !== null) {
+			this.#scheduler.promote(batch.key, batch.priority);
+			return;
+		}
 		void this.#submitBatch(batch).catch((error: unknown) => this.#failBatch(batch, error));
 	}
 

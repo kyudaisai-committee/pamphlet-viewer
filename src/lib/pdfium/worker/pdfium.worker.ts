@@ -9,6 +9,7 @@ import { requestPdfRange } from "@/lib/pdfium/range/range-request";
 import type {
 	RangeTransportRequest,
 	RangeWorkerCancelRequest,
+	RangeWorkerPromoteRequest,
 	RangeWorkerRequest,
 	RangeWorkerResponse,
 } from "@/lib/pdfium/range/range-transport";
@@ -57,6 +58,12 @@ interface ThumbnailPrefetchRequest {
 interface CancelRequest {
 	type: "cancel";
 	id: number;
+}
+
+interface PromoteRequest {
+	type: "promote";
+	id: number;
+	priority: PageTaskPriority;
 }
 
 type WorkerRequest =
@@ -124,11 +131,17 @@ interface WorkerScope {
 	addEventListener(
 		type: "message",
 		listener: (
-			event: MessageEvent<WorkerRequest | CancelRequest | RangeWorkerResponse>,
+			event: MessageEvent<
+				WorkerRequest | CancelRequest | PromoteRequest | RangeWorkerResponse
+			>,
 		) => void,
 	): void;
 	postMessage(
-		message: WorkerResponse | RangeWorkerRequest | RangeWorkerCancelRequest,
+		message:
+			| WorkerResponse
+			| RangeWorkerRequest
+			| RangeWorkerCancelRequest
+			| RangeWorkerPromoteRequest,
 		transfer?: Transferable[],
 	): void;
 	close(): void;
@@ -142,6 +155,8 @@ let nextRangeRequestId = 0;
 let lastProcessedRequestId = -1;
 const operationControllers = new Map<number, AbortController>();
 const cancelledRequestIds = new Set<number>();
+const queuedRequests = new Map<number, WorkerRequest>();
+const operationIdsBySignal = new WeakMap<AbortSignal, number>();
 const pendingRangeRequests = new Map<
 	number,
 	{
@@ -149,6 +164,7 @@ const pendingRangeRequests = new Map<
 		reject(error: unknown): void;
 		signal: AbortSignal;
 		abort(): void;
+		operationId: number;
 	}
 >();
 
@@ -161,7 +177,12 @@ workerScope.addEventListener("message", function queueRequest(event) {
 		cancelRequest(event.data.id);
 		return;
 	}
+	if (event.data.type === "promote") {
+		promoteRequest(event.data.id, event.data.priority);
+		return;
+	}
 	const request = event.data;
+	queuedRequests.set(request.id, request);
 	requestQueue = requestQueue.then(
 		() => processRequest(request),
 		() => processRequest(request),
@@ -169,6 +190,7 @@ workerScope.addEventListener("message", function queueRequest(event) {
 });
 
 async function processRequest(request: WorkerRequest): Promise<void> {
+	queuedRequests.delete(request.id);
 	if (cancelledRequestIds.delete(request.id)) {
 		lastProcessedRequestId = Math.max(lastProcessedRequestId, request.id);
 		workerScope.postMessage({
@@ -181,6 +203,7 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 	}
 	const controller = new AbortController();
 	operationControllers.set(request.id, controller);
+	operationIdsBySignal.set(controller.signal, request.id);
 	try {
 		if (request.type === "open") {
 			useRangeBroker = request.useRangeBroker;
@@ -293,22 +316,58 @@ function cancelRequest(id: number): void {
 	cancelledRequestIds.add(id);
 }
 
+function promoteRequest(id: number, priority: PageTaskPriority): void {
+	const queued = queuedRequests.get(id);
+	if (queued?.type === "page-size" || queued?.type === "render") {
+		queued.priority = priority;
+	}
+	if (!operationControllers.has(id)) return;
+	documentSession?.setPriority(priority);
+	for (const [rangeId, pending] of pendingRangeRequests) {
+		if (pending.operationId !== id) continue;
+		const message: RangeWorkerPromoteRequest = {
+			type: "range-promote",
+			id: rangeId,
+			priority,
+		};
+		workerScope.postMessage(message);
+	}
+}
+
 function requestPdfRangeFromHost(
 	request: RangeTransportRequest,
 	signal: AbortSignal,
 ): Promise<PdfRangeResponse> {
+	if (signal.aborted) return Promise.reject(createOperationAbortError());
 	if (!useRangeBroker) return requestPdfRange({ ...request, signal });
 	const id = nextRangeRequestId;
 	nextRangeRequestId += 1;
+	const operationId = operationIdsBySignal.get(signal);
+	if (operationId === undefined) {
+		return Promise.reject(new Error("The PDF range request has no active page operation."));
+	}
 	return new Promise((resolve, reject) => {
 		const abort = function cancelHostRangeRequest(): void {
+			const pending = pendingRangeRequests.get(id);
+			if (pending === undefined) return;
 			pendingRangeRequests.delete(id);
-			workerScope.postMessage({ type: "range-cancel", id });
-			reject(new DOMException("The PDF range request was cancelled.", "AbortError"));
+			try {
+				workerScope.postMessage({ type: "range-cancel", id });
+			} catch {
+				// The host may already have retired this worker.
+			} finally {
+				reject(createOperationAbortError());
+			}
 		};
-		pendingRangeRequests.set(id, { resolve, reject, signal, abort });
+		pendingRangeRequests.set(id, { resolve, reject, signal, abort, operationId });
 		signal.addEventListener("abort", abort, { once: true });
-		workerScope.postMessage({ type: "range-request", id, request });
+		try {
+			workerScope.postMessage({ type: "range-request", id, request });
+		} catch (error) {
+			pendingRangeRequests.delete(id);
+			signal.removeEventListener("abort", abort);
+			reject(error);
+		}
 	});
 }
 
@@ -334,4 +393,8 @@ function resolveRangeRequest(response: RangeWorkerResponse): void {
 		lastModified: response.response.lastModified,
 		responseUrl: response.response.responseUrl,
 	});
+}
+
+function createOperationAbortError(): DOMException {
+	return new DOMException("The PDF operation was cancelled.", "AbortError");
 }

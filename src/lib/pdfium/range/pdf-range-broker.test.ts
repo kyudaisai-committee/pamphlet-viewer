@@ -94,6 +94,99 @@ test("cancelling one worker request does not cancel a shared fetch", async () =>
 	}
 });
 
+test("a promoted queued background fetch starts while reserved fetches remain held", async () => {
+	const pdf = createPdf(RANGE_CHUNK_SIZE * 20);
+	const fetches: Array<{
+		range: string;
+		signal: AbortSignal;
+		resolve(response: Response): void;
+	}> = [];
+	vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+		const signal = init.signal;
+		const range = new Headers(init.headers).get("Range");
+		if (!(signal instanceof AbortSignal) || range === null) {
+			throw new Error("The broker omitted an abortable range request.");
+		}
+		return new Promise<Response>((resolve, reject) => {
+			fetches.push({ range, signal, resolve });
+			signal.addEventListener(
+				"abort",
+				() => reject(new DOMException("The fetch was cancelled.", "AbortError")),
+				{ once: true },
+			);
+			if (signal.aborted) reject(new DOMException("The fetch was cancelled.", "AbortError"));
+		});
+	});
+	const broker = new PdfRangeBroker(URL);
+	const controllers = Array.from({ length: 3 }, () => new AbortController());
+	const requests = [
+		createRequest(0, RANGE_CHUNK_SIZE - 1, "thumbnail"),
+		createRequest(4 * RANGE_CHUNK_SIZE, 5 * RANGE_CHUNK_SIZE - 1, "thumbnail"),
+		createRequest(8 * RANGE_CHUNK_SIZE, 9 * RANGE_CHUNK_SIZE - 1, "thumbnail"),
+	];
+	try {
+		const promises = requests.map((request, index) => {
+			const controller = controllers[index];
+			if (controller === undefined) throw new Error("The request controller is missing.");
+			const promise = broker.request(request, controller.signal);
+			void promise.catch(() => undefined);
+			return promise;
+		});
+		await vi.waitFor(() => expect(fetches).toHaveLength(2));
+		const promotedRequest = requests[2];
+		if (promotedRequest === undefined) throw new Error("The promoted request is missing.");
+		expect(broker.promoteRequest(promotedRequest, "visible")).toBe(true);
+		await vi.waitFor(() => expect(fetches).toHaveLength(3));
+		expect(fetches.slice(0, 2).every((fetch) => !fetch.signal.aborted)).toBe(true);
+
+		const promotedFetch = fetches[2];
+		if (promotedFetch === undefined) throw new Error("The promoted fetch did not start.");
+		promotedFetch.resolve(createResponse(pdf, promotedFetch.range));
+		await expect(promises[2]).resolves.toMatchObject({ totalLength: pdf.byteLength });
+	} finally {
+		broker.dispose();
+		vi.unstubAllGlobals();
+	}
+});
+
+test("a failed multi-chunk request cancels only its unshared sibling waiters", async () => {
+	const pdf = createPdf(RANGE_CHUNK_SIZE * 8);
+	const heldFetch = createDeferred<Response>();
+	const fetches: Array<{ range: string; signal: AbortSignal }> = [];
+	vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+		const signal = init.signal;
+		const range = new Headers(init.headers).get("Range");
+		if (!(signal instanceof AbortSignal) || range === null) {
+			throw new Error("The broker omitted an abortable range request.");
+		}
+		fetches.push({ range, signal });
+		if (range.startsWith(`bytes=${4 * RANGE_CHUNK_SIZE}-`)) return heldFetch.promise;
+		return new Response(null, { status: 503 });
+	});
+	const broker = new PdfRangeBroker(URL);
+	const request = createRequest(0, 8 * RANGE_CHUNK_SIZE - 1, "visible");
+	const controller = new AbortController();
+	try {
+		const failed = broker.request(request, controller.signal);
+		const sharedSibling = broker.request(
+			createRequest(4 * RANGE_CHUNK_SIZE, 5 * RANGE_CHUNK_SIZE - 1, "visible"),
+			new AbortController().signal,
+		);
+		await expect(failed).rejects.toThrow("HTTP 503");
+		await vi.waitFor(() => expect(fetches).toHaveLength(2));
+		const held = fetches.find((fetch) =>
+			fetch.range.startsWith(`bytes=${4 * RANGE_CHUNK_SIZE}-`),
+		);
+		if (held === undefined) throw new Error("The sibling range fetch did not start.");
+		expect(held.signal.aborted).toBe(false);
+		heldFetch.resolve(createResponse(pdf, held.range));
+		await expect(sharedSibling).resolves.toMatchObject({ totalLength: pdf.byteLength });
+	} finally {
+		broker.dispose();
+		vi.unstubAllGlobals();
+	}
+});
+
 test("restarts a chunk request after its last cancelled fetch is already aborting", async () => {
 	const pdf = createPdf(RANGE_CHUNK_SIZE * 2);
 	const fetches: Array<{

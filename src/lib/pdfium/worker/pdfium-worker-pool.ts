@@ -13,6 +13,7 @@ import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-clien
 export const PDFIUM_WORKER_LIMIT = 4;
 export const PDFIUM_VISIBLE_CONCURRENCY = 2;
 const WORKER_TERMINATION_GRACE_MS = 100;
+const MAX_PREPARED_PAGES_PER_WORKER = 8;
 
 interface PdfiumWorkerSlot {
 	client: PdfiumWorkerClient | null;
@@ -22,6 +23,7 @@ interface PdfiumWorkerSlot {
 	activeRequests: number;
 	activeSignals: Set<AbortSignal>;
 	activeOperationCount: number;
+	preparedPages: Set<number>;
 }
 
 type WorkerOperation<Result> = (
@@ -57,6 +59,7 @@ export class PdfiumWorkerPool {
 			activeRequests: 0,
 			activeSignals: new Set(),
 			activeOperationCount: 0,
+			preparedPages: new Set(),
 		}));
 		this.#scheduler = new PageTaskScheduler({
 			maximumConcurrent: slotCount,
@@ -73,14 +76,18 @@ export class PdfiumWorkerPool {
 		return this.#scheduleTask(
 			`size:${pageIndex}`,
 			priority,
+			pageIndex,
 			(client, taskPriority, signal) => client.getPageSize(pageIndex, taskPriority, signal),
 			signal,
 		);
 	}
 
 	prefetchPage(pageIndex: number): Promise<void> {
-		return this.#scheduleTask(`data:${pageIndex}`, "data", (client, _priority, signal) =>
-			client.prefetchPage(pageIndex, signal),
+		return this.#scheduleTask(
+			`data:${pageIndex}`,
+			"data",
+			pageIndex,
+			(client, _priority, signal) => client.prefetchPage(pageIndex, signal),
 		);
 	}
 
@@ -93,9 +100,11 @@ export class PdfiumWorkerPool {
 		return this.#scheduleVisualTask(
 			`render:${pageIndex}:${scale}`,
 			priority,
+			pageIndex,
 			(client, taskPriority, signal) =>
 				client.renderPage(pageIndex, scale, taskPriority, signal),
 			signal,
+			(client, taskPriority) => client.promoteRender(pageIndex, scale, taskPriority),
 		).then((visual) => {
 			if (visual === null) throw new Error("PDF worker did not return a page image.");
 			return visual;
@@ -106,6 +115,7 @@ export class PdfiumWorkerPool {
 		return this.#scheduleVisualTask(
 			`thumbnail:${pageIndex}`,
 			"thumbnail",
+			pageIndex,
 			(client, _priority, signal) => client.renderThumbnail(pageIndex, signal),
 		);
 	}
@@ -118,6 +128,7 @@ export class PdfiumWorkerPool {
 		return this.#scheduleVisualTask(
 			`thumbnail:${pageIndex}`,
 			"thumbnail",
+			pageIndex,
 			(client, _priority, signal) => client.prefetchThumbnail(pageIndex, signal),
 		);
 	}
@@ -150,25 +161,35 @@ export class PdfiumWorkerPool {
 	#scheduleTask<Result>(
 		key: string,
 		priority: PageTaskPriority,
+		pageIndex: number,
 		operation: WorkerOperation<Result>,
 		signal?: AbortSignal,
 		releaseResult?: (result: Result) => void,
+		onPriorityChange?: (client: PdfiumWorkerClient, priority: PageTaskPriority) => void,
 	): Promise<Result> {
-		return this.#scheduleLeaseTask(key, priority, operation, releaseResult, signal).then(
-			(lease) => {
-				const result = lease.value;
-				lease.release();
-				return result;
-			},
-		);
+		return this.#scheduleLeaseTask(
+			key,
+			priority,
+			pageIndex,
+			operation,
+			releaseResult,
+			signal,
+			onPriorityChange,
+		).then((lease) => {
+			const result = lease.value;
+			lease.release();
+			return result;
+		});
 	}
 
 	#scheduleLeaseTask<Result>(
 		key: string,
 		priority: PageTaskPriority,
+		pageIndex: number,
 		operation: WorkerOperation<Result>,
 		releaseResult?: (result: Result) => void,
 		signal?: AbortSignal,
+		onPriorityChange?: (client: PdfiumWorkerClient, priority: PageTaskPriority) => void,
 	): Promise<PageTaskLease<Result>> {
 		this.#assertActive();
 		const controller = new AbortController();
@@ -178,14 +199,28 @@ export class PdfiumWorkerPool {
 		const controllers = this.#consumerControllers.get(priority) ?? new Set<AbortController>();
 		controllers.add(controller);
 		this.#consumerControllers.set(priority, controllers);
+		let taskPriority = priority;
+		let activeClient: PdfiumWorkerClient | null = null;
 		return this.#scheduler
 			.schedule(
 				{
 					key,
 					priority,
-					execute: (signal, taskPriority) =>
-						this.#executeWithRecovery(operation, taskPriority, signal),
+					execute: (signal, initialPriority) => {
+						taskPriority = initialPriority;
+						return this.#executeWithRecovery(
+							operation,
+							pageIndex,
+							() => taskPriority,
+							signal,
+							(client) => (activeClient = client),
+						);
+					},
 					releaseResult,
+					onPriorityChange: (nextPriority) => {
+						taskPriority = nextPriority;
+						if (activeClient !== null) onPriorityChange?.(activeClient, nextPriority);
+					},
 				},
 				controller.signal,
 			)
@@ -199,15 +234,19 @@ export class PdfiumWorkerPool {
 	async #scheduleVisualTask(
 		key: string,
 		priority: PageTaskPriority,
+		pageIndex: number,
 		operation: WorkerOperation<PageVisual | null>,
 		signal?: AbortSignal,
+		onPriorityChange?: (client: PdfiumWorkerClient, priority: PageTaskPriority) => void,
 	): Promise<PageVisual | null> {
 		const lease = await this.#scheduleLeaseTask(
 			key,
 			priority,
+			pageIndex,
 			operation,
 			releaseVisualResult,
 			signal,
+			onPriorityChange,
 		);
 		try {
 			if (lease.value === null) return null;
@@ -219,12 +258,20 @@ export class PdfiumWorkerPool {
 
 	async #executeWithRecovery<Result>(
 		operation: WorkerOperation<Result>,
-		priority: PageTaskPriority,
+		pageIndex: number,
+		getPriority: () => PageTaskPriority,
 		signal: AbortSignal,
+		onClientReady: (client: PdfiumWorkerClient) => void,
 	): Promise<Result> {
 		for (let attempt = 0; attempt < 2; attempt += 1) {
 			try {
-				return await this.#runOnSlot(operation, priority, signal);
+				return await this.#runOnSlot(
+					operation,
+					pageIndex,
+					getPriority,
+					signal,
+					onClientReady,
+				);
 			} catch (error) {
 				if (
 					!(error instanceof PdfiumWorkerUnavailableError) ||
@@ -240,12 +287,14 @@ export class PdfiumWorkerPool {
 
 	async #runOnSlot<Result>(
 		operation: WorkerOperation<Result>,
-		priority: PageTaskPriority,
+		pageIndex: number,
+		getPriority: () => PageTaskPriority,
 		signal: AbortSignal,
+		onClientReady: (client: PdfiumWorkerClient) => void,
 	): Promise<Result> {
 		this.#assertActive();
 		if (signal.aborted) throw createAbortError();
-		const slot = this.#getLeastBusySlot();
+		const slot = this.#getLeastBusySlot(pageIndex);
 		slot.activeRequests += 1;
 		slot.activeSignals.add(signal);
 		let operationStarted = false;
@@ -253,9 +302,12 @@ export class PdfiumWorkerPool {
 			const client = await this.#open(slot, signal);
 			this.#assertActive();
 			if (signal.aborted) throw createAbortError();
+			onClientReady(client);
 			slot.activeOperationCount += 1;
 			operationStarted = true;
-			return await operation(client, priority, signal);
+			const result = await operation(client, getPriority(), signal);
+			this.#rememberPreparedPage(slot, pageIndex);
+			return result;
 		} catch (error) {
 			if (error instanceof PdfiumWorkerUnavailableError) this.#resetSlot(slot);
 			throw error;
@@ -295,6 +347,7 @@ export class PdfiumWorkerPool {
 			this.#resetSlot(slot);
 		}
 		if (slot.opening === null) {
+			slot.preparedPages.clear();
 			const client = new PdfiumWorkerClient(this.rangeBroker);
 			const controller = new AbortController();
 			slot.client = client;
@@ -313,7 +366,10 @@ export class PdfiumWorkerPool {
 				})
 				.catch((error: unknown) => {
 					client.terminate();
-					if (slot.client === client) slot.client = null;
+					if (slot.client === client) {
+						slot.client = null;
+						slot.preparedPages.clear();
+					}
 					if (slot.opening === opening) {
 						slot.opening = null;
 						slot.openingController = null;
@@ -340,7 +396,10 @@ export class PdfiumWorkerPool {
 		}
 	}
 
-	#getLeastBusySlot(): PdfiumWorkerSlot {
+	#getLeastBusySlot(pageIndex: number): PdfiumWorkerSlot {
+		const idleSlots = this.#slots.filter((slot) => slot.activeRequests === 0);
+		const idleWarmSlot = idleSlots.find((slot) => slot.preparedPages.has(pageIndex));
+		if (idleWarmSlot !== undefined) return idleWarmSlot;
 		const firstSlot = this.#slots[0];
 		if (firstSlot === undefined) {
 			throw new Error("The PDF worker pool has no available slots.");
@@ -350,6 +409,14 @@ export class PdfiumWorkerPool {
 			if (slot.activeRequests < leastBusySlot.activeRequests) leastBusySlot = slot;
 		}
 		return leastBusySlot;
+	}
+
+	#rememberPreparedPage(slot: PdfiumWorkerSlot, pageIndex: number): void {
+		slot.preparedPages.delete(pageIndex);
+		slot.preparedPages.add(pageIndex);
+		if (slot.preparedPages.size <= MAX_PREPARED_PAGES_PER_WORKER) return;
+		const oldestPageIndex = slot.preparedPages.values().next().value;
+		if (oldestPageIndex !== undefined) slot.preparedPages.delete(oldestPageIndex);
 	}
 
 	#resetSlots(): void {
@@ -363,6 +430,7 @@ export class PdfiumWorkerPool {
 		slot.opening = null;
 		slot.openingController = null;
 		slot.openingConsumers = 0;
+		slot.preparedPages.clear();
 	}
 
 	#assertActive(): void {

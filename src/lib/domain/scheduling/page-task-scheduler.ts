@@ -12,6 +12,7 @@ export interface PageTask<Result> {
 	readonly priority: PageTaskPriority;
 	execute(signal: AbortSignal, priority: PageTaskPriority): Promise<Result>;
 	releaseResult?(result: Result): void;
+	onPriorityChange?(priority: PageTaskPriority): void;
 }
 
 export interface PageTaskSchedulerOptions {
@@ -90,10 +91,10 @@ export class PageTaskScheduler {
 		} else if (scheduled.state === "complete") {
 			return Promise.resolve(this.#createLease(scheduled));
 		} else if (
-			scheduled.state === "queued" &&
+			(scheduled.state === "queued" || scheduled.state === "running") &&
 			getPriorityRank(task.priority) < getPriorityRank(scheduled.priority)
 		) {
-			scheduled.priority = task.priority;
+			this.#promoteTask(scheduled, task.priority);
 		}
 
 		const waiter = this.#createWaiter(scheduled, signal);
@@ -108,12 +109,12 @@ export class PageTaskScheduler {
 		const task = this.#tasks.get(key);
 		if (
 			task === undefined ||
-			task.state !== "queued" ||
+			(task.state !== "queued" && task.state !== "running") ||
 			getPriorityRank(priority) >= getPriorityRank(task.priority)
 		) {
 			return false;
 		}
-		task.priority = priority;
+		this.#promoteTask(task, priority);
 		this.#drain();
 		return true;
 	}
@@ -202,6 +203,20 @@ export class PageTaskScheduler {
 		return (
 			this.#activeBackground < this.options.maximumConcurrent - this.options.reservedVisible
 		);
+	}
+
+	#promoteTask(task: ScheduledTask<unknown>, priority: PageTaskPriority): void {
+		task.priority = priority;
+		if (task.state !== "running") return;
+		if (
+			task.runningPriority !== null &&
+			task.runningPriority !== "visible" &&
+			priority === "visible"
+		) {
+			this.#activeBackground -= 1;
+		}
+		task.runningPriority = priority;
+		task.onPriorityChange?.(priority);
 	}
 
 	async #run<Result>(task: ScheduledTask<Result>): Promise<void> {

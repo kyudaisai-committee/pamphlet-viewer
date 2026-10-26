@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { RangeTransportRequest } from "@/lib/pdfium/range/range-transport";
+
 interface OpenRequest {
 	id: number;
 	type: "open";
 	url: string;
 	wasmUrl: string;
+	useRangeBroker?: boolean;
 }
 
 interface PagePrefetchRequest {
@@ -18,8 +21,34 @@ interface CancelRequest {
 	type: "cancel";
 }
 
-type WorkerRequest = OpenRequest | PagePrefetchRequest;
-type WorkerMessage = WorkerRequest | CancelRequest;
+interface PromoteRequest {
+	id: number;
+	type: "promote";
+	priority: "visible" | "data" | "prerender" | "thumbnail";
+}
+
+interface RenderRequest {
+	id: number;
+	type: "render";
+	pageIndex: number;
+	scale: number;
+	priority: "visible" | "data" | "prerender" | "thumbnail";
+}
+
+interface RangeResponseMessage {
+	type: "range-response";
+	id: number;
+	response: {
+		bytes: ArrayBuffer;
+		totalLength: number;
+		etag: string | null;
+		lastModified: string | null;
+		responseUrl: string;
+	};
+}
+
+type WorkerRequest = OpenRequest | PagePrefetchRequest | RenderRequest;
+type WorkerMessage = WorkerRequest | CancelRequest | PromoteRequest | RangeResponseMessage;
 
 interface WorkerResponse {
 	id: number;
@@ -32,6 +61,13 @@ interface DocumentSessionStub {
 	readonly isPoisoned: boolean;
 	dispose(): void;
 	prefetchPage(pageIndex: number, signal?: AbortSignal): Promise<void>;
+	setPriority?(priority: "visible" | "data" | "prerender" | "thumbnail"): void;
+	renderPage?(
+		pageIndex: number,
+		scale: number,
+		priority: "visible" | "data" | "prerender" | "thumbnail",
+		signal?: AbortSignal,
+	): Promise<{ type: "pixels"; width: number; height: number; pixels: ArrayBuffer }>;
 }
 
 describe("PDF worker document lifecycle", () => {
@@ -344,6 +380,241 @@ describe("PDF worker document lifecycle", () => {
 		expect(prefetchPage).toHaveBeenCalledTimes(2);
 		expect(closeWorker).not.toHaveBeenCalled();
 	});
+
+	it("promotes an active render and its outstanding range request", async () => {
+		let rangeRequester:
+			| ((request: RangeTransportRequest, signal: AbortSignal) => Promise<unknown>)
+			| undefined;
+		const setPriority = vi.fn();
+		const session: DocumentSessionStub = {
+			info: { pageCount: 8, fileLength: 1024 },
+			isPoisoned: false,
+			dispose() {},
+			async prefetchPage() {},
+			setPriority,
+			async renderPage(_pageIndex, _scale, priority, signal) {
+				if (rangeRequester === undefined || signal === undefined) {
+					throw new Error("The PDF range requester was not initialized.");
+				}
+				await rangeRequester(
+					{
+						url: "https://example.test/catalog.pdf",
+						start: 0,
+						requestedEnd: 255,
+						totalLength: null,
+						etag: null,
+						lastModified: null,
+						priority,
+					},
+					signal,
+				);
+				return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
+			},
+		};
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
+			PdfiumDocumentSession: class {
+				static open(
+					_url: string,
+					_wasmUrl: string,
+					_signal: AbortSignal,
+					_cacheLimitBytes: number,
+					requester?: (
+						request: RangeTransportRequest,
+						signal: AbortSignal,
+					) => Promise<unknown>,
+				): Promise<DocumentSessionStub> {
+					rangeRequester = requester;
+					return Promise.resolve(session);
+				}
+			},
+			PdfiumFatalError: class extends Error {},
+		}));
+
+		const messages: unknown[] = [];
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
+		const workerScope = {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerMessage>) => void,
+			) {
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
+			},
+			postMessage(message: unknown): void {
+				messages.push(message);
+			},
+			close() {},
+		};
+		vi.stubGlobal("self", workerScope);
+		await import("./pdfium.worker");
+
+		const send = (request: WorkerMessage): void => {
+			if (dispatch === null)
+				throw new Error("The PDF worker did not register its message handler.");
+			dispatch(request);
+		};
+		send({
+			id: 1,
+			type: "open",
+			url: "https://example.test/catalog.pdf",
+			wasmUrl: "https://example.test/pdfium.wasm",
+			useRangeBroker: true,
+		});
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ type: "opened" })),
+		);
+		send({ id: 2, type: "render", pageIndex: 1, scale: 1, priority: "prerender" });
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ type: "range-request" })),
+		);
+		const rangeRequest = messages.find(isRangeRequest);
+		if (rangeRequest === undefined)
+			throw new Error("The active render did not request a range.");
+		send({ id: 2, type: "promote", priority: "visible" });
+		expect(setPriority).toHaveBeenCalledWith("visible");
+		expect(messages).toContainEqual({
+			type: "range-promote",
+			id: rangeRequest.id,
+			priority: "visible",
+		});
+		send({
+			type: "range-response",
+			id: rangeRequest.id,
+			response: {
+				bytes: new ArrayBuffer(256),
+				totalLength: 1024,
+				etag: '"catalog-v1"',
+				lastModified: null,
+				responseUrl: "https://example.test/catalog.pdf",
+			},
+		});
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ id: 2, type: "rendered" })),
+		);
+	});
+
+	it("cleans up failed host posts and skips an already-cancelled range request", async () => {
+		let dispatch: ((request: WorkerMessage) => void) | null = null;
+		let send: ((request: WorkerMessage) => void) | null = null;
+		let shouldThrowRangePost = true;
+		let cancelBeforeRange = false;
+		let activeRenderId = 2;
+		let rangeRequester:
+			| ((request: RangeTransportRequest, signal: AbortSignal) => Promise<unknown>)
+			| undefined;
+		const session: DocumentSessionStub = {
+			info: { pageCount: 2, fileLength: 1024 },
+			isPoisoned: false,
+			dispose() {},
+			async prefetchPage() {},
+			async renderPage(_pageIndex, _scale, priority, signal) {
+				if (rangeRequester === undefined || signal === undefined) {
+					throw new Error("The PDF range requester was not initialized.");
+				}
+				if (cancelBeforeRange) send?.({ id: activeRenderId, type: "cancel" });
+				await rangeRequester(
+					{
+						url: "https://example.test/catalog.pdf",
+						start: 0,
+						requestedEnd: 255,
+						totalLength: null,
+						etag: null,
+						lastModified: null,
+						priority,
+					},
+					signal,
+				);
+				return { type: "pixels", width: 1, height: 1, pixels: new ArrayBuffer(4) };
+			},
+		};
+		vi.doMock("@/lib/pdfium/document/pdfium-document", () => ({
+			PdfiumDocumentSession: class {
+				static open(
+					_url: string,
+					_wasmUrl: string,
+					_signal: AbortSignal,
+					_cacheLimitBytes: number,
+					requester?: (
+						request: RangeTransportRequest,
+						signal: AbortSignal,
+					) => Promise<unknown>,
+				): Promise<DocumentSessionStub> {
+					rangeRequester = requester;
+					return Promise.resolve(session);
+				}
+			},
+			PdfiumFatalError: class extends Error {},
+		}));
+
+		const messages: unknown[] = [];
+		const workerScope = {
+			addEventListener(
+				_type: "message",
+				listener: (event: MessageEvent<WorkerMessage>) => void,
+			) {
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerMessage>);
+			},
+			postMessage(message: unknown): void {
+				if (isRangeRequest(message) && shouldThrowRangePost) {
+					shouldThrowRangePost = false;
+					throw new Error("The host could not receive the range request.");
+				}
+				messages.push(message);
+			},
+			close() {},
+		};
+		vi.stubGlobal("self", workerScope);
+		await import("./pdfium.worker");
+
+		send = (request) => {
+			if (dispatch === null)
+				throw new Error("The PDF worker did not register its message handler.");
+			dispatch(request);
+		};
+		send({
+			id: 1,
+			type: "open",
+			url: "https://example.test/catalog.pdf",
+			wasmUrl: "https://example.test/pdfium.wasm",
+			useRangeBroker: true,
+		});
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ type: "opened" })),
+		);
+
+		send({ id: 2, type: "render", pageIndex: 0, scale: 1, priority: "visible" });
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ id: 2, type: "error" })),
+		);
+		expect(messages.filter(isRangeRequest)).toHaveLength(0);
+
+		activeRenderId = 3;
+		send({ id: activeRenderId, type: "render", pageIndex: 0, scale: 1, priority: "visible" });
+		await vi.waitFor(() => expect(messages.filter(isRangeRequest)).toHaveLength(1));
+		const rangeRequest = messages.find(isRangeRequest);
+		if (rangeRequest === undefined) throw new Error("The retry did not request a range.");
+		send({
+			type: "range-response",
+			id: rangeRequest.id,
+			response: {
+				bytes: new ArrayBuffer(256),
+				totalLength: 1024,
+				etag: '"catalog-v1"',
+				lastModified: null,
+				responseUrl: "https://example.test/catalog.pdf",
+			},
+		});
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ id: 3, type: "rendered" })),
+		);
+
+		activeRenderId = 4;
+		cancelBeforeRange = true;
+		send({ id: activeRenderId, type: "render", pageIndex: 1, scale: 1, priority: "visible" });
+		await vi.waitFor(() =>
+			expect(messages).toContainEqual(expect.objectContaining({ id: 4, type: "error" })),
+		);
+		expect(messages.filter(isRangeRequest)).toHaveLength(1);
+	});
 });
 
 function createDeferred<Value>(): { promise: Promise<Value>; resolve(value: Value): void } {
@@ -352,4 +623,15 @@ function createDeferred<Value>(): { promise: Promise<Value>; resolve(value: Valu
 		resolve = complete;
 	});
 	return { promise, resolve };
+}
+
+function isRangeRequest(value: unknown): value is { id: number; type: "range-request" } {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"id" in value &&
+		typeof value.id === "number" &&
+		"type" in value &&
+		value.type === "range-request"
+	);
 }

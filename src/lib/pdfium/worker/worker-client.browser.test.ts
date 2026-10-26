@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PageSourceUnavailableError } from "@/lib/document/page-source";
 import { PdfiumBackend } from "@/lib/document/pdfium-backend";
+import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
 
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-client";
 
@@ -15,6 +16,7 @@ class ControlledWorker extends EventTarget {
 	static instances: ControlledWorker[] = [];
 	readonly requests: WorkerRequestRecord[] = [];
 	terminateCalls = 0;
+	postMessageError: Error | null = null;
 
 	constructor() {
 		super();
@@ -22,6 +24,7 @@ class ControlledWorker extends EventTarget {
 	}
 
 	postMessage(message: unknown): void {
+		if (this.postMessageError !== null) throw this.postMessageError;
 		if (!isWorkerRequestRecord(message)) throw new Error("Unexpected worker request.");
 		this.requests.push(message);
 	}
@@ -231,6 +234,69 @@ describe("PdfiumWorkerClient terminal state", () => {
 		await expect(open).rejects.toMatchObject({ name: "AbortError" });
 		await expect(client.open("brochure.pdf")).rejects.toMatchObject({ name: "AbortError" });
 		expect(worker.terminateCalls).toBe(1);
+	});
+
+	it.each(["terminate", "error"] as const)(
+		"ignores late range work and releases late visuals after %s",
+		async (terminalAction) => {
+			const fetch = vi.fn();
+			vi.stubGlobal("fetch", fetch);
+			const broker = new PdfRangeBroker("https://example.test/catalog.pdf");
+			const client = new PdfiumWorkerClient(broker);
+			const worker = getWorker();
+			if (terminalAction === "terminate") client.terminate();
+			else worker.dispatchEvent(new ErrorEvent("error", { message: "The worker crashed." }));
+
+			worker.reply({
+				type: "range-request",
+				id: 40,
+				request: {
+					url: "https://example.test/catalog.pdf",
+					start: 0,
+					requestedEnd: 255,
+					totalLength: null,
+					etag: null,
+					lastModified: null,
+					priority: "visible",
+				},
+			});
+			const close = vi.fn();
+			worker.reply({
+				id: 41,
+				type: "rendered",
+				visual: {
+					type: "bitmap",
+					width: 10,
+					height: 10,
+					bitmap: { close } as unknown as ImageBitmap,
+				},
+			});
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			expect(fetch).not.toHaveBeenCalled();
+			expect(close).toHaveBeenCalledOnce();
+			broker.dispose();
+		},
+	);
+
+	it("cleans up the pending request and abort listener after postMessage throws", async () => {
+		const client = new PdfiumWorkerClient();
+		const worker = getWorker();
+		const controller = new AbortController();
+		const postError = new Error("The worker could not receive a message.");
+		worker.postMessageError = postError;
+		const firstOpen = client.open("catalog.pdf", true, controller.signal);
+		await expect(firstOpen).rejects.toBe(postError);
+
+		worker.postMessageError = null;
+		controller.abort();
+		const secondOpen = client.open("catalog.pdf");
+		const request = worker.requests[0];
+		if (request === undefined) throw new Error("The retry open request was not posted.");
+		expect(worker.requests).toHaveLength(1);
+		worker.reply({ id: request.id, type: "opened", pageCount: 1, fileLength: 256 });
+		await expect(secondOpen).resolves.toMatchObject({ pageCount: 1 });
+		client.terminate();
 	});
 });
 

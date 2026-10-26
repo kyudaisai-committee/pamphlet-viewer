@@ -8,6 +8,7 @@ import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
 import { PdfRepresentationChangedError } from "@/lib/pdfium/range/range-request";
 import type {
 	RangeWorkerCancelRequest,
+	RangeWorkerPromoteRequest,
 	RangeWorkerRequest,
 	RangeWorkerResponse,
 } from "@/lib/pdfium/range/range-transport";
@@ -125,6 +126,7 @@ type WorkerMessage =
 	| WorkerResponse
 	| RangeWorkerRequest
 	| RangeWorkerCancelRequest
+	| RangeWorkerPromoteRequest
 	| { type: "bootstrap-ready" };
 type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 	? OpenedResponse
@@ -139,6 +141,7 @@ type ResponseFor<Request extends WorkerRequest> = Request extends OpenRequest
 					: RenderedResponse;
 
 interface PendingRequest {
+	request: WorkerRequest;
 	resolve(response: WorkerResponse): void;
 	reject(error: Error): void;
 	priority: PageTaskPriority | null;
@@ -149,6 +152,7 @@ interface PendingRequest {
 
 interface PendingRangeRequest {
 	controller: AbortController;
+	request: RangeWorkerRequest["request"];
 }
 
 export class PdfiumWorkerClient {
@@ -281,6 +285,28 @@ export class PdfiumWorkerClient {
 		}
 	}
 
+	promoteRender(pageIndex: number, scale: number, priority: PageTaskPriority): boolean {
+		let promoted = false;
+		for (const [id, pending] of this.#pending) {
+			const request = pending.request;
+			if (
+				request.type !== "render" ||
+				request.pageIndex !== pageIndex ||
+				request.scale !== scale ||
+				pending.cancellationRequested ||
+				pending.signal?.aborted === true ||
+				pending.priority === null ||
+				getPriorityRank(priority) >= getPriorityRank(pending.priority)
+			) {
+				continue;
+			}
+			pending.priority = priority;
+			promoted = true;
+			this.#worker.postMessage({ type: "promote", id, priority });
+		}
+		return promoted;
+	}
+
 	terminate(): void {
 		if (this.#state !== "active") return;
 		this.#state = "terminated";
@@ -303,6 +329,7 @@ export class PdfiumWorkerClient {
 		this.#nextId += 1;
 		return new Promise<ResponseFor<Request>>((resolve, reject) => {
 			const pending: PendingRequest = {
+				request,
 				resolve: (response) => {
 					if (response.type === "error") {
 						reject(createWorkerError(response));
@@ -321,19 +348,43 @@ export class PdfiumWorkerClient {
 				pending.abortListener = () => this.#requestCancellation(id, pending);
 				signal.addEventListener("abort", pending.abortListener, { once: true });
 			}
-			this.#worker.postMessage({ id, ...request });
+			try {
+				this.#worker.postMessage({ id, ...request });
+			} catch (error) {
+				this.#pending.delete(id);
+				this.#removeAbortListener(pending);
+				reject(error);
+				return;
+			}
 			if (signal?.aborted) this.#requestCancellation(id, pending);
 		});
 	}
 
 	#onMessage(response: WorkerMessage): void {
 		if (response.type === "bootstrap-ready") return;
+		if (this.#state !== "active") {
+			if (
+				response.type === "rendered" ||
+				response.type === "thumbnail" ||
+				response.type === "thumbnail-prefetch"
+			) {
+				releaseWorkerResponse(response);
+			}
+			return;
+		}
 		if (response.type === "range-cancel") {
 			this.#pendingRanges.get(response.id)?.controller.abort();
 			return;
 		}
 		if (response.type === "range-request") {
 			void this.#handleRangeRequest(response);
+			return;
+		}
+		if (response.type === "range-promote") {
+			const pending = this.#pendingRanges.get(response.id);
+			if (pending !== undefined) {
+				this.rangeBroker?.promoteRequest(pending.request, response.priority);
+			}
 			return;
 		}
 		if (response.type === "error" && response.fatal === true) {
@@ -363,7 +414,7 @@ export class PdfiumWorkerClient {
 			return;
 		}
 		const controller = new AbortController();
-		this.#pendingRanges.set(message.id, { controller });
+		this.#pendingRanges.set(message.id, { controller, request: message.request });
 		try {
 			const response = await broker.request(message.request, controller.signal);
 			if (controller.signal.aborted || this.#state !== "active") return;
@@ -420,7 +471,13 @@ export class PdfiumWorkerClient {
 	#requestCancellation(id: number, pending: PendingRequest): void {
 		if (pending.cancellationRequested || this.#pending.get(id) !== pending) return;
 		pending.cancellationRequested = true;
-		this.#worker.postMessage({ type: "cancel", id });
+		try {
+			this.#worker.postMessage({ type: "cancel", id });
+		} catch (error) {
+			this.#pending.delete(id);
+			this.#removeAbortListener(pending);
+			pending.reject(error instanceof Error ? error : new Error("The PDF worker stopped."));
+		}
 	}
 
 	#removeAbortListener(pending: PendingRequest): void {
@@ -456,6 +513,13 @@ function getRequestPriority(request: WorkerRequest): PageTaskPriority | null {
 	if (request.type === "page-prefetch") return "data";
 	if (request.type === "thumbnail" || request.type === "thumbnail-prefetch") return "thumbnail";
 	return null;
+}
+
+function getPriorityRank(priority: PageTaskPriority): number {
+	if (priority === "visible") return 0;
+	if (priority === "data") return 1;
+	if (priority === "prerender") return 2;
+	return 3;
 }
 
 function createWorkerError(response: ErrorResponse): Error {

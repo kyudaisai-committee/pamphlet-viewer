@@ -86,6 +86,10 @@ export class PdfiumDocumentSession {
 		return this.#poisoned || this.#availability?.isPoisoned === true;
 	}
 
+	setPriority(priority: PageTaskPriority): void {
+		this.loader.setPriority(priority);
+	}
+
 	async getPageSize(
 		pageIndex: number,
 		priority: PageTaskPriority = "visible",

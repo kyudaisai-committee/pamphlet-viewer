@@ -29,6 +29,12 @@ export interface RangeWorkerCancelRequest {
 	readonly id: number;
 }
 
+export interface RangeWorkerPromoteRequest {
+	readonly type: "range-promote";
+	readonly id: number;
+	readonly priority: PageTaskPriority;
+}
+
 export interface RangeWorkerResponse {
 	readonly type: "range-response";
 	readonly id: number;
