@@ -1,5 +1,12 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.0-alpha.8
+
+### Patch Changes
+
+- 2b0a494: 日本語と英語の表示に対応し、ビューアごとに表示言語を選べるようにしました。
+- 6aceac6: PDFに埋め込みサムネイルがある場合は優先して使い、利用できないときはページを縮小描画します。
+
 ## 0.1.0-alpha.7
 
 ### Patch Changes
