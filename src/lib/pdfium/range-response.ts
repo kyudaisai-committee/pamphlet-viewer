@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export interface ContentRange {
 	start: number;
 	end: number;

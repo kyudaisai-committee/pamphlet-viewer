@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { bookmarkStore } from "./bookmark-store";
 
 export class ViewerBookmarks {

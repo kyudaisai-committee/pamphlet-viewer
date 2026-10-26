@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PamphletViewerConfig } from "@/lib/public-api";
 
 type ConfigListener = (config: PamphletViewerConfig) => void;

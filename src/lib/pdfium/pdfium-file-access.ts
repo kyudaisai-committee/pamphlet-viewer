@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 const FILE_ACCESS_SIZE = 12;
 const FILE_AVAIL_SIZE = 8;
 const DOWNLOAD_HINTS_SIZE = 8;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 type FullscreenMode = "none" | "native" | "popover" | "fixed";
 
 export class ReaderFullscreenController {

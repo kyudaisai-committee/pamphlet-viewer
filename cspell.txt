@@ -27,3 +27,7 @@ mdsvex
 vite
 kyudaisai
 unpremultiply
+kurage
+umitsukidev
+Lucide
+lucide

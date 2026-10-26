@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { GesturePoint, ZoomAnchor } from "../domain/reader-gesture";
 
 export function captureZoomAnchor(pageArea: HTMLElement, point: GesturePoint): ZoomAnchor | null {

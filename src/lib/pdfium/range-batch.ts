@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export interface RangeBatch {
 	startIndex: number;
 	chunkIndexes: number[];

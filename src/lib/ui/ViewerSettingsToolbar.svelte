@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import type { FitMode, LayoutMode } from "../domain/layout";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
