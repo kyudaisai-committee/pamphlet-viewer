@@ -2,7 +2,7 @@
 
 import { createRangeBatchPlan, type RangeBatch } from "./range-batch";
 import { RangeChunkCache } from "./range-chunk-cache";
-import { requestPdfRange } from "./range-request";
+import { PdfRepresentationChangedError, requestPdfRange } from "./range-request";
 
 export const RANGE_CHUNK_SIZE = 256 * 1024;
 export const RANGE_CACHE_LIMIT = 64 * 1024 * 1024;
@@ -243,7 +243,9 @@ export class PdfRangeLoader {
 			(this.#etag !== null && this.#etag !== response.etag) ||
 			(this.#lastModified !== null && this.#lastModified !== response.lastModified)
 		) {
-			throw new Error("The PDF representation changed while it was being loaded.");
+			throw new PdfRepresentationChangedError(
+				"The PDF representation changed while it was being loaded.",
+			);
 		}
 		if (this.#totalLength === null && response.responseUrl !== "") {
 			this.#requestUrl = response.responseUrl;

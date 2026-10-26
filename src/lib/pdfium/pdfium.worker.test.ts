@@ -143,4 +143,58 @@ describe("PDF worker document lifecycle", () => {
 		expect(prefetchPage).toHaveBeenCalledWith(6);
 		expect(responses[1]).toMatchObject({ id: 2, type: "page-prefetch" });
 	});
+
+	it("retires the worker when the server changes the PDF representation", async () => {
+		const { PdfRepresentationChangedError } = await import("./range-request");
+		const session: DocumentSessionStub = {
+			info: { pageCount: 4, fileLength: 1024 },
+			isPoisoned: false,
+			dispose: vi.fn(),
+			async prefetchPage() {
+				throw new PdfRepresentationChangedError("The PDF representation changed.");
+			},
+		};
+		vi.doMock("./pdfium-document", () => ({
+			PdfiumDocumentSession: class {
+				static open(): Promise<DocumentSessionStub> {
+					return Promise.resolve(session);
+				}
+			},
+			PdfiumFatalError: class extends Error {},
+		}));
+
+		const responses: WorkerResponse[] = [];
+		const closeWorker = vi.fn();
+		let dispatch: ((request: WorkerRequest) => void) | null = null;
+		const workerScope = {
+			addEventListener(_type: "message", listener: (event: MessageEvent<WorkerRequest>) => void) {
+				dispatch = (request) => listener({ data: request } as MessageEvent<WorkerRequest>);
+			},
+			postMessage(message: WorkerResponse): void {
+				responses.push(message);
+			},
+			close: closeWorker,
+		};
+		vi.stubGlobal("self", workerScope);
+		await import("./pdfium.worker");
+
+		const send = (request: WorkerRequest): void => {
+			if (dispatch === null)
+				throw new Error("The PDF worker did not register its message handler.");
+			dispatch(request);
+		};
+		send({
+			id: 1,
+			type: "open",
+			url: "https://example.test/brochure.pdf",
+			wasmUrl: "https://example.test/pdfium.wasm",
+		});
+		await vi.waitFor(() => expect(responses).toHaveLength(1));
+		send({ id: 2, type: "page-prefetch", pageIndex: 2 });
+		await vi.waitFor(() => expect(responses).toHaveLength(2));
+
+		expect(responses[1]).toMatchObject({ id: 2, type: "error", fatal: true });
+		expect(session.dispose).toHaveBeenCalledOnce();
+		expect(closeWorker).toHaveBeenCalledOnce();
+	});
 });

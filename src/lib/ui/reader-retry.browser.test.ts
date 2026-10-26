@@ -19,7 +19,7 @@ afterEach(() => {
 	resetControlledWorkers();
 });
 
-test("retries a fatal PDF worker through the viewer and restores page, zoom, and DPR", async () => {
+test("reopens an updated PDF after a fatal range request and renders its new document", async () => {
 	const dprDescriptor = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
 	Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 2 });
 	vi.stubGlobal("Worker", ControlledWorker);
@@ -30,6 +30,10 @@ test("retries a fatal PDF worker through the viewer and restores page, zoom, and
 		element.style.height = "620px";
 		element.layout = "single";
 		element.backend = new PdfiumBackend();
+		const loadedPageCounts: number[] = [];
+		element.addEventListener("documentload", (event) =>
+			loadedPageCounts.push(event.detail.pageCount),
+		);
 		const ready = waitForViewerReady(element);
 		document.body.append(element);
 		await ready;
@@ -43,7 +47,7 @@ test("retries a fatal PDF worker through the viewer and restores page, zoom, and
 		failedWorker.reply({
 			id: failedRender.id,
 			type: "error",
-			message: "The PDF worker trapped.",
+			message: "The PDF representation changed.",
 			fatal: true,
 		});
 
@@ -68,8 +72,8 @@ test("retries a fatal PDF worker through the viewer and restores page, zoom, and
 		recoveredWorker.reply({
 			id: recoveredOpen.id,
 			type: "opened",
-			pageCount: 4,
-			fileLength: 8192,
+			pageCount: 5,
+			fileLength: 10240,
 		});
 		const recoveredRender = await answerPageSizeRequestsUntilRender(recoveredWorker);
 		expect(
@@ -94,12 +98,19 @@ test("retries a fatal PDF worker through the viewer and restores page, zoom, and
 				type: "pixels",
 				width: 1,
 				height: 1,
-				pixels: new Uint8Array([38, 42, 45, 255]).buffer,
+				pixels: new Uint8Array([38, 42, 105, 255]).buffer,
 			},
 		});
 		await expect
 			.poll(() => shadowRoot.querySelector('.page-frame[data-page-index="1"]'))
 			.not.toBeNull();
+		await expect.poll(() => loadedPageCounts).toEqual([4, 5]);
+		const canvas = shadowRoot.querySelector<HTMLCanvasElement>(
+			'.page-frame[data-page-index="1"] canvas.page-canvas',
+		);
+		if (canvas === null) throw new Error("The updated PDF page was not rendered.");
+		const renderedPixel = canvas.getContext("2d")?.getImageData(0, 0, 1, 1).data;
+		expect(renderedPixel?.[2]).toBe(105);
 		expect(failedWorker.terminateCalls).toBe(1);
 		expect(recoveredWorker.terminateCalls).toBe(0);
 	} finally {

@@ -2,6 +2,7 @@
 
 import type { PageSize, PageVisual } from "../document/page-source";
 import { PdfiumDocumentSession, PdfiumFatalError } from "./pdfium-document";
+import { PdfRepresentationChangedError } from "./range-request";
 
 interface OpenRequest {
 	id: number;
@@ -159,7 +160,10 @@ async function processRequest(request: WorkerRequest): Promise<void> {
 		const transfer = visual.type === "pixels" ? [visual.pixels] : [];
 		workerScope.postMessage(response, transfer);
 	} catch (error) {
-		const fatal = error instanceof PdfiumFatalError || documentSession?.isPoisoned === true;
+		const fatal =
+			error instanceof PdfiumFatalError ||
+			error instanceof PdfRepresentationChangedError ||
+			documentSession?.isPoisoned === true;
 		if (fatal) {
 			documentSession?.dispose();
 			documentSession = null;

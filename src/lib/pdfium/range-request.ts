@@ -5,6 +5,13 @@ import { cancelResponseBody, parseContentRange, readBoundedResponseBody } from "
 export const RANGE_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_FILE_LENGTH = 0xffff_ffff;
 
+export class PdfRepresentationChangedError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = "PdfRepresentationChangedError";
+	}
+}
+
 export interface PdfRangeRequestParameters {
 	url: string;
 	signal: AbortSignal;
@@ -48,6 +55,11 @@ export async function requestPdfRange(
 		const response = await fetch(url, { headers, signal: requestController.signal });
 		if (response.status !== 206) {
 			cancelResponseBody(response);
+			if (response.status === 200) {
+				throw new PdfRepresentationChangedError(
+					"The server returned HTTP 200 to a byte-range request; the PDF representation changed.",
+				);
+			}
 			throw new Error(`The server returned HTTP ${response.status} to a byte-range request.`);
 		}
 
@@ -67,14 +79,16 @@ export async function requestPdfRange(
 		}
 		if (totalLength !== null && range.total !== totalLength) {
 			cancelResponseBody(response);
-			throw new Error("The PDF length changed while it was being loaded.");
+			throw new PdfRepresentationChangedError("The PDF length changed while it was being loaded.");
 		}
 		if (
 			(etag !== null && response.headers.get("ETag") !== etag) ||
 			(lastModified !== null && response.headers.get("Last-Modified") !== lastModified)
 		) {
 			cancelResponseBody(response);
-			throw new Error("The PDF representation changed while it was being loaded.");
+			throw new PdfRepresentationChangedError(
+				"The PDF representation changed while it was being loaded.",
+			);
 		}
 
 		const expectedLength = range.end - range.start + 1;
