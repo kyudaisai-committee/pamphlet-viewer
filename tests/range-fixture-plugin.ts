@@ -75,7 +75,11 @@ export function rangeFixturePlugin(): Plugin {
 		"/__annotated-range-metrics",
 	);
 	const embeddedThumbnailFixture = createFixtureRecord(
-		createPdfFixture({ thumbnailPageNumbers: [1], midDocumentFillerBytes: 0 }),
+		createPdfFixture({
+			thumbnailPageNumbers: [1],
+			indexedThumbnailPageNumbers: [1],
+			midDocumentFillerBytes: 0,
+		}),
 		"/__embedded-thumbnail-range-metrics",
 	);
 	let redirectRequests = 0;

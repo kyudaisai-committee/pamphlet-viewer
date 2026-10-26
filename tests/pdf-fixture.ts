@@ -11,6 +11,7 @@ export interface PdfFixtureOptions {
 	midDocumentFillerBytes?: number;
 	rotatedCropPageNumber?: number;
 	thumbnailPageNumbers?: readonly number[];
+	indexedThumbnailPageNumbers?: readonly number[];
 	imagePageNumbers?: readonly number[];
 }
 
@@ -18,6 +19,9 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	const chunks: Buffer[] = [Buffer.from("%PDF-1.7\n", "ascii")];
 	const offsets: number[] = [0];
 	const thumbnailPageNumbers = getThumbnailPageNumbers(options.thumbnailPageNumbers);
+	const indexedThumbnailPageNumbers = new Set(
+		getThumbnailPageNumbers(options.indexedThumbnailPageNumbers),
+	);
 	const imagePageNumbers = getImagePageNumbers(options.imagePageNumbers);
 	const thumbnailObjectByPageNumber = new Map(
 		thumbnailPageNumbers.map((pageNumber, index) => [pageNumber, 3 + PAGE_COUNT * 2 + index]),
@@ -96,10 +100,13 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	for (const pageNumber of thumbnailPageNumbers) {
 		const thumbnailObject = thumbnailObjectByPageNumber.get(pageNumber);
 		if (thumbnailObject === undefined) continue;
-		const imageData = "00FF00".repeat(12);
+		const indexed = indexedThumbnailPageNumbers.has(pageNumber);
+		const imageData = indexed ? "0001".repeat(6) : "00FF00".repeat(12);
 		const stream = `${imageData}>\n`;
 		const thumbnailBody = [
-			"<< /Type /XObject /Subtype /Image /Width 3 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8",
+			indexed
+				? "<< /Type /XObject /Subtype /Image /Width 3 /Height 4 /ColorSpace [/Indexed /DeviceRGB 1 <FF00000000FF>] /BitsPerComponent 8"
+				: "<< /Type /XObject /Subtype /Image /Width 3 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8",
 			`/Filter /ASCIIHexDecode /Length ${Buffer.byteLength(stream, "ascii")} >>`,
 			"stream",
 			stream.trimEnd(),

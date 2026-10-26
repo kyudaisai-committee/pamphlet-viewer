@@ -4,7 +4,7 @@ import type { PageVisual } from "../document/page-source";
 import { PdfiumBackend } from "../document/pdfium-backend";
 import { PageRenderQueue } from "../domain/page-render-queue";
 
-test("uses a PDF's embedded thumbnail through PDFium without a page-size render", async () => {
+test("uses a PDFium-rendered color thumbnail without rendering the full page", async () => {
 	const { queue, dispose } = await openQueue("/__embedded-thumbnail-range-fixture.pdf");
 	try {
 		const visual = await queue.render(0, 0.3, "thumbnail");
@@ -13,7 +13,8 @@ test("uses a PDF's embedded thumbnail through PDFium without a page-size render"
 		if (visual.type !== "pixels") throw new Error("PDFium should return thumbnail pixels.");
 		expect(visual.width).toBe(3);
 		expect(visual.height).toBe(4);
-		expect(getPixel(visual, 1, 2)).toEqual([0, 255, 0, 255]);
+		expect(getPixel(visual, 0, 0)).toEqual([255, 0, 0, 255]);
+		expect(getPixel(visual, 1, 0)).toEqual([0, 0, 255, 255]);
 	} finally {
 		dispose();
 	}
