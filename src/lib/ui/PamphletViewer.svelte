@@ -321,6 +321,7 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 			thumbnailPageIndexes = [];
 			controller.closeThumbnails();
 		}
+		if (event.type === "pagechange") page = event.detail.page;
 		const host = getViewerHost();
 		host?.dispatchEvent(
 			new CustomEvent(event.type, {
@@ -329,7 +330,6 @@ import { findCurrentChapter, resolveChapters } from "../domain/viewer-config";
 				composed: true,
 			}),
 		);
-		if (event.type === "pagechange") page = event.detail.page;
 	}
 
 	function getViewerHost(): HTMLElement | null {

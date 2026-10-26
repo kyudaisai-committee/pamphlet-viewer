@@ -72,6 +72,30 @@ test("toolbar zoom, slider, and reset keep the page-area center in place", async
 	await expect.poll(() => pagePointError(pageArea, center, initialRatio)).toBeLessThanOrEqual(2);
 });
 
+test("keeps a page assigned synchronously by a pagechange listener", async () => {
+	await import("../entry");
+	const element = createViewer(createBackend(undefined, 3));
+	const firstPage = waitForPageChange(element);
+	document.body.append(element);
+	await firstPage;
+
+	const pageChanges: number[] = [];
+	element.addEventListener("pagechange", (event) => {
+		pageChanges.push(event.detail.page);
+		if (event.detail.page === 2) element.page = 3;
+	});
+
+	const shadowRoot = getShadowRoot(element);
+	const nextButton = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="次のページ"]');
+	if (nextButton === null) throw new Error("The next-page button was not rendered.");
+	nextButton.click();
+
+	await expect.poll(() => pageChanges).toEqual([2, 3]);
+	await expect.poll(() => element.page).toBe(3);
+	await expect.poll(() => element.getAttribute("page")).toBe("3");
+	await expect.poll(() => getFrame(getPageArea(shadowRoot)).dataset.pageIndex).toBe("2");
+});
+
 test.each([390, 520, 700])(
 	"Ctrl-wheel and pinch zoom preserve the pointer or gesture center in a %i pixel host",
 	async (width) => {
