@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export interface PageSize {
 	width: number;
 	height: number;
@@ -12,6 +14,7 @@ export type PageVisual =
 export interface PageSource {
 	readonly pageCount: number;
 	getPageSize(pageIndex: number): Promise<PageSize>;
+	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual>;
 	dispose(): void | Promise<void>;
 }

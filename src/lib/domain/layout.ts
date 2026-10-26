@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PageSize } from "../document/page-source";
 
 export const AUTO_SPREAD_MIN_WIDTH = 760;

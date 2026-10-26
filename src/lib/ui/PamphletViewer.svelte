@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <svelte:options
 	customElement={{
 		props: {

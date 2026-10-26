@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PageSource, PageVisual } from "../document/page-source";
 import { PageSourceUnavailableError } from "../document/page-source";
 

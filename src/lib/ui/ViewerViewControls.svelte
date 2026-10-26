@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import { Maximize2Icon, Minimize2Icon } from "@lucide/svelte";
 

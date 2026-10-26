@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { cancelResponseBody, parseContentRange, readBoundedResponseBody } from "./range-response";
 
 export const RANGE_REQUEST_TIMEOUT_MS = 30_000;

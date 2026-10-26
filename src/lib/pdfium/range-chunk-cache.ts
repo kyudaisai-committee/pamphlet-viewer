@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export class RangeChunkCache {
 	#chunks = new Map<number, Uint8Array>();
 	#byteLength = 0;

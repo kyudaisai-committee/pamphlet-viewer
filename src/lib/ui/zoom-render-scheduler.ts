@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 export const ZOOM_RENDER_DELAY_MS = 130;
 
 export class ZoomRenderScheduler {

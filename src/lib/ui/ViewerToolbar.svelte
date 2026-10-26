@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import type { PamphletChapter } from "@/lib/public-api";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";

@@ -1,12 +1,17 @@
 {
 	"name": "@kyudaisai/pamphlet-viewer",
 	"version": "0.1.0-alpha.7",
+	"license": "MIT",
+	"author": "九大祭実行委員会, kurage (@umitsukidev)",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/kyudaisai-committee/pamphlet-viewer.git"
 	},
 	"files": [
-		"dist/library"
+		"dist/library",
+		"licenses",
+		"NOTICE",
+		"THIRD_PARTY_NOTICES.txt"
 	],
 	"type": "module",
 	"main": "./dist/library/pamphlet-viewer.js",
@@ -38,16 +43,14 @@
 		"prepare": "lefthook install",
 		"prepack": "pnpm build:library"
 	},
-	"dependencies": {
-		"@embedpdf/pdfium": "2.15.1",
-		"@lucide/svelte": "^1.60.0"
-	},
 	"devDependencies": {
 		"@changesets/cli": "^3.0.3",
+		"@embedpdf/pdfium": "2.15.1",
 		"@eslint/js": "^10.0.1",
 		"@inlang/paraglide-js": "2.29.1",
 		"@inlang/plugin-m-function-matcher": "2.3.0",
 		"@inlang/plugin-message-format": "4.5.0",
+		"@lucide/svelte": "^1.60.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tsconfig/svelte": "^5.0.8",
 		"@types/node": "^24.19.2",

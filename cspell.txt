@@ -7,6 +7,8 @@ Annot
 Annots
 FILEACCESS
 BGRA
+BGRX
+PREMUL
 RGBA
 HEAPU8
 endobj
@@ -26,3 +28,8 @@ vite
 kyudaisai
 Paraglide
 Inlang
+unpremultiply
+kurage
+umitsukidev
+Lucide
+lucide

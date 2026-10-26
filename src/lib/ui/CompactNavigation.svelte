@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import { BookmarkCheckIcon, BookmarkIcon } from "@lucide/svelte";
 

@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <script lang="ts">
 	import type { ViewerPhase } from "../domain/viewer-controller.svelte";
 	import { useViewerMessages } from "../i18n/viewer-messages-context.svelte";

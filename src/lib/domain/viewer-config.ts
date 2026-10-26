@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import type { PamphletChapter } from "../public-api";
 
 export function resolveChapters(config: unknown, pageCount: number): PamphletChapter[] {
