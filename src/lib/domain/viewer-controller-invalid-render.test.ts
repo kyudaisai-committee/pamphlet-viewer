@@ -58,9 +58,12 @@ describe("ViewerController invalid render requests", () => {
 	);
 
 	test.each(["invalid-page", "invalid-option"] as const)(
-		"clears a waiting request after %s so the same input can be retried",
+		"ignores page-size results after %s and lets the input be retried",
 		async (invalidState) => {
-			const firstPageSize = createDeferred<{ width: number; height: number }>();
+			const firstPageSize = createDeferred<{
+				width: number;
+				height: number;
+			}>();
 			let pageSizeCalls = 0;
 			const getPageSize = vi.fn(() => {
 				pageSizeCalls += 1;
@@ -92,12 +95,12 @@ describe("ViewerController invalid render requests", () => {
 
 			firstPageSize.resolve({ width: 300, height: 400 });
 			await flushPendingWork();
-			expect(getPageSize).toHaveBeenCalledOnce();
+			expect(getPageSize).toHaveBeenCalledTimes(2);
 			expect(renderPage).not.toHaveBeenCalled();
 
 			controller.requestRender(waitingInput);
 			await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
-			expect(getPageSize).toHaveBeenCalledTimes(2);
+			expect(getPageSize).toHaveBeenCalledTimes(3);
 			expect(renderPage).toHaveBeenCalledOnce();
 			expect(controller.failure).toBeNull();
 			controller.dispose();
