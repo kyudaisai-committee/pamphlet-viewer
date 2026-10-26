@@ -1,0 +1,104 @@
+import { expect, test, vi } from "vitest";
+
+import { PageTaskScheduler } from "./page-task-scheduler";
+
+test("runs queued work by priority and promotes a shared queued task", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const first = createDeferred<string>();
+	const calls: string[] = [];
+	const active = scheduler.schedule({
+		key: "active",
+		priority: "visible",
+		execute: () => first.promise,
+	});
+	const background = scheduler.schedule({
+		key: "neighbor:2",
+		priority: "prerender",
+		execute: async () => {
+			calls.push("neighbor");
+			return "neighbor";
+		},
+	});
+	const visible = scheduler.schedule({
+		key: "visible:3",
+		priority: "visible",
+		execute: async () => {
+			calls.push("visible");
+			return "visible";
+		},
+	});
+	const promoted = scheduler.schedule({
+		key: "neighbor:2",
+		priority: "visible",
+		execute: async () => {
+			calls.push("duplicate");
+			return "duplicate";
+		},
+	});
+
+	first.resolve("active");
+	const leases = await Promise.all([active, visible, background, promoted]);
+	expect(calls).toEqual(["neighbor", "visible"]);
+	expect(leases[2]?.value).toBe("neighbor");
+	expect(leases[3]?.value).toBe("neighbor");
+	for (const lease of leases) lease?.release();
+	scheduler.dispose();
+});
+
+test("cancelling one consumer preserves a task needed by another consumer", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const deferred = createDeferred<number>();
+	const execution = vi.fn((signal: AbortSignal) => {
+		expect(signal.aborted).toBe(false);
+		return deferred.promise;
+	});
+	const firstController = new AbortController();
+	const first = scheduler.schedule(
+		{ key: "same-page:scale", priority: "prerender", execute: execution },
+		firstController.signal,
+	);
+	const second = scheduler.schedule({
+		key: "same-page:scale",
+		priority: "visible",
+		execute: execution,
+	});
+
+	firstController.abort();
+	await expect(first).rejects.toMatchObject({ name: "AbortError" });
+	expect(execution).toHaveBeenCalledOnce();
+
+	deferred.resolve(42);
+	const lease = await second;
+	expect(lease.value).toBe(42);
+	lease.release();
+	scheduler.dispose();
+});
+
+test("releases a shared result once after every lease is released", async () => {
+	const scheduler = new PageTaskScheduler({ maximumConcurrent: 1, reservedVisible: 0 });
+	const releaseResult = vi.fn();
+	const task = {
+		key: "page:scale",
+		priority: "visible" as const,
+		execute: async () => ({ pixels: 10 }),
+		releaseResult,
+	};
+	const [first, second] = await Promise.all([scheduler.schedule(task), scheduler.schedule(task)]);
+	first?.release();
+	first?.release();
+	expect(releaseResult).not.toHaveBeenCalled();
+	second?.release();
+	expect(releaseResult).toHaveBeenCalledOnce();
+	scheduler.dispose();
+});
+
+function createDeferred<Value>(): {
+	promise: Promise<Value>;
+	resolve(value: Value): void;
+} {
+	let resolve: (value: Value) => void = () => undefined;
+	const promise = new Promise<Value>((complete) => {
+		resolve = complete;
+	});
+	return { promise, resolve };
+}
