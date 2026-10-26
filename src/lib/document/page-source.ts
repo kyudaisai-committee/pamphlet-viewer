@@ -15,7 +15,11 @@ export interface PageSource {
 	readonly pageCount: number;
 	readonly propagateThumbnailErrors?: boolean;
 	getPageSize(pageIndex: number): Promise<PageSize>;
+	getPrefetchedPageSize?(pageIndex: number): Promise<PageSize>;
+	getThumbnailPageSize?(pageIndex: number): Promise<PageSize>;
+	cancelForegroundRequests?(): void;
 	prefetchPage?(pageIndex: number): Promise<void>;
+	cancelPrefetchPageRequests?(): void;
 	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	prefetchThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual>;

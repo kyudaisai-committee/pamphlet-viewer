@@ -219,6 +219,7 @@ export class ViewerController {
 		this.#renderQueue?.cancelQueued("visible");
 		const id = this.#renderId + 1;
 		this.#renderId = id;
+		this.pageSource.cancelForegroundRequests?.();
 		const generation = this.#loadId;
 		this.#pendingRender = { ...input, id, generation };
 		this.#drainRenderQueue(generation);
@@ -392,7 +393,11 @@ export class ViewerController {
 			const requestsByGroup = await Promise.all(
 				groups.map(async (pageIndexes) => {
 					const pageSizes = await Promise.all(
-						pageIndexes.map((pageIndex) => source.getPageSize(pageIndex)),
+						pageIndexes.map((pageIndex) =>
+							source.getPrefetchedPageSize === undefined
+								? source.getPageSize(pageIndex)
+								: source.getPrefetchedPageSize(pageIndex),
+						),
 					);
 					const displayScale = calculateFitScale(
 						pageSizes,
@@ -498,6 +503,7 @@ export class ViewerController {
 		this.#pendingRender = null;
 		this.#lastRenderKey = "";
 		this.#failedRenderKey = "";
+		this.pageSource?.cancelForegroundRequests?.();
 		this.#prerenderScheduler.clear();
 		this.#renderQueue?.cancelQueued("visible");
 		this.#renderQueue?.cancelQueued("prefetch");
