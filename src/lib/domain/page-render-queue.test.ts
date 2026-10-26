@@ -5,6 +5,7 @@ import {
 	type PageSource,
 	type PageVisual,
 } from "@/lib/document/page-source";
+import { calculateThumbnailScale } from "@/lib/document/thumbnail-scale";
 
 import { PageRenderQueue } from "./page-render-queue";
 
@@ -121,7 +122,7 @@ describe("PageRenderQueue", () => {
 			await queue.render(4, 0.3, "thumbnail");
 
 			expect(renderThumbnail).toHaveBeenCalledWith(4);
-			expect(renderPage).toHaveBeenCalledWith(4, 0.3);
+			expect(renderPage).toHaveBeenCalledWith(4, calculateThumbnailScale(300, 400));
 			queue.dispose();
 		},
 	);

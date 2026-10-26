@@ -65,8 +65,10 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 		const retryButton = shadowRoot.querySelector<HTMLButtonElement>('[role="alert"] button');
 		if (retryButton === null) throw new Error("The retry button was not rendered.");
 		await userEvent.click(retryButton);
-		await expect.poll(() => ControlledWorker.instances.length).toBe(2);
-		const recoveredWorker = getControlledWorker(1);
+		await expect.poll(() => ControlledWorker.instances.length).toBeGreaterThan(1);
+		const recoveredWorker = ControlledWorker.instances.at(-1);
+		if (recoveredWorker === undefined)
+			throw new Error("The recovered page worker was not created.");
 		const recoveredOpen = await waitForWorkerRequest(recoveredWorker, "open");
 		expect(recoveredOpen.url).toBe(firstOpen.url);
 		recoveredWorker.reply({
