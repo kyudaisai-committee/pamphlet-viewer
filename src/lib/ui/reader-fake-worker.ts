@@ -188,10 +188,56 @@ export async function waitForWorkerRequestAcrossInstances(
 		.poll(() => {
 			found = undefined;
 			for (const worker of ControlledWorker.instances.slice(startIndex)) {
-				const request = worker.requests.find((candidate) => candidate.type === type);
+				const request = worker.requests.find(
+					(candidate) =>
+						candidate.type === type && !worker.repliedRequestIds.has(candidate.id),
+				);
 				if (request !== undefined) {
 					found = { worker, request };
 					return true;
+				}
+			}
+			return false;
+		})
+		.toBe(true);
+	if (found === undefined) throw new Error(`The ${type} request was not sent.`);
+	return found;
+}
+
+export async function waitForWorkerRequestAfterOpening(
+	type: string,
+	startIndex = 0,
+	matches: (request: ReaderWorkerRequest) => boolean = () => true,
+): Promise<{ worker: ControlledWorker; request: ReaderWorkerRequest }> {
+	let found: { worker: ControlledWorker; request: ReaderWorkerRequest } | undefined;
+	await expect
+		.poll(() => {
+			found = undefined;
+			for (const worker of ControlledWorker.instances.slice(startIndex)) {
+				for (const request of worker.requests) {
+					if (worker.repliedRequestIds.has(request.id)) continue;
+					if (request.type === type && matches(request)) {
+						found = { worker, request };
+						return true;
+					}
+					if (
+						request.type === "open" &&
+						ControlledWorker.lastOpenedDocumentInfo !== null
+					) {
+						worker.reply({
+							id: request.id,
+							type: "opened",
+							...ControlledWorker.lastOpenedDocumentInfo,
+						});
+						continue;
+					}
+					if (request.type === "page-size") {
+						worker.reply({
+							id: request.id,
+							type: "page-size",
+							pageSize: { width: 300, height: 400 },
+						});
+					}
 				}
 			}
 			return false;

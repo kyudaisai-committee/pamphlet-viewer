@@ -13,6 +13,7 @@ import {
 	waitForViewerReady,
 	waitForWorkerRequest,
 	waitForWorkerRequestAcrossInstances,
+	waitForWorkerRequestAfterOpening,
 } from "./reader-fake-worker";
 
 afterEach(() => {
@@ -58,6 +59,18 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 			id: failedRender.request.id,
 			type: "error",
 			message: "The PDF representation changed.",
+			fatal: true,
+		});
+		const retriedRender = await waitForWorkerRequestAfterOpening(
+			"render",
+			0,
+			(request) => request.pageIndex === failedRender.request.pageIndex,
+		);
+		expect(retriedRender.worker).not.toBe(failedRender.worker);
+		retriedRender.worker.reply({
+			id: retriedRender.request.id,
+			type: "error",
+			message: "The PDF representation changed again.",
 			fatal: true,
 		});
 
