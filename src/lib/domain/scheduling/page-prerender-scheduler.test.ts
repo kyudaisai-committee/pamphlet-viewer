@@ -62,11 +62,35 @@ describe("PagePrerenderScheduler", () => {
 
 		const claimed = scheduler.claim(2, 1.5);
 		expect(claimed).toBeDefined();
+		expect(scheduler.claim(2, 1.5)).toBeUndefined();
 		expect(scheduler.claim(2, 2)).toBeUndefined();
 		const visual = pixelVisual();
 		render.resolve(visual);
 		expect(await claimed).toBe(visual);
 		expect(scheduler.take(2, 1.5)).toBeUndefined();
+		scheduler.setSource(null);
+	});
+
+	it("aborts an in-flight render after its request leaves the target set", async () => {
+		const started = deferred<AbortSignal>();
+		const result = deferred<PageVisual>();
+		const scheduler = new PagePrerenderScheduler();
+		scheduler.setSource(
+			createSource((_pageIndex, _scale, signal) => {
+				if (signal === undefined)
+					throw new Error("The prerender signal was not forwarded.");
+				started.resolve(signal);
+				return result.promise;
+			}),
+		);
+		scheduler.setRequests([{ pageIndex: 1, scale: 1 }]);
+		const signal = await started.promise;
+
+		scheduler.setRequests([]);
+
+		expect(signal.aborted).toBe(true);
+		result.resolve(pixelVisual());
+		await flushTasks();
 		scheduler.setSource(null);
 	});
 
@@ -181,7 +205,11 @@ describe("PagePrerenderScheduler", () => {
 });
 
 function createSource(
-	renderPrefetchedPage: (pageIndex: number, scale: number) => Promise<PageVisual>,
+	renderPrefetchedPage: (
+		pageIndex: number,
+		scale: number,
+		signal?: AbortSignal,
+	) => Promise<PageVisual>,
 ): PageSource {
 	return {
 		pageCount: 10,

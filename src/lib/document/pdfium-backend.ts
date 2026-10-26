@@ -102,9 +102,15 @@ class PdfiumPageSource implements PageSource {
 		return this.#workerPool.renderPage(pageIndex, scale).catch(mapSourceFailure);
 	}
 
-	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual> {
+	renderPrefetchedPage(
+		pageIndex: number,
+		scale: number,
+		signal?: AbortSignal,
+	): Promise<PageVisual> {
 		this.#assertActive();
-		return this.#workerPool.renderPage(pageIndex, scale, "prerender").catch(mapSourceFailure);
+		return this.#workerPool
+			.renderPage(pageIndex, scale, "prerender", signal)
+			.catch(mapSourceFailure);
 	}
 
 	renderThumbnail(pageIndex: number): Promise<PageVisual | null> {

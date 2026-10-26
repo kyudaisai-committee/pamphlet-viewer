@@ -84,12 +84,14 @@ export class PdfiumWorkerPool {
 		pageIndex: number,
 		scale: number,
 		priority: PageTaskPriority = "visible",
+		signal?: AbortSignal,
 	): Promise<PageVisual> {
 		return this.#scheduleVisualTask(
 			`render:${pageIndex}:${scale}`,
 			priority,
 			(client, taskPriority, signal) =>
 				client.renderPage(pageIndex, scale, taskPriority, signal),
+			signal,
 		).then((visual) => {
 			if (visual === null) throw new Error("PDF worker did not return a page image.");
 			return visual;
@@ -194,8 +196,15 @@ export class PdfiumWorkerPool {
 		key: string,
 		priority: PageTaskPriority,
 		operation: WorkerOperation<PageVisual | null>,
+		signal?: AbortSignal,
 	): Promise<PageVisual | null> {
-		const lease = await this.#scheduleLeaseTask(key, priority, operation, releaseVisualResult);
+		const lease = await this.#scheduleLeaseTask(
+			key,
+			priority,
+			operation,
+			releaseVisualResult,
+			signal,
+		);
 		try {
 			if (lease.value === null) return null;
 			return await clonePageVisual(lease.value);

@@ -317,6 +317,12 @@ export class ViewerController {
 								try {
 									return { visual: await pendingPrerender, plan };
 								} catch {
+									if (!this.#isCurrent(request, source)) {
+										throw new DOMException(
+											"The page render was superseded.",
+											"AbortError",
+										);
+									}
 									// A failed speculative render is retried at visible priority.
 								}
 							} else {
@@ -328,6 +334,9 @@ export class ViewerController {
 						}
 					}
 
+					if (!this.#isCurrent(request, source)) {
+						throw new DOMException("The page render was superseded.", "AbortError");
+					}
 					const visual = await renderQueue.render(pageIndex, plan.rasterScale, "visible");
 					return { visual, plan };
 				}),

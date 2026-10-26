@@ -102,12 +102,65 @@ it("shares an in-flight prerender with the visible request for that page", async
 	controller.dispose();
 });
 
-function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
-	let resolve: (value: T) => void = () => undefined;
-	const promise = new Promise<T>((complete) => {
-		resolve = complete;
+it("does not retry a stale claimed prerender at visible priority", async () => {
+	const failedPrerender = deferred<PageVisual>();
+	const prerenderStarted = deferred<void>();
+	const renderPage = vi.fn(async () => pixelVisual());
+	const source: PageSource = {
+		pageCount: 3,
+		async getPageSize() {
+			return { width: 300, height: 400 };
+		},
+		renderPage,
+		renderPrefetchedPage(pageIndex) {
+			if (pageIndex !== 1) return Promise.resolve(pixelVisual());
+			prerenderStarted.resolve();
+			return failedPrerender.promise;
+		},
+		promotePageRender: () => true,
+		dispose() {},
+	};
+	const controller = new ViewerController(() => undefined);
+	const input = {
+		page: 1,
+		layout: "single" as const,
+		fit: "page" as const,
+		zoom: 1,
+		viewport: { width: 300, height: 400 },
+	};
+	await controller.load("brochure.pdf", {
+		async open() {
+			return source;
+		},
 	});
-	return { promise, resolve };
+	controller.requestRender(input);
+	await vi.waitFor(() => expect(controller.renderRevision).toBe(1));
+	await prerenderStarted.promise;
+
+	controller.requestRender({ ...input, page: 2 });
+	await vi.waitFor(() => expect(renderPage).toHaveBeenCalledOnce());
+	controller.requestRender({ ...input, page: 3 });
+	await vi.waitFor(() => expect(controller.renderRevision).toBe(2));
+	failedPrerender.reject(new Error("The obsolete prerender failed."));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(renderPage.mock.calls.map(([pageIndex]) => pageIndex)).toEqual([0, 2]);
+	expect(controller.pageVisuals[2]).toBeDefined();
+	controller.dispose();
+});
+
+function deferred<T>(): {
+	promise: Promise<T>;
+	resolve(value: T): void;
+	reject(reason?: unknown): void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	let reject: (reason?: unknown) => void = () => undefined;
+	const promise = new Promise<T>((complete, fail) => {
+		resolve = complete;
+		reject = fail;
+	});
+	return { promise, resolve, reject };
 }
 
 function pixelVisual(): PageVisual {

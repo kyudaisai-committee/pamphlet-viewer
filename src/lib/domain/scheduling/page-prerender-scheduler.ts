@@ -125,7 +125,12 @@ export class PagePrerenderScheduler {
 		const cached = this.take(pageIndex, scale);
 		if (cached !== undefined) return Promise.resolve(cached);
 		const task = this.#tasksByKey.get(createKey(pageIndex, scale));
-		if (task?.state !== "running" || task.result === null || task.source !== this.#source) {
+		if (
+			task?.state !== "running" ||
+			task.claimed ||
+			task.result === null ||
+			task.source !== this.#source
+		) {
 			return undefined;
 		}
 		task.claimed = true;
