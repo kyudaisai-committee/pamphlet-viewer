@@ -13,6 +13,7 @@ export interface PdfFixtureOptions {
 	thumbnailPageNumbers?: readonly number[];
 	indexedThumbnailPageNumbers?: readonly number[];
 	imagePageNumbers?: readonly number[];
+	pageObjectGapBytes?: number;
 }
 
 export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
@@ -48,6 +49,11 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 	position += chunks.at(-1)?.byteLength ?? 0;
 
 	for (let index = 0; index < PAGE_COUNT; index += 1) {
+		const pageObjectGapBytes = options.pageObjectGapBytes ?? 0;
+		if (index > 0 && pageObjectGapBytes > 0) {
+			appendFiller(chunks, pageObjectGapBytes);
+			position += pageObjectGapBytes;
+		}
 		const pageObject = 3 + index;
 		const contentObject = 3 + PAGE_COUNT + index;
 		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;

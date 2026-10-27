@@ -1,0 +1,309 @@
+// SPDX-License-Identifier: MIT
+
+export type PageTaskPriority = "visible" | "data" | "prerender" | "thumbnail";
+
+export interface PageTaskLease<Result> {
+	readonly value: Result;
+	release(): void;
+}
+
+export interface PageTask<Result> {
+	readonly key: string;
+	readonly priority: PageTaskPriority;
+	execute(signal: AbortSignal, priority: PageTaskPriority): Promise<Result>;
+	releaseResult?(result: Result): void;
+	onPriorityChange?(priority: PageTaskPriority): void;
+}
+
+export interface PageTaskSchedulerOptions {
+	maximumConcurrent: number;
+	reservedVisible: number;
+	onVisibleBlocked?: () => void;
+}
+
+interface PageTaskWaiter<Result> {
+	resolve(lease: PageTaskLease<Result>): void;
+	reject(error: unknown): void;
+	signal: AbortSignal | undefined;
+	abortListener: (() => void) | null;
+}
+
+interface ScheduledTask<Result> extends Omit<PageTask<Result>, "priority"> {
+	priority: PageTaskPriority;
+	sequence: number;
+	state: "queued" | "running" | "aborting" | "complete";
+	runningPriority: PageTaskPriority | null;
+	waiters: Set<PageTaskWaiter<Result>>;
+	controller: AbortController | null;
+	result: Result | null;
+	hasResult: boolean;
+	leaseCount: number;
+}
+
+export class PageTaskScheduler {
+	#tasks = new Map<string, ScheduledTask<unknown>>();
+	#queue: ScheduledTask<unknown>[] = [];
+	#active = 0;
+	#activeBackground = 0;
+	#sequence = 0;
+	#disposed = false;
+
+	constructor(private readonly options: PageTaskSchedulerOptions) {
+		if (!Number.isSafeInteger(options.maximumConcurrent) || options.maximumConcurrent < 1) {
+			throw new RangeError("The task scheduler needs at least one concurrent slot.");
+		}
+		if (
+			!Number.isSafeInteger(options.reservedVisible) ||
+			options.reservedVisible < 0 ||
+			options.reservedVisible >= options.maximumConcurrent
+		) {
+			throw new RangeError("Reserved visible slots must be below the concurrency limit.");
+		}
+	}
+
+	get isVisibleBlocked(): boolean {
+		return (
+			this.#active >= this.options.maximumConcurrent &&
+			this.#queue.some((task) => task.priority === "visible")
+		);
+	}
+
+	schedule<Result>(task: PageTask<Result>, signal?: AbortSignal): Promise<PageTaskLease<Result>> {
+		if (this.#disposed) return Promise.reject(createAbortError());
+		if (signal?.aborted) return Promise.reject(createAbortError());
+
+		let scheduled = this.#tasks.get(task.key) as ScheduledTask<Result> | undefined;
+		if (scheduled === undefined) {
+			scheduled = {
+				...task,
+				sequence: this.#sequence,
+				state: "queued",
+				runningPriority: null,
+				waiters: new Set(),
+				controller: null,
+				result: null,
+				hasResult: false,
+				leaseCount: 0,
+			};
+			this.#sequence += 1;
+			this.#tasks.set(task.key, scheduled as ScheduledTask<unknown>);
+			this.#queue.push(scheduled as ScheduledTask<unknown>);
+		} else if (scheduled.state === "complete") {
+			return Promise.resolve(this.#createLease(scheduled));
+		} else if (
+			(scheduled.state === "queued" || scheduled.state === "running") &&
+			getPriorityRank(task.priority) < getPriorityRank(scheduled.priority)
+		) {
+			const promotionError = this.#promoteTask(scheduled, task.priority);
+			if (promotionError !== null) return Promise.reject(promotionError);
+		}
+
+		const waiter = this.#createWaiter(scheduled, signal);
+		return new Promise((resolve, reject) => {
+			waiter.resolve = resolve;
+			waiter.reject = reject;
+			this.#drain();
+		});
+	}
+
+	promote(key: string, priority: PageTaskPriority): boolean {
+		const task = this.#tasks.get(key);
+		if (
+			task === undefined ||
+			(task.state !== "queued" && task.state !== "running") ||
+			getPriorityRank(priority) >= getPriorityRank(task.priority)
+		) {
+			return false;
+		}
+		const promotionError = this.#promoteTask(task, priority);
+		if (promotionError !== null) return true;
+		this.#drain();
+		return true;
+	}
+
+	dispose(): void {
+		if (this.#disposed) return;
+		this.#disposed = true;
+		for (const task of this.#tasks.values()) {
+			for (const waiter of [...task.waiters])
+				this.#removeWaiter(task, waiter, createAbortError());
+			if (task.state === "running") task.controller?.abort();
+			if (task.state === "complete" && task.leaseCount === 0 && task.hasResult) {
+				task.releaseResult?.(task.result);
+				task.result = null;
+				task.hasResult = false;
+			}
+		}
+		this.#queue = [];
+		this.#tasks.clear();
+	}
+
+	#createWaiter<Result>(
+		task: ScheduledTask<Result>,
+		signal?: AbortSignal,
+	): PageTaskWaiter<Result> {
+		const waiter: PageTaskWaiter<Result> = {
+			resolve: () => undefined,
+			reject: () => undefined,
+			signal,
+			abortListener: null,
+		};
+		if (signal !== undefined) {
+			waiter.abortListener = () => this.#removeWaiter(task, waiter, createAbortError());
+			signal.addEventListener("abort", waiter.abortListener, { once: true });
+		}
+		task.waiters.add(waiter);
+		return waiter;
+	}
+
+	#removeWaiter<Result>(
+		task: ScheduledTask<Result>,
+		waiter: PageTaskWaiter<Result>,
+		error: unknown,
+	): void {
+		if (!task.waiters.delete(waiter)) return;
+		if (waiter.abortListener !== null) {
+			waiter.signal?.removeEventListener("abort", waiter.abortListener);
+			waiter.abortListener = null;
+		}
+		waiter.reject(error);
+		if (task.waiters.size !== 0) return;
+		if (task.state === "queued") {
+			this.#removeTask(task);
+			return;
+		}
+		if (task.state === "running") {
+			task.state = "aborting";
+			this.#removeTask(task);
+			task.controller?.abort();
+		}
+	}
+
+	#drain(): void {
+		if (this.#disposed) return;
+		this.#queue.sort((left, right) => {
+			const priority = getPriorityRank(left.priority) - getPriorityRank(right.priority);
+			return priority || left.sequence - right.sequence;
+		});
+		while (this.#active < this.options.maximumConcurrent && this.#queue.length > 0) {
+			const index = this.#queue.findIndex((task) => this.#canStart(task));
+			if (index < 0) return;
+			const task = this.#queue.splice(index, 1)[0];
+			if (task === undefined) continue;
+			this.#active += 1;
+			task.runningPriority = task.priority;
+			if (task.runningPriority !== "visible") this.#activeBackground += 1;
+			task.state = "running";
+			task.controller = new AbortController();
+			void this.#run(task);
+		}
+		if (this.isVisibleBlocked) this.options.onVisibleBlocked?.();
+	}
+
+	#canStart(task: ScheduledTask<unknown>): boolean {
+		if (task.priority === "visible") return true;
+		return (
+			this.#activeBackground < this.options.maximumConcurrent - this.options.reservedVisible
+		);
+	}
+
+	#promoteTask(task: ScheduledTask<unknown>, priority: PageTaskPriority): Error | null {
+		if (task.state !== "running") {
+			task.priority = priority;
+			return null;
+		}
+		try {
+			task.onPriorityChange?.(priority);
+		} catch (error) {
+			const promotionError =
+				error instanceof Error ? error : new Error("The page task could not be promoted.");
+			for (const waiter of [...task.waiters]) {
+				this.#removeWaiter(task, waiter, promotionError);
+			}
+			return promotionError;
+		}
+		task.priority = priority;
+		if (
+			task.runningPriority !== null &&
+			task.runningPriority !== "visible" &&
+			priority === "visible"
+		) {
+			this.#activeBackground -= 1;
+		}
+		task.runningPriority = priority;
+		return null;
+	}
+
+	async #run<Result>(task: ScheduledTask<Result>): Promise<void> {
+		try {
+			const result = await task.execute(
+				task.controller?.signal ?? AbortSignal.abort(),
+				task.priority,
+			);
+			task.result = result;
+			task.hasResult = true;
+			task.state = "complete";
+			if (task.waiters.size === 0 || this.#disposed) {
+				task.releaseResult?.(result);
+				task.result = null;
+				task.hasResult = false;
+				this.#removeTask(task);
+				return;
+			}
+			for (const waiter of [...task.waiters]) {
+				task.waiters.delete(waiter);
+				if (waiter.abortListener !== null) {
+					waiter.signal?.removeEventListener("abort", waiter.abortListener);
+					waiter.abortListener = null;
+				}
+				waiter.resolve(this.#createLease(task));
+			}
+		} catch (error) {
+			for (const waiter of [...task.waiters]) {
+				this.#removeWaiter(task, waiter, error);
+			}
+			this.#removeTask(task);
+		} finally {
+			this.#active -= 1;
+			if (task.runningPriority !== null && task.runningPriority !== "visible") {
+				this.#activeBackground -= 1;
+			}
+			task.runningPriority = null;
+			this.#drain();
+		}
+	}
+
+	#createLease<Result>(task: ScheduledTask<Result>): PageTaskLease<Result> {
+		task.leaseCount += 1;
+		let released = false;
+		return {
+			value: task.result as Result,
+			release: () => {
+				if (released) return;
+				released = true;
+				task.leaseCount -= 1;
+				if (task.leaseCount !== 0 || !task.hasResult) return;
+				task.releaseResult?.(task.result as Result);
+				task.result = null;
+				task.hasResult = false;
+				this.#removeTask(task);
+			},
+		};
+	}
+
+	#removeTask(task: ScheduledTask<unknown>): void {
+		this.#queue = this.#queue.filter((queued) => queued !== task);
+		if (this.#tasks.get(task.key) === task) this.#tasks.delete(task.key);
+	}
+}
+
+function getPriorityRank(priority: PageTaskPriority): number {
+	if (priority === "visible") return 0;
+	if (priority === "data") return 1;
+	if (priority === "prerender") return 2;
+	return 3;
+}
+
+function createAbortError(): DOMException {
+	return new DOMException("The page task was cancelled.", "AbortError");
+}

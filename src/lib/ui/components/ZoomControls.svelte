@@ -1,0 +1,160 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<script lang="ts">
+	import { RotateCcwIcon, ZoomInIcon, ZoomOutIcon } from "@lucide/svelte";
+	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
+
+	interface Props {
+		zoom: number;
+		enabled: boolean;
+		onZoomChange(value: number): void;
+		onResetZoom(): void;
+	}
+
+	let { zoom, enabled, onZoomChange, onResetZoom }: Props = $props();
+	const messages = useViewerMessages();
+
+	function setZoomFromInput(event: Event): void {
+		const input = event.currentTarget;
+		if (!(input instanceof HTMLInputElement)) return;
+		onZoomChange(Number(input.value));
+	}
+</script>
+
+<div class="zoom-controls" role="group" aria-label={messages.zoomControls}>
+	<button
+		class="icon-button"
+		type="button"
+		aria-label={messages.zoomOut}
+		title={messages.zoomOut}
+		disabled={!enabled || zoom <= 0.1}
+		onclick={() => onZoomChange(Math.max(0.1, zoom / 1.2))}
+	>
+		<ZoomOutIcon size={18} aria-hidden="true" />
+	</button>
+	<input
+		class="zoom-slider"
+		type="range"
+		min="0.1"
+		max="8"
+		step="0.1"
+		value={zoom}
+		aria-label={messages.zoomLevel}
+		disabled={!enabled}
+		oninput={setZoomFromInput}
+	/>
+	<output class="zoom-level" aria-live="polite">{Math.round(zoom * 100)}%</output>
+	<button
+		class="icon-button"
+		type="button"
+		aria-label={messages.zoomIn}
+		title={messages.zoomIn}
+		disabled={!enabled || zoom >= 8}
+		onclick={() => onZoomChange(Math.min(8, zoom * 1.2))}
+	>
+		<ZoomInIcon size={18} aria-hidden="true" />
+	</button>
+	<button
+		class="text-button reset-zoom"
+		type="button"
+		aria-label={messages.resetZoom}
+		title={messages.resetZoom}
+		disabled={!enabled || zoom === 1}
+		onclick={onResetZoom}
+	>
+		<RotateCcwIcon size={15} aria-hidden="true" />
+		<span class="reset-label">{messages.fitView}</span>
+	</button>
+</div>
+
+<style>
+	.zoom-controls {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+
+		button {
+			box-sizing: border-box;
+			min-height: var(--pamphlet-viewer-control-height);
+			padding: var(--pamphlet-viewer-control-padding-block)
+				var(--pamphlet-viewer-control-padding-inline);
+			border: var(--pamphlet-viewer-border-width) solid transparent;
+			border-radius: var(--pamphlet-viewer-control-radius);
+			background: transparent;
+			color: inherit;
+			font: inherit;
+			cursor: pointer;
+
+			&:hover:not(:disabled) {
+				background: var(--pamphlet-viewer-control-hover);
+			}
+
+			&:focus-visible {
+				outline: var(--pamphlet-viewer-focus-ring);
+				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
+			}
+
+			&:disabled {
+				color: var(--pamphlet-viewer-disabled-text);
+				cursor: not-allowed;
+			}
+		}
+
+		.icon-button {
+			display: inline-grid;
+			place-items: center;
+			width: var(--pamphlet-viewer-icon-button-width);
+			padding: var(--pamphlet-viewer-control-padding-block);
+		}
+
+		.zoom-slider {
+			width: clamp(72px, 9cqi, 142px);
+			accent-color: var(--pamphlet-viewer-accent, #a8c5bc);
+		}
+
+		.zoom-level {
+			min-width: 42px;
+			font-size: 12px;
+			font-variant-numeric: tabular-nums;
+			text-align: center;
+		}
+
+		.reset-zoom {
+			padding-inline: 8px;
+			font-size: 12px;
+		}
+
+		.reset-label {
+			display: inline;
+		}
+	}
+
+	@container reader-toolbar (max-width: 700px) {
+		.zoom-controls {
+			flex: 1 1 100%;
+			justify-content: space-between;
+			gap: 3px;
+
+			.zoom-slider {
+				flex: 1 1 56px;
+				width: auto;
+				min-width: 48px;
+				max-width: 180px;
+			}
+
+			.reset-zoom {
+				width: var(--pamphlet-viewer-touch-target-size);
+				padding: 5px;
+			}
+
+			.reset-label {
+				display: none;
+			}
+
+			button {
+				min-height: var(--pamphlet-viewer-touch-target-size);
+			}
+		}
+	}
+
+</style>

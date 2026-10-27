@@ -14,15 +14,20 @@ export type PageVisual =
 export interface PageSource {
 	readonly pageCount: number;
 	readonly propagateThumbnailErrors?: boolean;
-	getPageSize(pageIndex: number): Promise<PageSize>;
-	getPrefetchedPageSize?(pageIndex: number): Promise<PageSize>;
+	getPageSize(pageIndex: number, signal?: AbortSignal): Promise<PageSize>;
+	getPrefetchedPageSize?(pageIndex: number, signal?: AbortSignal): Promise<PageSize>;
 	getThumbnailPageSize?(pageIndex: number): Promise<PageSize>;
 	cancelForegroundRequests?(): void;
+	promotePageRender?(pageIndex: number, scale: number): boolean;
 	prefetchPage?(pageIndex: number): Promise<void>;
 	cancelPrefetchPageRequests?(): void;
 	renderThumbnail?(pageIndex: number): Promise<PageVisual | null>;
 	prefetchThumbnail?(pageIndex: number): Promise<PageVisual | null>;
-	renderPrefetchedPage(pageIndex: number, scale: number): Promise<PageVisual>;
+	renderPrefetchedPage(
+		pageIndex: number,
+		scale: number,
+		signal?: AbortSignal,
+	): Promise<PageVisual>;
 	renderPage(pageIndex: number, scale: number): Promise<PageVisual>;
 	dispose(): void | Promise<void>;
 }

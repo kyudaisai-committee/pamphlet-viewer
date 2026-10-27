@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import type { PamphletViewerElement } from "../public-api";
+import type { PamphletViewerElement } from "@/lib/public-api";
 
 interface LibraryTestMessage {
 	type: "pagechange" | "error";
