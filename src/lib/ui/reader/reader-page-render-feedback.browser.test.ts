@@ -1,18 +1,22 @@
-import { afterEach, expect, test } from "vitest";
+import { tick } from "svelte";
+import { afterEach, expect, test, vi } from "vitest";
+
+import { ZOOM_RENDER_DELAY_MS } from "@/lib/ui/zoom/zoom-render-scheduler";
 
 import {
 	COLORS,
 	createBackend,
 	createDeferred,
 	createViewer,
-	delay,
 	expectRenderedPages,
 	visualFor,
 	waitForPageChange,
+	waitForAnimationFrames,
 } from "./reader-page-render-fixtures";
 
 afterEach(() => {
 	document.body.replaceChildren();
+	vi.useRealTimers();
 });
 
 test.each([
@@ -38,6 +42,7 @@ test.each([
 	document.body.append(viewer);
 	await firstPage;
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
 	const shadowRoot = viewer.shadowRoot;
 	if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
@@ -49,16 +54,19 @@ test.each([
 	deferRendering = true;
 	zoomSlider.value = "4";
 	zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+	await tick();
+	await vi.advanceTimersByTimeAsync(ZOOM_RENDER_DELAY_MS);
 	await zoomRenderStarted.promise;
-	await delay(250);
-
+	await tick();
+	await vi.advanceTimersByTimeAsync(200);
+	await tick();
 	expect(shadowRoot.querySelector(".rendering-feedback")).toBeNull();
 	expect(Number(zoomSlider.value)).toBe(4);
 	expect(pageArea.scrollHeight).toBeGreaterThan(pageArea.clientHeight * 2);
 	expect(pageArea.scrollWidth).toBeGreaterThan(pageArea.clientWidth);
 
 	zoomRender.resolve(visualFor(0));
-	await delay(50);
+	await waitForAnimationFrames(2);
 });
 
 test.each([
@@ -85,6 +93,7 @@ test.each([
 		document.body.append(viewer);
 		await firstPage;
 		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
 		const shadowRoot = viewer.shadowRoot;
 		if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
@@ -98,13 +107,24 @@ test.each([
 		const secondPage = waitForPageChange(viewer, 2);
 		viewer.page = 2;
 		await pageTwoStarted.promise;
+		await tick();
+		await vi.advanceTimersByTimeAsync(200);
+		await tick();
+		let feedback = shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
+		if (feedback === null) throw new Error("The page-navigation feedback did not appear.");
+
 		zoomSlider.value = "4";
 		zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
-		await delay(250);
+		await tick();
+		await vi.advanceTimersByTimeAsync(ZOOM_RENDER_DELAY_MS);
+		await tick();
+		await vi.advanceTimersByTimeAsync(200);
+		await tick();
+		feedback = shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
+		if (feedback === null)
+			throw new Error("The page-navigation feedback did not remain visible.");
 		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
 
-		const feedback = shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
-		if (feedback === null) throw new Error("The page-navigation feedback is missing.");
 		expect(Number(zoomSlider.value)).toBe(4);
 		expect(pageArea.scrollHeight).toBeGreaterThan(pageArea.clientHeight * 2);
 		expect(pageArea.scrollWidth).toBeGreaterThan(pageArea.clientWidth);
@@ -141,6 +161,7 @@ test.each([
 
 		pageTwoRender.resolve(visualFor(1));
 		await secondPage;
+		await tick();
 		await expectRenderedPages(viewer, [{ pageIndex: 1, pixel: COLORS[1] ?? null }]);
 		expect(shadowRoot.querySelector(".rendering-feedback")).toBeNull();
 	},
@@ -171,16 +192,20 @@ test.each(["viewport resize", "same-page layout change"] as const)(
 		await expectRenderedPages(viewer, [{ pageIndex: 1, pixel: COLORS[1] ?? null }]);
 		const shadowRoot = viewer.shadowRoot;
 		if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
 		const redrawPageIndex = 1;
 		deferredPageIndex = redrawPageIndex;
 		if (change === "viewport resize") viewer.style.width = "960px";
 		else viewer.layout = "spread";
 		await redrawStarted.promise;
-		await delay(250);
+		await tick();
+		await vi.advanceTimersByTimeAsync(200);
+		await tick();
 		expect(shadowRoot.querySelector(".rendering-feedback")).toBeNull();
 
 		redraw.resolve(visualFor(redrawPageIndex));
+		await waitForAnimationFrames(2);
 		await expectRenderedPages(viewer, [{ pageIndex: 1, pixel: COLORS[1] ?? null }]);
 	},
 );

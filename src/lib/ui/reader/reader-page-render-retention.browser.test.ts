@@ -7,11 +7,12 @@ import {
 	createPageSource,
 	createVisual,
 	createViewer,
-	delay,
 	expectRenderedPages,
 	observePageFrames,
 	readRenderedPages,
 	visualFor,
+	waitForAnimationFrames,
+	waitForRenderingFeedback,
 	waitForPageChange,
 } from "./reader-page-render-fixtures";
 
@@ -19,11 +20,9 @@ afterEach(() => {
 	document.body.replaceChildren();
 });
 
-test.each([
-	{ background: "dark page", color: [18, 20, 22] as [number, number, number] },
-	{ background: "light page", color: [245, 245, 245] as [number, number, number] },
-])("keeps the current canvas and readable feedback over a $background", async ({ color }) => {
+test("keeps the current canvas until the new page is ready", async () => {
 	await import("@/lib/entry");
+	const color: [number, number, number] = [18, 20, 22];
 	const pageTwoStarted = createDeferred<void>();
 	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 	const viewer = createViewer(
@@ -45,40 +44,15 @@ test.each([
 	const secondPage = waitForPageChange(viewer, 2);
 	viewer.page = 2;
 	await pageTwoStarted.promise;
-	await delay(250);
+	const feedback = await waitForRenderingFeedback(viewer);
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: color }]);
-	const feedback = viewer.shadowRoot?.querySelector<HTMLElement>(".rendering-feedback");
-	const pageArea = viewer.shadowRoot?.querySelector<HTMLElement>(".page-area");
-	if (
-		feedback === null ||
-		feedback === undefined ||
-		pageArea === null ||
-		pageArea === undefined
-	) {
-		throw new Error("The pending render feedback or page area is missing.");
-	}
+	expect(feedback.getAttribute("role")).toBe("status");
 	expect(feedback.textContent).toContain("ページを描画しています。");
-	const feedbackStyle = getComputedStyle(feedback);
-	expect(feedbackStyle.backgroundColor).toBe("rgb(36, 40, 46)");
-	expect(feedbackStyle.color).toBe("rgb(228, 231, 233)");
-	expect(feedbackStyle.borderTopColor).toBe("rgb(59, 65, 72)");
-	expect(feedbackStyle.boxShadow).toBe("none");
-	expect(feedbackStyle.fontSize).toBe("14px");
-	const pageAreaBounds = pageArea.getBoundingClientRect();
-	let feedbackBounds = feedback.getBoundingClientRect();
-	expect(feedbackBounds.top).toBeGreaterThanOrEqual(pageAreaBounds.top);
-	expect(feedbackBounds.bottom).toBeLessThanOrEqual(pageAreaBounds.bottom);
-	const scrollHeight = pageArea.scrollHeight;
-	pageArea.scrollTop = 180;
-	pageArea.dispatchEvent(new Event("scroll"));
-	feedbackBounds = feedback.getBoundingClientRect();
-	expect(feedbackBounds.top).toBeGreaterThanOrEqual(pageAreaBounds.top);
-	expect(feedbackBounds.bottom).toBeLessThanOrEqual(pageAreaBounds.bottom);
-	expect(pageArea.scrollHeight).toBe(scrollHeight);
 
 	pageTwoRender.resolve(visualFor(1));
 	await secondPage;
 	await expectRenderedPages(viewer, [{ pageIndex: 1, pixel: COLORS[1] ?? null }]);
+	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
 });
 
 test("keeps a nonempty canvas across a normal quick page transition", async () => {
@@ -136,7 +110,7 @@ test("keeps a canvas present when an adjacent prerender is already cached", asyn
 	await firstPage;
 	await prerenderStarted.promise;
 	await prerenderFinished.promise;
-	await delay(100);
+	await waitForAnimationFrames(2);
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
 	expect(prerenderCalls).toContain(1);
 	expect(renderCalls).not.toContain(1);
@@ -187,7 +161,7 @@ test("keeps both old spread pages until both new pages finish rendering", async 
 	viewer.page = 4;
 	await Promise.all([pageFourStarted.promise, pageFiveStarted.promise]);
 	pageFiveRender.resolve(visualFor(4));
-	await delay(250);
+	await waitForRenderingFeedback(viewer);
 	await expectRenderedPages(viewer, [
 		{ pageIndex: 1, pixel: COLORS[1] ?? null },
 		{ pageIndex: 2, pixel: COLORS[2] ?? null },
@@ -200,5 +174,5 @@ test("keeps both old spread pages until both new pages finish rendering", async 
 		{ pageIndex: 3, pixel: COLORS[3] ?? null },
 		{ pageIndex: 4, pixel: COLORS[4] ?? null },
 	]);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
+	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
 });

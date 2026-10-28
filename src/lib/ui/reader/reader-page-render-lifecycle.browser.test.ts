@@ -8,11 +8,12 @@ import {
 	createDeferred,
 	createPageSource,
 	createViewer,
-	delay,
 	expectRenderedPages,
 	readRenderedPages,
 	visualFor,
+	waitForAnimationFrames,
 	waitForPageChange,
+	waitForRenderingFeedback,
 } from "./reader-page-render-fixtures";
 
 afterEach(() => {
@@ -43,10 +44,11 @@ test("does not restore an outdated page after a newer page finishes", async () =
 	const thirdPage = waitForPageChange(viewer, 3);
 	viewer.page = 3;
 	await thirdPage;
+	await waitForAnimationFrames(2);
 	await expectRenderedPages(viewer, [{ pageIndex: 2, pixel: COLORS[2] ?? null }]);
 
 	pageTwoRender.resolve(visualFor(1));
-	await delay(0);
+	await waitForAnimationFrames(2);
 	await expectRenderedPages(viewer, [{ pageIndex: 2, pixel: COLORS[2] ?? null }]);
 	expect(pageChanges).toEqual([1, 3]);
 });
@@ -71,14 +73,13 @@ test("clears navigation feedback when returning to the still-visible page", asyn
 
 	viewer.page = 2;
 	await pageTwoStarted.promise;
-	await delay(250);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).not.toBeNull();
+	await waitForRenderingFeedback(viewer);
 
 	viewer.page = 1;
 	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
 	pageTwoRender.resolve(visualFor(1));
-	await delay(0);
+	await waitForAnimationFrames(2);
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
 });
 
@@ -109,16 +110,14 @@ test("clears old pages on source change and ignores a late render from the old s
 
 	viewer.page = 2;
 	await oldPageTwoStarted.promise;
-	await delay(250);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")?.textContent).toContain(
-		"ページを描画しています。",
-	);
+	const feedback = await waitForRenderingFeedback(viewer);
+	expect(feedback.textContent).toContain("ページを描画しています。");
 	viewer.src = "./reader-page-render-second.pdf";
 	await expect
 		.poll(() => viewer.shadowRoot?.querySelector(".status")?.textContent)
 		.toContain("PDFの情報を読み込んでいます。");
 	expect(readRenderedPages(viewer)).toEqual([]);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
+	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
 
 	const replacementPage = waitForPageChange(viewer, 1);
 	newSource.resolve(
@@ -133,7 +132,7 @@ test("clears old pages on source change and ignores a late render from the old s
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: [140, 40, 180] }]);
 
 	oldPageTwoRender.resolve(visualFor(1));
-	await delay(0);
+	await waitForAnimationFrames(2);
 	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: [140, 40, 180] }]);
 	expect(pageChanges).toEqual([1, 1]);
 });
@@ -158,10 +157,9 @@ test("hides the previous page when a replacement render fails", async () => {
 
 	viewer.page = 2;
 	await pageTwoStarted.promise;
-	await delay(250);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).not.toBeNull();
+	await waitForRenderingFeedback(viewer);
 	pageTwoRender.reject(new Error("The page could not be rendered."));
 	await expect.poll(() => viewer.shadowRoot?.querySelector('[role="alert"]')).not.toBeNull();
 	expect(readRenderedPages(viewer)).toEqual([]);
-	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
+	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
 });
