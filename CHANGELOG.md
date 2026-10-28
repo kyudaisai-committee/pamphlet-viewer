@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.5
+
+### Patch Changes
+
+- 0d536f1: ページ描画中の進行表示が出るまでの猶予を100msへ短縮しました。
+
 ## 0.1.4
 
 ### Patch Changes
