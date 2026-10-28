@@ -6,9 +6,13 @@
 	import type { PageVisual } from "@/lib/document/page-source";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
-
-	const THUMBNAIL_ROW_HEIGHT = 160;
-	const VIRTUAL_OVERSCAN = 1;
+	import {
+		calculateThumbnailColumnCount,
+		calculateThumbnailRowCount,
+		calculateVisibleThumbnailRows,
+		getThumbnailPageIndexesForRow,
+		THUMBNAIL_ROW_HEIGHT,
+	} from "./thumbnail-grid";
 
 	interface Props {
 		pageCount: number;
@@ -27,19 +31,32 @@
 	}: Props = $props();
 	const messages = useViewerMessages();
 	let scrollContainer = $state<HTMLElement>();
-	let visibleStart = $state(0);
-	let visibleEnd = $state(0);
-	let renderedPageIndexes = $derived(
-		Array.from({ length: visibleEnd - visibleStart }, (_, offset) => visibleStart + offset),
+	let columnCount = $state(1);
+	let visibleStartRow = $state(0);
+	let visibleEndRow = $state(0);
+	let totalRows = $derived(calculateThumbnailRowCount(pageCount, columnCount));
+	let renderedRows = $derived(
+		Array.from({ length: visibleEndRow - visibleStartRow }, (_, offset) => {
+			const rowIndex = visibleStartRow + offset;
+			return {
+				rowIndex,
+				pageIndexes: getThumbnailPageIndexesForRow(rowIndex, pageCount, columnCount),
+			};
+		}),
 	);
 
 	$effect(() => {
 		const count = pageCount;
 		const activePage = currentPages[0] ?? 0;
-		if (count === 0) return;
+		const columns = columnCount;
 		untrack(() => {
+			if (count === 0) {
+				updateVisiblePages();
+				return;
+			}
 			if (scrollContainer !== undefined) {
-				const activeTop = activePage * THUMBNAIL_ROW_HEIGHT;
+				const activeRow = Math.floor(Math.min(activePage, count - 1) / columns);
+				const activeTop = activeRow * THUMBNAIL_ROW_HEIGHT;
 				const activeBottom = activeTop + THUMBNAIL_ROW_HEIGHT;
 				const visibleBottom = scrollContainer.scrollTop + scrollContainer.clientHeight;
 				if (activeTop < scrollContainer.scrollTop || activeBottom > visibleBottom) {
@@ -61,23 +78,27 @@
 	function updateVisiblePages(): void {
 		const container = scrollContainer;
 		if (container === undefined || pageCount === 0) {
-			visibleStart = 0;
-			visibleEnd = 0;
+			visibleStartRow = 0;
+			visibleEndRow = 0;
 			onVisiblePagesChange([]);
 			return;
 		}
 
-		const firstVisible = Math.floor(container.scrollTop / THUMBNAIL_ROW_HEIGHT);
-		const lastVisible = Math.ceil(
-			(container.scrollTop + container.clientHeight) / THUMBNAIL_ROW_HEIGHT,
+		const nextColumnCount = calculateThumbnailColumnCount(container.clientWidth);
+		if (columnCount !== nextColumnCount) columnCount = nextColumnCount;
+		const range = calculateVisibleThumbnailRows(
+			pageCount,
+			nextColumnCount,
+			container.scrollTop,
+			container.clientHeight,
 		);
-		const nextStart = Math.max(0, firstVisible - VIRTUAL_OVERSCAN);
-		const nextEnd = Math.min(pageCount, lastVisible + VIRTUAL_OVERSCAN);
-		visibleStart = nextStart;
-		visibleEnd = Math.max(nextStart, nextEnd);
-		onVisiblePagesChange(
-			Array.from({ length: visibleEnd - visibleStart }, (_, offset) => visibleStart + offset),
-		);
+		visibleStartRow = range.startRow;
+		visibleEndRow = range.endRow;
+		const visiblePageIndexes = Array.from(
+			{ length: range.endRow - range.startRow },
+			(_, offset) => getThumbnailPageIndexesForRow(range.startRow + offset, pageCount, nextColumnCount),
+		).flat();
+		onVisiblePagesChange(visiblePageIndexes);
 	}
 </script>
 
@@ -89,36 +110,40 @@
 		bind:this={scrollContainer}
 		onscroll={updateVisiblePages}
 	>
-		<div class="thumbnail-list">
-			<div class="virtual-spacer" aria-hidden="true" style:height={`${visibleStart * THUMBNAIL_ROW_HEIGHT}px`}></div>
-			{#each renderedPageIndexes as pageIndex (pageIndex)}
-				{@const visual = visuals[pageIndex]}
-				<div class="thumbnail-entry-wrapper" role="listitem" data-page-index={pageIndex}>
-					<button
-					class="thumbnail-entry"
-					class:current={currentPages.includes(pageIndex)}
-					class:current-cover={pageIndex === 0 && currentPages.includes(pageIndex)}
-					data-page-index={pageIndex}
-					aria-current={currentPages.includes(pageIndex) ? "page" : undefined}
-					aria-label={messages.showThumbnailPage(pageIndex + 1)}
-					type="button"
-					onclick={() => onSelectPage(pageIndex + 1)}
-				>
-					<span class="thumbnail-preview" aria-hidden="true">
-						{#if visual !== undefined}
-							<PageCanvas visual={visual} label={messages.pageLabel(pageIndex + 1)} decorative />
-						{:else}
-							<span class="thumbnail-placeholder"></span>
-						{/if}
-					</span>
-					<span class="thumbnail-label">{pageIndex + 1}</span>
-					</button>
+		<div class="thumbnail-list" style:--thumbnail-column-count={columnCount}>
+			<div class="virtual-spacer" aria-hidden="true" style:height={`${visibleStartRow * THUMBNAIL_ROW_HEIGHT}px`}></div>
+			{#each renderedRows as row (row.rowIndex)}
+				<div class="thumbnail-row">
+					{#each row.pageIndexes as pageIndex (pageIndex)}
+						{@const visual = visuals[pageIndex]}
+						<div class="thumbnail-entry-wrapper" role="listitem" data-page-index={pageIndex}>
+							<button
+								class="thumbnail-entry"
+								class:current={currentPages.includes(pageIndex)}
+								class:current-cover={pageIndex === 0 && currentPages.includes(pageIndex)}
+								data-page-index={pageIndex}
+								aria-current={currentPages.includes(pageIndex) ? "page" : undefined}
+								aria-label={messages.showThumbnailPage(pageIndex + 1)}
+								type="button"
+								onclick={() => onSelectPage(pageIndex + 1)}
+							>
+								<span class="thumbnail-preview" aria-hidden="true">
+									{#if visual !== undefined}
+										<PageCanvas visual={visual} label={messages.pageLabel(pageIndex + 1)} decorative />
+									{:else}
+										<span class="thumbnail-placeholder"></span>
+									{/if}
+								</span>
+								<span class="thumbnail-label">{pageIndex + 1}</span>
+							</button>
+						</div>
+					{/each}
 				</div>
 			{/each}
 			<div
 				class="virtual-spacer"
 				aria-hidden="true"
-				style:height={`${Math.max(0, pageCount - visibleEnd) * THUMBNAIL_ROW_HEIGHT}px`}
+				style:height={`${Math.max(0, totalRows - visibleEndRow) * THUMBNAIL_ROW_HEIGHT}px`}
 			></div>
 		</div>
 	</div>
@@ -148,14 +173,22 @@
 				flex-direction: column;
 				min-height: 100%;
 
+				.thumbnail-row {
+					box-sizing: border-box;
+					display: grid;
+					grid-template-columns: repeat(var(--thumbnail-column-count), minmax(0, 1fr));
+					gap: 8px;
+					flex: 0 0 160px;
+					height: 160px;
+					padding-inline: 8px;
+				}
+
 				.thumbnail-entry-wrapper {
 					box-sizing: border-box;
 					display: grid;
 					place-items: center;
-					flex: 0 0 160px;
-					height: 160px;
+					min-width: 0;
 					min-height: 0;
-					padding-inline: 8px;
 
 					.thumbnail-entry {
 						box-sizing: border-box;
@@ -165,7 +198,6 @@
 						width: 100%;
 						height: 152px;
 						min-height: 0;
-						flex: 0 0 152px;
 						margin: 0;
 						padding: 7px;
 						border: var(--pamphlet-viewer-border-width) solid transparent;
@@ -208,6 +240,11 @@
 							overflow: hidden;
 							border: var(--pamphlet-viewer-border-width) solid #454b52;
 							background: #171a1e;
+
+							:global(.page-visual),
+							:global(.page-canvas) {
+								background: transparent;
+							}
 
 							.thumbnail-placeholder {
 								width: 42%;

@@ -32,6 +32,9 @@ const CORS_ASSET_METRICS_PATH = "/__pdfium-cors-asset-metrics";
 const ANNOTATED_FIXTURE_PATH = "/__annotated-range-fixture.pdf";
 const EMBEDDED_THUMBNAIL_FIXTURE_PATH = "/__embedded-thumbnail-range-fixture.pdf";
 const EMBEDDED_THUMBNAIL_BATCH_FIXTURE_PATH = "/__embedded-thumbnail-batch-range-fixture.pdf";
+const THUMBNAIL_PORTRAIT_FIXTURE_PATH = "/__thumbnail-portrait-range-fixture.pdf";
+const THUMBNAIL_LANDSCAPE_FIXTURE_PATH = "/__thumbnail-landscape-range-fixture.pdf";
+const THUMBNAIL_MIXED_FIXTURE_PATH = "/__thumbnail-mixed-range-fixture.pdf";
 const LIBRARY_DIRECTORY = resolve(process.cwd(), "dist/library");
 const LIBRARY_HTML_PATH = "/__built-library-test.html";
 const REMOTE_LIBRARY_HTML_PATH = "/__built-library-remote-test.html";
@@ -91,6 +94,31 @@ export function rangeFixturePlugin(): Plugin {
 		}),
 		"/__embedded-thumbnail-batch-range-metrics",
 	);
+	const portraitPageSize = { width: 300, height: 400 };
+	const landscapePageSize = { width: 400, height: 300 };
+	const thumbnailPortraitFixture = createFixtureRecord(
+		createPdfFixture({
+			pageSizes: Array.from({ length: 24 }, () => portraitPageSize),
+			midDocumentFillerBytes: 0,
+		}),
+		"/__thumbnail-portrait-range-metrics",
+	);
+	const thumbnailLandscapeFixture = createFixtureRecord(
+		createPdfFixture({
+			pageSizes: Array.from({ length: 24 }, () => landscapePageSize),
+			midDocumentFillerBytes: 0,
+		}),
+		"/__thumbnail-landscape-range-metrics",
+	);
+	const thumbnailMixedFixture = createFixtureRecord(
+		createPdfFixture({
+			pageSizes: Array.from({ length: 24 }, (_, index) =>
+				index % 2 === 0 ? portraitPageSize : landscapePageSize,
+			),
+			midDocumentFillerBytes: 0,
+		}),
+		"/__thumbnail-mixed-range-metrics",
+	);
 	let redirectRequests = 0;
 	const fixtures = new Map<string, FixtureRecord>([
 		[FIXTURE_PATH, regularFixture],
@@ -103,6 +131,9 @@ export function rangeFixturePlugin(): Plugin {
 		[ANNOTATED_FIXTURE_PATH, annotatedFixture],
 		[EMBEDDED_THUMBNAIL_FIXTURE_PATH, embeddedThumbnailFixture],
 		[EMBEDDED_THUMBNAIL_BATCH_FIXTURE_PATH, embeddedThumbnailBatchFixture],
+		[THUMBNAIL_PORTRAIT_FIXTURE_PATH, thumbnailPortraitFixture],
+		[THUMBNAIL_LANDSCAPE_FIXTURE_PATH, thumbnailLandscapeFixture],
+		[THUMBNAIL_MIXED_FIXTURE_PATH, thumbnailMixedFixture],
 	]);
 	const corsServers = new Map<number, ReturnType<typeof createServer>>();
 	const corsAssetRequests = new Map<number, string[]>();

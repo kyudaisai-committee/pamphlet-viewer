@@ -7,6 +7,7 @@ const FAR_PAGE_COLOR = [0.91, 0.08, 0.16] as const;
 
 export interface PdfFixtureOptions {
 	tinyPageNumbers?: readonly number[];
+	pageSizes?: readonly { width: number; height: number }[];
 	contentGapBytes?: number;
 	midDocumentFillerBytes?: number;
 	rotatedCropPageNumber?: number;
@@ -57,7 +58,8 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		const pageObject = 3 + index;
 		const contentObject = 3 + PAGE_COUNT + index;
 		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
-		const mediaBox = tinyPage ? "0 0 24 24" : "0 0 300 400";
+		const pageSize = options.pageSizes?.[index] ?? { width: 300, height: 400 };
+		const mediaBox = tinyPage ? "0 0 24 24" : `0 0 ${pageSize.width} ${pageSize.height}`;
 		const rotatedCropPage = options.rotatedCropPageNumber === index + 1;
 		const pageGeometry = rotatedCropPage
 			? "/CropBox [25 40 225 340] /Rotate 90"
@@ -93,7 +95,10 @@ export function createPdfFixture(options: PdfFixtureOptions = {}): Buffer {
 		const contentObject = 3 + PAGE_COUNT + index;
 		const color = getPageColor(index);
 		const tinyPage = options.tinyPageNumbers?.includes(index + 1) ?? false;
-		const rectangle = tinyPage ? "2 2 20 20" : "30 40 240 320";
+		const pageSize = options.pageSizes?.[index] ?? { width: 300, height: 400 };
+		const rectangle = tinyPage
+			? "2 2 20 20"
+			: `30 40 ${pageSize.width - 60} ${pageSize.height - 80}`;
 		const imageObject = imageObjectByPageNumber.get(index + 1);
 		const stream =
 			imageObject === undefined
