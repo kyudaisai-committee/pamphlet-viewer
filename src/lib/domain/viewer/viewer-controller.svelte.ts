@@ -229,20 +229,20 @@ export class ViewerController {
 		return id;
 	}
 
-	retryRender(input: RenderInput): void {
+	retryRender(input: RenderInput): number | null {
 		if (this.#sourceUnavailable) {
 			const url = this.#sourceUrl;
 			const backend = this.#backend;
 			if (url !== null && backend !== null) {
 				void this.#loadDocument(url, backend, input, true);
 			}
-			return;
+			return null;
 		}
 		this.#failedRenderKey = "";
 		this.#lastRenderKey = "";
 		this.failure = null;
 		this.phase = "ready";
-		this.requestRender(input);
+		return this.requestRender(input);
 	}
 
 	setThumbnailPages(

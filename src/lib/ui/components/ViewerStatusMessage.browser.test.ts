@@ -9,70 +9,34 @@ afterEach(() => {
 	document.body.replaceChildren();
 });
 
-test("does not show the rendering status after a quick page change", async () => {
+test("delays the rendering status by 100 ms when no page is visible", async () => {
 	await import("@/lib/entry");
 	const render = createDeferred<PageVisual>();
 	const renderStarted = createDeferred<void>();
 	const element = createViewer({
-		async renderPage(pageIndex: number): Promise<PageVisual> {
-			if (pageIndex === 1) {
-				renderStarted.resolve();
-				return render.promise;
-			}
-			return createVisual();
+		async renderPage(): Promise<PageVisual> {
+			renderStarted.resolve();
+			return render.promise;
 		},
 	});
 	const firstPage = waitForPageChange(element, 1);
 	document.body.append(element);
-	await firstPage;
-
-	const secondPage = waitForPageChange(element, 2);
-	element.page = 2;
 	await renderStarted.promise;
-	await delay(100);
+
+	await delay(50);
 	expect(element.shadowRoot?.querySelector(".status")?.textContent).not.toContain(
 		RENDERING_STATUS_MESSAGE,
 	);
-
-	render.resolve(createVisual());
-	await secondPage;
-	await delay(450);
-	expect(element.shadowRoot?.querySelector(".status")).toBeNull();
-	expect(element.shadowRoot?.textContent).not.toContain(RENDERING_STATUS_MESSAGE);
-});
-
-test("shows the rendering status after it stays pending for 400 ms", async () => {
-	await import("@/lib/entry");
-	const render = createDeferred<PageVisual>();
-	const renderStarted = createDeferred<void>();
-	const element = createViewer({
-		async renderPage(pageIndex: number): Promise<PageVisual> {
-			if (pageIndex === 1) {
-				renderStarted.resolve();
-				return render.promise;
-			}
-			return createVisual();
-		},
-	});
-	const firstPage = waitForPageChange(element, 1);
-	document.body.append(element);
-	await firstPage;
-
-	const secondPage = waitForPageChange(element, 2);
-	element.page = 2;
-	await renderStarted.promise;
 	await expect
 		.poll(() => element.shadowRoot?.querySelector(".status")?.textContent)
 		.toContain(RENDERING_STATUS_MESSAGE);
 
-	render.resolve(createVisual());
-	await secondPage;
+	render.resolve(createVisual(220, 40, 40));
+	await firstPage;
 	await expect.poll(() => element.shadowRoot?.querySelector(".status")).toBeNull();
 });
 
-function createViewer(renderer: {
-	renderPage(pageIndex: number): Promise<PageVisual>;
-}): PamphletViewerElement {
+function createViewer(renderer: { renderPage(): Promise<PageVisual> }): PamphletViewerElement {
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = "840px";
 	element.style.height = "620px";
@@ -82,24 +46,19 @@ function createViewer(renderer: {
 	return element;
 }
 
-function createBackend(renderer: {
-	renderPage(pageIndex: number): Promise<PageVisual>;
-}): DocumentBackend {
+function createBackend(renderer: { renderPage(): Promise<PageVisual> }): DocumentBackend {
 	return {
 		async open(): Promise<PageSource> {
 			return {
-				pageCount: 2,
+				pageCount: 1,
 				async getPageSize() {
 					return { width: 300, height: 400 };
 				},
-				async getPrefetchedPageSize() {
-					throw new DOMException("Skip prerendering in this test.", "AbortError");
-				},
-				renderPage(pageIndex: number) {
-					return renderer.renderPage(pageIndex);
+				renderPage() {
+					return renderer.renderPage();
 				},
 				async renderPrefetchedPage() {
-					return createVisual();
+					return createVisual(220, 40, 40);
 				},
 				dispose() {},
 			};
@@ -107,8 +66,13 @@ function createBackend(renderer: {
 	};
 }
 
-function createVisual(): PageVisual {
-	return { type: "pixels", width: 1, height: 1, pixels: new Uint8Array([1, 2, 3, 255]).buffer };
+function createVisual(red: number, green: number, blue: number): PageVisual {
+	return {
+		type: "pixels",
+		width: 1,
+		height: 1,
+		pixels: new Uint8Array([red, green, blue, 255]).buffer,
+	};
 }
 
 function waitForPageChange(element: PamphletViewerElement, page: number): Promise<void> {
