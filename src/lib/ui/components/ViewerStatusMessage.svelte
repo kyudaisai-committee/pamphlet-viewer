@@ -12,6 +12,20 @@
 
 	let { phase, failure, onRetry }: Props = $props();
 	const messages = useViewerMessages();
+	const RENDERING_STATUS_DELAY_MS = 400;
+	let renderingStatusVisible = $state(false);
+
+	$effect(() => {
+		if (phase !== "ready") {
+			renderingStatusVisible = false;
+			return;
+		}
+
+		const timeout = window.setTimeout(() => {
+			renderingStatusVisible = true;
+		}, RENDERING_STATUS_DELAY_MS);
+		return () => window.clearTimeout(timeout);
+	});
 </script>
 
 <div class="status" role={phase === "error" ? "alert" : "status"}>
@@ -23,7 +37,9 @@
 			<button type="button" onclick={onRetry}>{messages.retry}</button>
 		{/if}
 	{:else if phase === "ready"}
-		<span>{messages.renderingPage}</span>
+		{#if renderingStatusVisible}
+			<span>{messages.renderingPage}</span>
+		{/if}
 	{:else}
 		<span>{messages.emptyViewer}</span>
 	{/if}
