@@ -62,12 +62,16 @@ test("upgrades preconfigured elements once and keeps child styles inside the sha
 	const shadowRoot = element.shadowRoot;
 	expect(shadowRoot).not.toBeNull();
 	const toolbar = shadowRoot?.querySelector<HTMLElement>(".toolbar");
-	const chapterSelect = shadowRoot?.querySelector<HTMLSelectElement>(
-		'select[aria-label="章へ移動"]',
+	const tableOfContentsToggle = shadowRoot?.querySelector<HTMLButtonElement>(
+		'[data-panel-toggle="chapters"]',
 	);
 	const canvas = shadowRoot?.querySelector<HTMLCanvasElement>(".page-canvas");
 	expect(toolbar).not.toBeNull();
-	expect(chapterSelect?.selectedOptions[0]?.textContent).toBe("はじめに");
+	expect(tableOfContentsToggle).not.toBeNull();
+	tableOfContentsToggle?.click();
+	await expect
+		.poll(() => shadowRoot?.querySelector(".chapter-title")?.textContent)
+		.toBe("はじめに");
 	expect(canvas).not.toBeNull();
 	expect(getComputedStyle(toolbar as HTMLElement).display).toBe("flex");
 	expect(getComputedStyle(canvas as HTMLCanvasElement).display).toBe("block");

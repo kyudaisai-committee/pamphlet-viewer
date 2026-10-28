@@ -37,6 +37,10 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	import { createViewerMessages } from "@/lib/i18n/viewer-messages";
 	import { provideViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
+	import BookmarkPanel from "@/lib/ui/components/BookmarkPanel.svelte";
+	import ChapterListPanel from "@/lib/ui/components/ChapterListPanel.svelte";
+	import ReaderPanel from "@/lib/ui/components/ReaderPanel.svelte";
+	import type { ReaderPanelTab } from "@/lib/ui/components/ReaderPanel.svelte";
 	import ThumbnailPanel from "@/lib/ui/components/ThumbnailPanel.svelte";
 	import ViewerStage from "@/lib/ui/components/ViewerStage.svelte";
 	import ViewerSettingsToolbar from "@/lib/ui/components/ViewerSettingsToolbar.svelte";
@@ -80,7 +84,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let localeInitialized = $state(false);
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
 	let zoom = $state(1);
-	let thumbnailsOpen = $state(false);
+	let activePanel = $state<ReaderPanelTab | null>(null);
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
@@ -142,7 +146,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
 				clearZoomAnchor();
-				thumbnailsOpen = false;
+				activePanel = null;
 				thumbnailPageIndexes = [];
 				controller.closeThumbnails();
 			});
@@ -274,10 +278,15 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	});
 
 	$effect(() => {
-		const isOpen = thumbnailsOpen;
+		const panel = activePanel;
 		const pageIndexes = thumbnailPageIndexes;
-		if (isOpen) untrack(() => controller.setThumbnailPages(pageIndexes));
+		if (panel === "pages") untrack(() => controller.setThumbnailPages(pageIndexes));
 		else untrack(() => controller.closeThumbnails());
+	});
+
+	$effect(() => {
+		if (activePanel !== "chapters" || chapters.length > 0) return;
+		untrack(() => (activePanel = null));
 	});
 
 	onMount(() => {
@@ -319,7 +328,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 
 	function dispatchControllerEvent(event: ViewerEvent): void {
 		if (event.type === "error" && controller.sourceUnavailable) {
-			thumbnailsOpen = false;
+			activePanel = null;
 			thumbnailPageIndexes = [];
 			controller.closeThumbnails();
 		}
@@ -345,13 +354,6 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		page = Number(value);
 	}
 
-	function onChapterChange(value: string): void {
-		const chapterPage = chapters.find((chapter) => String(chapter.page) === value)?.page;
-		if (chapterPage === undefined) return;
-		clearZoomAnchor();
-		page = chapterPage;
-	}
-
 	function toggleCurrentBookmark(): void {
 		bookmarkController.toggleCurrentPage(
 			resolvedSource,
@@ -361,11 +363,56 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		);
 	}
 
-	function selectBookmark(value: string): void {
-		const bookmarkedPage = bookmarkController.findPage(value, bookmarksEnabled);
-		if (bookmarkedPage === undefined) return;
+	function selectBookmark(bookmarkedPage: number): void {
+		if (!bookmarksEnabled || !bookmarkController.pages.includes(bookmarkedPage)) return;
+		selectPanelPage(bookmarkedPage);
+	}
+
+	function selectChapter(chapterPage: number): void {
+		if (!chapters.some((chapter) => chapter.page === chapterPage)) return;
+		selectPanelPage(chapterPage);
+	}
+
+	function selectPanelPage(selectedPage: number): void {
+		if (
+			!Number.isSafeInteger(selectedPage) ||
+			selectedPage < 1 ||
+			selectedPage > controller.pageCount
+		) {
+			return;
+		}
 		clearZoomAnchor();
-		page = bookmarkedPage;
+		page = selectedPage;
+		const stageSlot = shellElement?.querySelector<HTMLElement>(".stage-slot");
+		if (stageSlot === null || stageSlot === undefined || getComputedStyle(stageSlot).display !== "none") {
+			return;
+		}
+		activePanel = null;
+		void tick().then(() => pageArea?.focus({ preventScroll: true }));
+	}
+
+	function togglePanel(panel: ReaderPanelTab): void {
+		if (panel === "chapters" && chapters.length === 0) return;
+		if (panel === "bookmarks" && !bookmarksEnabled) return;
+		activePanel = activePanel === panel ? null : panel;
+	}
+
+	function selectPanel(panel: ReaderPanelTab): void {
+		if (panel === "chapters" && chapters.length === 0) return;
+		if (panel === "bookmarks" && !bookmarksEnabled) return;
+		activePanel = panel;
+	}
+
+	function closePanel(): void {
+		const closingPanel = activePanel;
+		if (closingPanel === null) return;
+		activePanel = null;
+		void tick().then(() => {
+			const toggle = shellElement?.querySelector<HTMLButtonElement>(
+				`[data-panel-toggle="${closingPanel}"]`,
+			);
+			toggle?.focus({ preventScroll: true });
+		});
 	}
 
 	function onLayoutChange(value: string): void {
@@ -499,16 +546,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	}
 
 	function selectThumbnail(selectedPage: number): void {
-		clearZoomAnchor();
-		page = selectedPage;
-		const stageSlot = shellElement?.querySelector<HTMLElement>(".stage-slot");
-		if (
-			stageSlot !== null &&
-			stageSlot !== undefined &&
-			getComputedStyle(stageSlot).display === "none"
-		) {
-			thumbnailsOpen = false;
-		}
+		selectPanelPage(selectedPage);
 	}
 
 	function onViewportChange(nextViewport: ViewportSize): void {
@@ -538,26 +576,46 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 </script>
 
 <div class="viewer-shell" lang={locale} bind:this={shellElement}>
+	{#snippet pagesPanel()}
+		<ThumbnailPanel
+			pageCount={controller.pageCount}
+			currentPages={currentPages}
+			visuals={controller.thumbnailVisuals}
+			onVisiblePagesChange={updateThumbnailPages}
+			onSelectPage={selectThumbnail}
+		/>
+	{/snippet}
+	{#snippet chapterPanel()}
+		<ChapterListPanel
+			{chapters}
+			currentChapterPage={currentChapter?.page}
+			onSelectChapter={selectChapter}
+		/>
+	{/snippet}
+	{#snippet bookmarkPanel()}
+		<BookmarkPanel
+			{page}
+			bookmarkPages={bookmarkController.pages}
+			bookmarked={currentPageBookmarked}
+			bookmarkEnabled={bookmarksEnabled}
+			onToggleBookmark={toggleCurrentBookmark}
+			onSelectBookmark={selectBookmark}
+		/>
+	{/snippet}
 	{#snippet leftToolbar()}
 		<ViewerToolbar
 			page={page}
 			pageCount={controller.pageCount}
-			{chapters}
-			currentChapterPage={currentChapter?.page}
-			bookmarkPages={bookmarkController.pages}
-			bookmarked={currentPageBookmarked}
+			chapterCount={chapters.length}
+			panel={activePanel}
 			bookmarkEnabled={bookmarksEnabled}
 			enabled={controller.pageCount > 0}
 			canPrevious={page > 1}
 			canNext={canMoveNext}
-			thumbnailsOpen={thumbnailsOpen}
 			onPageChange={onPageChange}
-			onChapterChange={onChapterChange}
-			onToggleBookmark={toggleCurrentBookmark}
-			onSelectBookmark={selectBookmark}
+			onTogglePanel={togglePanel}
 			onPrevious={previousPage}
 			onNext={nextPage}
-			onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
 		/>
 	{/snippet}
 	{#snippet rightToolbar()}
@@ -580,16 +638,17 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		right={rightToolbar}
 	/>
 	<div class="content-region" data-reader-region="body">
-		<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
-			{#if thumbnailsOpen}
-				<div class="thumbnail-slot">
-					<ThumbnailPanel
-						pageCount={controller.pageCount}
-						currentPages={currentPages}
-						visuals={controller.thumbnailVisuals}
-						onVisiblePagesChange={updateThumbnailPages}
-						onSelectPage={selectThumbnail}
-						onClose={() => (thumbnailsOpen = false)}
+		<div class="reader-body" class:panel-open={activePanel !== null}>
+			{#if activePanel !== null}
+				<div class="reader-panel-slot">
+					<ReaderPanel
+						panel={activePanel}
+						hasChapters={chapters.length > 0}
+						pages={pagesPanel}
+						chapters={chapterPanel}
+						bookmarks={bookmarkPanel}
+						onPanelChange={selectPanel}
+						onClose={closePanel}
 					/>
 				</div>
 			{/if}
@@ -740,11 +799,11 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			min-width: 0;
 			min-height: 0;
 
-			&.thumbnails-open {
+			&.panel-open {
 				grid-template-columns: 208px minmax(0, 1fr);
 			}
 
-			.thumbnail-slot {
+			.reader-panel-slot {
 				display: flex;
 				flex-direction: column;
 				min-width: 0;
@@ -773,7 +832,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			flex: 1 1 0;
 		}
 
-		.viewer-shell .reader-body.thumbnails-open {
+		.viewer-shell .reader-body.panel-open {
 			grid-template-columns: minmax(0, 1fr);
 
 			.stage-slot {

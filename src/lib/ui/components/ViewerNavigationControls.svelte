@@ -2,189 +2,133 @@
 
 <script lang="ts">
 	import {
-		BookmarkCheckIcon,
 		BookmarkIcon,
 		ChevronLeftIcon,
 		ChevronRightIcon,
 		PanelLeftIcon,
+		TableOfContentsIcon,
 	} from "@lucide/svelte";
 
-	import type { PamphletChapter } from "@/lib/public-api";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
-	import CompactNavigation from "./CompactNavigation.svelte";
+	import type { ReaderPanelTab } from "./ReaderPanel.svelte";
 	import MenuBar from "./MenuBar.svelte";
 
 	interface Props {
 		page: number;
 		pageCount: number;
-		chapters: readonly PamphletChapter[];
-		currentChapterPage?: number;
-		bookmarkPages: readonly number[];
-		bookmarked: boolean;
+		chapterCount: number;
+		panel: ReaderPanelTab | null;
 		bookmarkEnabled: boolean;
 		enabled: boolean;
 		canPrevious: boolean;
 		canNext: boolean;
-		thumbnailsOpen: boolean;
 		onPageChange(value: string): void;
-		onChapterChange(value: string): void;
-		onToggleBookmark(): void;
-		onSelectBookmark(value: string): void;
+		onTogglePanel(panel: ReaderPanelTab): void;
 		onPrevious(): void;
 		onNext(): void;
-		onToggleThumbnails(): void;
 	}
 
 	let {
 		page,
 		pageCount,
-		chapters,
-		currentChapterPage,
-		bookmarkPages,
-		bookmarked,
+		chapterCount,
+		panel,
 		bookmarkEnabled,
 		enabled,
 		canPrevious,
 		canNext,
-		thumbnailsOpen,
 		onPageChange,
-		onChapterChange,
-		onToggleBookmark,
-		onSelectBookmark,
+		onTogglePanel,
 		onPrevious,
 		onNext,
-		onToggleThumbnails,
 	}: Props = $props();
 	const messages = useViewerMessages();
 </script>
 
 {#snippet pageNavigation()}
 	<div class="page-controls" role="group" aria-label={messages.pageNavigationLabel}>
-	<button
-		class="icon-button thumbnail-toggle"
-		type="button"
-		aria-label={thumbnailsOpen ? messages.hidePages : messages.showPages}
-		aria-expanded={thumbnailsOpen}
-		title={thumbnailsOpen ? messages.hidePages : messages.showPages}
-		onclick={onToggleThumbnails}
-	>
-		<PanelLeftIcon size={18} aria-hidden="true" />
-	</button>
-	<button
-		class="icon-button"
-		type="button"
-		aria-label={messages.previousPage}
-		title={messages.previousPage}
-		aria-keyshortcuts="ArrowLeft PageUp"
-		disabled={!enabled || !canPrevious}
-		onclick={onPrevious}
-	>
-		<ChevronLeftIcon size={18} aria-hidden="true" />
-	</button>
-	<label class="page-number">
-		<input
-			type="number"
-			min="1"
-			max={pageCount}
-			value={page}
-			aria-label={messages.pageNumber}
-			disabled={!enabled}
-			onchange={(event) => onPageChange(event.currentTarget.value)}
-		/>
-		<span aria-hidden="true">/ {pageCount || "—"}</span>
-	</label>
-	<button
-		class="icon-button"
-		type="button"
-		aria-label={messages.nextPage}
-		title={messages.nextPage}
-		aria-keyshortcuts="ArrowRight PageDown"
-		disabled={!enabled || !canNext}
-		onclick={onNext}
-	>
-		<ChevronRightIcon size={18} aria-hidden="true" />
-	</button>
-</div>
-{/snippet}
-
-{#snippet bookmarkControls()}
-	<div class="bookmark-controls">
 		<button
-			class="icon-button bookmark-toggle"
+			class="icon-button thumbnail-toggle"
+			data-panel-toggle="pages"
 			type="button"
-			aria-label={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
-			aria-pressed={bookmarked}
-			title={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
-			disabled={!bookmarkEnabled}
-			onclick={onToggleBookmark}
+			aria-label={panel === "pages" ? messages.hidePages : messages.showPages}
+			aria-expanded={panel === "pages"}
+			title={panel === "pages" ? messages.hidePages : messages.showPages}
+			onclick={() => onTogglePanel("pages")}
 		>
-			{#if bookmarked}
-				<BookmarkCheckIcon size={18} aria-hidden="true" />
-			{:else}
-				<BookmarkIcon size={18} aria-hidden="true" />
-			{/if}
+			<PanelLeftIcon size={18} aria-hidden="true" />
 		</button>
-		<CompactNavigation
-			{chapters}
-			{currentChapterPage}
-			{bookmarkPages}
-			{bookmarked}
-			{bookmarkEnabled}
-			{enabled}
-			{onChapterChange}
-			{onToggleBookmark}
-			{onSelectBookmark}
-		/>
+		<button
+			class="icon-button"
+			type="button"
+			aria-label={messages.previousPage}
+			title={messages.previousPage}
+			aria-keyshortcuts="ArrowLeft PageUp"
+			disabled={!enabled || !canPrevious}
+			onclick={onPrevious}
+		>
+			<ChevronLeftIcon size={18} aria-hidden="true" />
+		</button>
+		<label class="page-number">
+			<input
+				type="number"
+				min="1"
+				max={pageCount}
+				value={page}
+				aria-label={messages.pageNumber}
+				disabled={!enabled}
+				onchange={(event) => onPageChange(event.currentTarget.value)}
+			/>
+			<span aria-hidden="true">/ {pageCount || "—"}</span>
+		</label>
+		<button
+			class="icon-button"
+			type="button"
+			aria-label={messages.nextPage}
+			title={messages.nextPage}
+			aria-keyshortcuts="ArrowRight PageDown"
+			disabled={!enabled || !canNext}
+			onclick={onNext}
+		>
+			<ChevronRightIcon size={18} aria-hidden="true" />
+		</button>
 	</div>
 {/snippet}
 
-{#snippet chapterNavigation()}
-{#if chapters.length > 0}
-	<label class="chapter-control">
-		<span>{messages.chapter}</span>
-		<select
-			aria-label={messages.goToChapter}
-			value={currentChapterPage ?? ""}
-			disabled={!enabled}
-			onchange={(event) => onChapterChange(event.currentTarget.value)}
-		>
-			<option value="">{messages.selectChapter}</option>
-			{#each chapters as chapter (chapter.page)}
-				<option value={chapter.page}>{chapter.title}</option>
-			{/each}
-		</select>
-	</label>
-{/if}
-{/snippet}
-
-{#snippet savedPageNavigation()}
-{#if bookmarkPages.length > 0}
-	<label class="bookmark-list-control">
-		<span>{messages.savedPages}</span>
-		<select
-			aria-label={messages.bookmarkList}
-			value=""
+{#snippet panelNavigation()}
+	<div class="panel-controls" role="group" aria-label={messages.readerPanel}>
+		{#if chapterCount > 0}
+			<button
+				class="icon-button panel-toggle"
+				data-panel-toggle="chapters"
+				type="button"
+				aria-label={panel === "chapters" ? messages.closePanel : messages.openTableOfContents}
+				aria-expanded={panel === "chapters"}
+				title={panel === "chapters" ? messages.closePanel : messages.openTableOfContents}
+				onclick={() => onTogglePanel("chapters")}
+			>
+				<TableOfContentsIcon size={18} aria-hidden="true" />
+			</button>
+		{/if}
+		<button
+			class="icon-button bookmark-toggle"
+			data-panel-toggle="bookmarks"
+			type="button"
+			aria-label={panel === "bookmarks" ? messages.closePanel : messages.openBookmarks}
+			aria-expanded={panel === "bookmarks"}
+			title={panel === "bookmarks" ? messages.closePanel : messages.openBookmarks}
 			disabled={!bookmarkEnabled}
-			onchange={(event) => {
-				onSelectBookmark(event.currentTarget.value);
-				event.currentTarget.value = "";
-			}}
+			onclick={() => onTogglePanel("bookmarks")}
 		>
-			<option value="">{messages.go}</option>
-			{#each bookmarkPages as savedPage (savedPage)}
-				<option value={savedPage}>{messages.savedPage(savedPage)}</option>
-			{/each}
-		</select>
-	</label>
-{/if}
+			<BookmarkIcon size={18} aria-hidden="true" />
+		</button>
+	</div>
 {/snippet}
 
 <MenuBar
 	items={[
 		{ kind: "snippet", id: "page-navigation", content: pageNavigation },
-		{ kind: "snippet", id: "bookmark-controls", content: bookmarkControls },
-		{ kind: "snippet", id: "chapter-navigation", content: chapterNavigation },
-		{ kind: "snippet", id: "saved-page-navigation", content: savedPageNavigation },
+		{ kind: "snippet", id: "panel-navigation", content: panelNavigation },
 		{ kind: "spacer", id: "navigation-spacer" },
 	]}
 />
@@ -193,44 +137,45 @@
 	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
 
 	@layer pamphlet-viewer.components {
-	.page-controls,
-	.bookmark-controls {
-		display: flex;
-		align-items: center;
-		gap: var(--pamphlet-viewer-control-gap);
+		.page-controls,
+		.panel-controls {
+			display: flex;
+			align-items: center;
+			gap: var(--pamphlet-viewer-control-gap);
 
-		button {
-			box-sizing: border-box;
-			min-height: var(--pamphlet-viewer-control-height);
-			padding: var(--pamphlet-viewer-control-padding-block)
-				var(--pamphlet-viewer-control-padding-inline);
-			border: var(--pamphlet-viewer-border-width) solid transparent;
-			border-radius: var(--pamphlet-viewer-control-radius);
-			background: transparent;
-			color: inherit;
-			font: inherit;
-			cursor: pointer;
+			button {
+				box-sizing: border-box;
+				min-height: var(--pamphlet-viewer-control-height);
+				padding: var(--pamphlet-viewer-control-padding-block)
+					var(--pamphlet-viewer-control-padding-inline);
+				border: var(--pamphlet-viewer-border-width) solid transparent;
+				border-radius: var(--pamphlet-viewer-control-radius);
+				background: transparent;
+				color: inherit;
+				font: inherit;
+				cursor: pointer;
 
-			&:hover:not(:disabled) {
-				background: var(--pamphlet-viewer-control-hover);
+				&:hover:not(:disabled) {
+					background: var(--pamphlet-viewer-control-hover);
+				}
+
+				&:focus-visible {
+					outline: var(--pamphlet-viewer-focus-ring);
+					outline-offset: var(--pamphlet-viewer-focus-ring-offset);
+				}
+
+				&:disabled {
+					color: var(--pamphlet-viewer-disabled-text);
+					cursor: not-allowed;
+				}
 			}
 
-			&:focus-visible {
-				outline: var(--pamphlet-viewer-focus-ring);
-				outline-offset: var(--pamphlet-viewer-focus-ring-offset);
+			.icon-button {
+				display: inline-grid;
+				place-items: center;
+				width: var(--pamphlet-viewer-icon-button-width);
+				padding: var(--pamphlet-viewer-control-padding-block);
 			}
-
-			&:disabled {
-				color: var(--pamphlet-viewer-disabled-text);
-				cursor: not-allowed;
-			}
-		}
-
-		.icon-button {
-			display: inline-grid;
-			place-items: center;
-			width: var(--pamphlet-viewer-icon-button-width);
-			padding: var(--pamphlet-viewer-control-padding-block);
 		}
 
 		.page-number {
@@ -253,74 +198,26 @@
 				text-align: center;
 			}
 		}
-	}
 
-	.bookmark-controls {
-		margin-inline-start: var(--pamphlet-viewer-control-gap);
-	}
+		@container reader-toolbar (max-width: 700px) {
+			.page-controls,
+			.panel-controls {
+				gap: var(--pamphlet-viewer-compact-control-gap);
 
-	.chapter-control,
-	.bookmark-list-control {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--pamphlet-viewer-control-gap);
-		min-width: 0;
-		white-space: nowrap;
+				button,
+				.icon-button {
+					min-height: var(--pamphlet-viewer-touch-target-size);
+				}
 
-		select {
-			box-sizing: border-box;
-			min-height: var(--pamphlet-viewer-control-height);
-			padding: 4px 24px 4px 8px;
-			border: var(--pamphlet-viewer-border-width) solid
-				var(--pamphlet-viewer-control-border);
-			border-radius: var(--pamphlet-viewer-field-radius);
-			background: var(--pamphlet-viewer-control-background);
-			color: inherit;
-			font: inherit;
-		}
-	}
-
-	.chapter-control select {
-		max-width: min(260px, 30vw);
-		text-overflow: ellipsis;
-	}
-
-	.bookmark-list-control select {
-		max-width: min(160px, 24vw);
-	}
-
-	@container reader-toolbar (max-width: 700px) {
-		.page-controls,
-		.bookmark-controls {
-			gap: var(--pamphlet-viewer-compact-control-gap);
-
-			button,
-			.icon-button {
-				min-height: var(--pamphlet-viewer-touch-target-size);
-			}
-
-			.icon-button {
-				width: var(--pamphlet-viewer-touch-target-size);
+				.icon-button {
+					width: var(--pamphlet-viewer-touch-target-size);
+				}
 			}
 
 			.page-number input {
 				width: 38px;
 				min-height: var(--pamphlet-viewer-touch-target-size);
 			}
-
-			> .bookmark-toggle {
-				display: none;
-			}
 		}
-
-		.bookmark-controls {
-			margin-inline-start: var(--pamphlet-viewer-compact-control-gap);
-		}
-
-		.chapter-control,
-		.bookmark-list-control {
-			display: none;
-		}
-	}
 	}
 </style>

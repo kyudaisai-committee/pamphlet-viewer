@@ -1,7 +1,6 @@
 <!-- SPDX-License-Identifier: MIT -->
 
 <script lang="ts">
-	import { XIcon } from "@lucide/svelte";
 	import { onMount, untrack } from "svelte";
 
 	import type { PageVisual } from "@/lib/document/page-source";
@@ -17,7 +16,6 @@
 		visuals: Readonly<Record<number, PageVisual>>;
 		onVisiblePagesChange(pageIndexes: readonly number[]): void;
 		onSelectPage(page: number): void;
-		onClose(): void;
 	}
 
 	let {
@@ -26,7 +24,6 @@
 		visuals,
 		onVisiblePagesChange,
 		onSelectPage,
-		onClose,
 	}: Props = $props();
 	const messages = useViewerMessages();
 	let scrollContainer = $state<HTMLElement>();
@@ -84,13 +81,7 @@
 	}
 </script>
 
-<aside class="thumbnail-panel" aria-label={messages.pageList}>
-	<header class="panel-heading">
-		<h2>{messages.pageList}</h2>
-		<button type="button" aria-label={messages.hidePages} onclick={onClose}>
-			<XIcon size={18} aria-hidden="true" />
-		</button>
-	</header>
+<div class="thumbnail-panel">
 	<div
 		class="thumbnail-scroll"
 		role="list"
@@ -131,7 +122,7 @@
 			></div>
 		</div>
 	</div>
-</aside>
+</div>
 
 <style>
 	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
@@ -140,52 +131,11 @@
 	.thumbnail-panel {
 		box-sizing: border-box;
 		display: grid;
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr);
 		width: 100%;
 		height: 100%;
 		min-width: 0;
 		min-height: 0;
-		border-inline-end: var(--pamphlet-viewer-border-width) solid
-			var(--pamphlet-viewer-border, #3b4148);
-		background: var(--pamphlet-viewer-panel, #24282e);
-
-		.panel-heading {
-			box-sizing: border-box;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			min-height: var(--pamphlet-viewer-touch-target-size);
-			padding: 4px 10px 4px 14px;
-			border-bottom: var(--pamphlet-viewer-border-width) solid
-				var(--pamphlet-viewer-border, #3b4148);
-
-			h2 {
-				margin: 0;
-				font-size: 13px;
-				font-weight: 600;
-			}
-
-			button {
-				display: grid;
-				place-items: center;
-				width: var(--pamphlet-viewer-control-height);
-				height: var(--pamphlet-viewer-control-height);
-				border: var(--pamphlet-viewer-border-width) solid transparent;
-				border-radius: var(--pamphlet-viewer-control-radius);
-				background: transparent;
-				color: inherit;
-				cursor: pointer;
-
-				&:hover {
-					background: var(--pamphlet-viewer-control-hover);
-				}
-
-				&:focus-visible {
-					outline: var(--pamphlet-viewer-focus-ring);
-					outline-offset: var(--pamphlet-viewer-focus-ring-offset);
-				}
-			}
-		}
 
 		.thumbnail-scroll {
 			min-height: 0;

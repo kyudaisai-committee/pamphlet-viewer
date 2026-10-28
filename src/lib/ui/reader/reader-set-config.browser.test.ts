@@ -21,8 +21,8 @@ test("exposes setConfig on the registered prototype and applies it before connec
 	const pageChanged = waitForPageChange(viewer);
 	document.body.append(viewer);
 	await pageChanged;
-
-	await expect.poll(() => getChapterTitles(viewer)).toEqual(["章を選択", "初期章"]);
+	openChapterPanel(viewer);
+	await expect.poll(() => getChapterTitles(viewer)).toEqual(["初期章"]);
 });
 
 test("replaces connected settings, clears chapters, and keeps instances independent", async () => {
@@ -35,13 +35,15 @@ test("replaces connected settings, clears chapters, and keeps instances independ
 	const secondPageChanged = waitForPageChange(secondViewer);
 	document.body.append(firstViewer, secondViewer);
 	await Promise.all([firstPageChanged, secondPageChanged]);
+	openChapterPanel(firstViewer);
+	openChapterPanel(secondViewer);
 
-	await expect.poll(() => getChapterTitles(firstViewer)).toEqual(["章を選択", "一つ目"]);
-	await expect.poll(() => getChapterTitles(secondViewer)).toEqual(["章を選択", "二つ目"]);
+	await expect.poll(() => getChapterTitles(firstViewer)).toEqual(["一つ目"]);
+	await expect.poll(() => getChapterTitles(secondViewer)).toEqual(["二つ目"]);
 
 	firstViewer.setConfig({ chapters: [{ title: "置換後", page: 3 }] });
-	await expect.poll(() => getChapterTitles(firstViewer)).toEqual(["章を選択", "置換後"]);
-	await expect.poll(() => getChapterTitles(secondViewer)).toEqual(["章を選択", "二つ目"]);
+	await expect.poll(() => getChapterTitles(firstViewer)).toEqual(["置換後"]);
+	await expect.poll(() => getChapterTitles(secondViewer)).toEqual(["二つ目"]);
 
 	firstViewer.setConfig({});
 	await expect.poll(() => getChapterTitles(firstViewer)).toEqual([]);
@@ -68,7 +70,8 @@ test("retains settings across disconnection and reattachment", async () => {
 	const firstPageChanged = waitForPageChange(viewer);
 	document.body.append(viewer);
 	await firstPageChanged;
-	await expect.poll(() => getChapterTitles(viewer)).toEqual(["章を選択", "接続前"]);
+	openChapterPanel(viewer);
+	await expect.poll(() => getChapterTitles(viewer)).toEqual(["接続前"]);
 
 	viewer.remove();
 	await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
@@ -76,10 +79,11 @@ test("retains settings across disconnection and reattachment", async () => {
 	const secondPageChanged = waitForPageChange(viewer);
 	document.body.append(viewer);
 	await secondPageChanged;
-	await expect.poll(() => getChapterTitles(viewer)).toEqual(["章を選択", "再接続後"]);
+	openChapterPanel(viewer);
+	await expect.poll(() => getChapterTitles(viewer)).toEqual(["再接続後"]);
 
 	viewer.setConfig({ chapters: [{ title: "再接続後の更新", page: 3 }] });
-	await expect.poll(() => getChapterTitles(viewer)).toEqual(["章を選択", "再接続後の更新"]);
+	await expect.poll(() => getChapterTitles(viewer)).toEqual(["再接続後の更新"]);
 });
 
 async function registerViewer(): Promise<CustomElementConstructor> {
@@ -130,12 +134,16 @@ function createBackend(): DocumentBackend {
 }
 
 function getChapterTitles(viewer: PamphletViewerElement): Array<string | null> {
-	const chapterSelect = viewer.shadowRoot?.querySelector<HTMLSelectElement>(
-		'select[aria-label="章へ移動"]',
+	return Array.from(
+		viewer.shadowRoot?.querySelectorAll<HTMLElement>(".chapter-title") ?? [],
+		(title) => title.textContent,
 	);
-	return chapterSelect === undefined || chapterSelect === null
-		? []
-		: Array.from(chapterSelect.options, (option) => option.textContent);
+}
+
+function openChapterPanel(viewer: PamphletViewerElement): void {
+	const shadowRoot = viewer.shadowRoot;
+	if (shadowRoot?.querySelector(".chapter-list") !== null) return;
+	shadowRoot?.querySelector<HTMLButtonElement>('[data-panel-toggle="chapters"]')?.click();
 }
 
 function getObservedAttributes(constructor: CustomElementConstructor): string[] {
