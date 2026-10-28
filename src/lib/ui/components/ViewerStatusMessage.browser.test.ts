@@ -11,7 +11,7 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
-test("delays the rendering status by 200 ms when no page is visible", async () => {
+test("delays the rendering status by 100 ms when no page is visible", async () => {
 	await import("@/lib/entry");
 	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 	const render = createDeferred<PageVisual>();
@@ -27,7 +27,7 @@ test("delays the rendering status by 200 ms when no page is visible", async () =
 	await renderStarted.promise;
 
 	await tick();
-	await vi.advanceTimersByTimeAsync(199);
+	await vi.advanceTimersByTimeAsync(99);
 	expect(element.shadowRoot?.querySelector(".status")?.textContent).not.toContain(
 		RENDERING_STATUS_MESSAGE,
 	);
