@@ -9,7 +9,7 @@
 
 	let { requestId }: Props = $props();
 	const messages = useViewerMessages();
-	const RENDERING_FEEDBACK_DELAY_MS = 100;
+	const RENDERING_FEEDBACK_DELAY_MS = 200;
 	let visible = $state(false);
 
 	$effect(() => {

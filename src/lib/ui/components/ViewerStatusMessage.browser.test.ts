@@ -9,7 +9,7 @@ afterEach(() => {
 	document.body.replaceChildren();
 });
 
-test("delays the rendering status by 100 ms when no page is visible", async () => {
+test("delays the rendering status by 200 ms when no page is visible", async () => {
 	await import("@/lib/entry");
 	const render = createDeferred<PageVisual>();
 	const renderStarted = createDeferred<void>();

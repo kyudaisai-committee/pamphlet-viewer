@@ -45,13 +45,16 @@ describe("ViewerController", () => {
 
 		controller.requestRender(renderInput(1));
 		await vi.waitFor(() => expect(Object.keys(controller.pageVisuals)).toHaveLength(1));
+		expect(controller.renderedPage).toBe(1);
 
 		controller.requestRender(renderInput(2));
 		await vi.waitFor(() => expect(closeCalls[0]?.mock.calls).toHaveLength(1));
 		await vi.waitFor(() => expect(controller.pageVisuals[1]).toBeDefined());
+		expect(controller.renderedPage).toBe(2);
 
 		controller.dispose();
 		expect(closeCalls[1]?.mock.calls).toHaveLength(1);
+		expect(controller.renderedPage).toBeNull();
 	});
 
 	it("starts the newest render while an earlier page-size request is pending", async () => {

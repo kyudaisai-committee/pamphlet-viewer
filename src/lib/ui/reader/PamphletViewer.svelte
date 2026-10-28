@@ -98,6 +98,8 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
 	let pendingRenderRequestId = $derived(
 		controller.phase === "ready" &&
+			controller.renderedPage !== null &&
+			page !== controller.renderedPage &&
 			latestRenderRequestId !== null &&
 			controller.renderedRequestId !== latestRenderRequestId
 			? latestRenderRequestId

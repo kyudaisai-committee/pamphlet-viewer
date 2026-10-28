@@ -51,6 +51,37 @@ test("does not restore an outdated page after a newer page finishes", async () =
 	expect(pageChanges).toEqual([1, 3]);
 });
 
+test("clears navigation feedback when returning to the still-visible page", async () => {
+	await import("@/lib/entry");
+	const pageTwoStarted = createDeferred<void>();
+	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
+	const viewer = createViewer(
+		createBackend(3, (pageIndex) => {
+			if (pageIndex === 1) {
+				pageTwoStarted.resolve();
+				return pageTwoRender.promise;
+			}
+			return Promise.resolve(visualFor(pageIndex));
+		}),
+	);
+	const firstPage = waitForPageChange(viewer, 1);
+	document.body.append(viewer);
+	await firstPage;
+	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
+
+	viewer.page = 2;
+	await pageTwoStarted.promise;
+	await delay(250);
+	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).not.toBeNull();
+
+	viewer.page = 1;
+	await expect.poll(() => viewer.shadowRoot?.querySelector(".rendering-feedback")).toBeNull();
+	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
+	pageTwoRender.resolve(visualFor(1));
+	await delay(0);
+	await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
+});
+
 test("clears old pages on source change and ignores a late render from the old source", async () => {
 	await import("@/lib/entry");
 	const oldPageTwoStarted = createDeferred<void>();
@@ -78,7 +109,7 @@ test("clears old pages on source change and ignores a late render from the old s
 
 	viewer.page = 2;
 	await oldPageTwoStarted.promise;
-	await delay(150);
+	await delay(250);
 	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")?.textContent).toContain(
 		"ページを描画しています。",
 	);
@@ -127,7 +158,7 @@ test("hides the previous page when a replacement render fails", async () => {
 
 	viewer.page = 2;
 	await pageTwoStarted.promise;
-	await delay(150);
+	await delay(250);
 	expect(viewer.shadowRoot?.querySelector(".rendering-feedback")).not.toBeNull();
 	pageTwoRender.reject(new Error("The page could not be rendered."));
 	await expect.poll(() => viewer.shadowRoot?.querySelector('[role="alert"]')).not.toBeNull();
