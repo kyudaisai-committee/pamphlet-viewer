@@ -93,8 +93,16 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let pendingZoomAnchorRequestId: number | null = null;
 	let zoomAnchorVersion = 0;
 	let lastRenderInput: RenderInput | null = null;
+	let latestRenderRequestId = $state<number | null>(null);
 	let resolvedLayout = $derived(resolveLayout(layout, viewport.width));
 	let currentPages = $derived(visiblePageIndexes(controller.pageCount, page, resolvedLayout));
+	let pendingRenderRequestId = $derived(
+		controller.phase === "ready" &&
+			latestRenderRequestId !== null &&
+			controller.renderedRequestId !== latestRenderRequestId
+			? latestRenderRequestId
+			: null,
+	);
 	let canMoveNext = $derived.by(() => {
 		const visible = visiblePageIndexes(controller.pageCount, page, resolvedLayout);
 		const lastVisiblePage = visible.at(-1);
@@ -112,7 +120,8 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	);
 	let currentPageBookmarked = $derived(bookmarkController.pages.includes(page));
 	let displayedPages = $derived.by((): DisplayedPage[] =>
-		currentPages.flatMap((pageIndex) => {
+		Object.keys(controller.pageRenderPlans).flatMap((pageIndexText) => {
+			const pageIndex = Number(pageIndexText);
 			const visual = controller.pageVisuals[pageIndex];
 			const plan = controller.pageRenderPlans[pageIndex];
 			if (visual === undefined || plan === undefined) return [];
@@ -199,6 +208,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			untrack(() => {
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
+				latestRenderRequestId = null;
 			});
 			return;
 		}
@@ -207,6 +217,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			untrack(() => {
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
+				latestRenderRequestId = null;
 				controller.failInvalidOption();
 			});
 			return;
@@ -216,7 +227,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
 				clearZoomAnchor();
-				controller.requestRender(input);
+				latestRenderRequestId = controller.requestRender(input);
 			});
 			return;
 		}
@@ -234,9 +245,11 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 					}
 					const requestId = controller.requestRender(input);
 					if (requestId === null) {
+						latestRenderRequestId = null;
 						clearZoomAnchor();
 						return;
 					}
+					latestRenderRequestId = requestId;
 					if (pendingZoomAnchor !== null) pendingZoomAnchorRequestId = requestId;
 				});
 			});
@@ -247,7 +260,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			if (previousInput !== null && !sameRenderContext(previousInput, input)) {
 				clearZoomAnchor();
 			}
-			controller.requestRender(input);
+			latestRenderRequestId = controller.requestRender(input);
 		});
 	});
 
@@ -571,7 +584,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			return;
 		}
 		const input = createRenderInput();
-		if (input !== null) controller.retryRender(input);
+		if (input !== null) latestRenderRequestId = controller.retryRender(input);
 	}
 </script>
 
@@ -657,6 +670,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 					pages={displayedPages}
 					phase={controller.phase}
 					failure={controller.failure}
+					{pendingRenderRequestId}
 					{zoom}
 					bind:pageArea
 					onViewportChange={onViewportChange}

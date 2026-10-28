@@ -12,6 +12,7 @@
 	import type { GesturePoint } from "@/lib/domain/navigation/reader-gesture";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import PageCanvas from "./PageCanvas.svelte";
+	import RenderingFeedback from "./RenderingFeedback.svelte";
 	import ViewerStatusMessage from "./ViewerStatusMessage.svelte";
 
 	interface DisplayedPage {
@@ -26,6 +27,7 @@
 		pages: readonly DisplayedPage[];
 		phase: ViewerPhase;
 		failure: ViewerFailure | null;
+		pendingRenderRequestId: number | null;
 		zoom: number;
 		pageArea?: HTMLElement;
 		onViewportChange(viewport: ViewportSize): void;
@@ -40,6 +42,7 @@
 		pages,
 		phase,
 		failure,
+		pendingRenderRequestId,
 		zoom,
 		pageArea = $bindable(),
 		onViewportChange,
@@ -230,41 +233,57 @@
 	}
 </script>
 
-<section
-	class="page-area"
-	class:zoomed={zoom > 1}
-	class:dragging={pointerActive && hasScrollableContent()}
-	aria-label={messages.pageDisplayArea}
-	aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown"
-	tabindex="-1"
-	bind:this={pageArea}
->
-	{#if pages.length > 0 && phase !== "error"}
-		<div class="viewer-pages" class:spread={pages.length === 2}>
-			{#each pages as page (page.pageIndex)}
-				<div
-					class="page-frame"
-					data-page-index={page.pageIndex}
-					style:width={`${page.plan.displayWidth}px`}
-					style:height={`${page.plan.displayHeight}px`}
-				>
-					<PageCanvas visual={page.visual} label={messages.pageLabel(page.pageIndex + 1)} />
+	<div class="stage-viewport">
+		<section
+			class="page-area"
+			class:zoomed={zoom > 1}
+			class:dragging={pointerActive && hasScrollableContent()}
+			aria-label={messages.pageDisplayArea}
+			aria-keyshortcuts="ArrowLeft ArrowRight PageUp PageDown"
+			tabindex="-1"
+			bind:this={pageArea}
+		>
+			{#if pages.length > 0 && phase !== "error"}
+				<div class="viewer-pages" class:spread={pages.length === 2}>
+					{#each pages as page (page.pageIndex)}
+						<div
+							class="page-frame"
+							data-page-index={page.pageIndex}
+							style:width={`${page.plan.displayWidth}px`}
+							style:height={`${page.plan.displayHeight}px`}
+						>
+							<PageCanvas visual={page.visual} label={messages.pageLabel(page.pageIndex + 1)} />
+						</div>
+					{/each}
 				</div>
-			{/each}
-		</div>
-	{:else}
-		<ViewerStatusMessage {phase} {failure} onRetry={onRetry} />
-	{/if}
-</section>
+			{:else}
+				<ViewerStatusMessage {phase} {failure} onRetry={onRetry} />
+			{/if}
+		</section>
+		{#if pages.length > 0 && phase !== "error"}
+			<RenderingFeedback requestId={pendingRenderRequestId} />
+		{/if}
+	</div>
 
 <style>
 	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
 
 	@layer pamphlet-viewer.components {
+	.stage-viewport {
+		box-sizing: border-box;
+		position: relative;
+		display: flex;
+		flex: 1 1 auto;
+		width: 100%;
+		height: 100%;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+
 	.page-area {
 		box-sizing: border-box;
 		flex: 1 1 auto;
-		position: relative;
 		width: 100%;
 		height: 100%;
 		min-width: 0;
@@ -304,6 +323,7 @@
 				background: #fff;
 			}
 		}
+
 	}
 
 	@container reader-toolbar (max-width: 700px) {
