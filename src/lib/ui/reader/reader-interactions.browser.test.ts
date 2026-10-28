@@ -273,7 +273,26 @@ test("shares touch target and compact toolbar tokens across mobile bars", async 
 		expect(getComputedStyle(toolbar).minHeight).toBe("60px");
 		expect(getComputedStyle(toolbar).paddingTop).toBe("8px");
 		expect(getComputedStyle(toolbar).paddingLeft).toBe("8px");
+		expect(getComputedStyle(toolbar).justifyContent).toBe("space-between");
 	}
+	const navigationSpacer = shadowRoot.querySelector<HTMLElement>(
+		".navigation-region .menu-bar-spacer",
+	);
+	const settingsSpacer = shadowRoot.querySelector<HTMLElement>(
+		".settings-toolbar .menu-bar-spacer",
+	);
+	if (navigationSpacer === null || settingsSpacer === null) {
+		throw new Error("The toolbar spacers are missing.");
+	}
+	expect(getComputedStyle(navigationSpacer).display).toBe("none");
+	expect(getComputedStyle(settingsSpacer).display).toBe("none");
+	const navigationRect = navigationToolbar.getBoundingClientRect();
+	expect(
+		shadowRoot.querySelector(".page-controls")?.getBoundingClientRect().left,
+	).toBeGreaterThanOrEqual(navigationRect.left + 8);
+	expect(
+		shadowRoot.querySelector(".bookmark-controls")?.getBoundingClientRect().right,
+	).toBeLessThanOrEqual(navigationRect.right - 8);
 
 	await browserPage.elementLocator(summary).click();
 	await expect.element(browserPage.elementLocator(chapterSelect)).toBeVisible();

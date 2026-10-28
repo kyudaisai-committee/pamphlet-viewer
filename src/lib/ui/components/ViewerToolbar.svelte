@@ -129,6 +129,9 @@
 				box-sizing: border-box;
 				display: flex;
 				align-items: center;
+				justify-content: space-between;
+				flex-wrap: wrap;
+				gap: var(--pamphlet-viewer-compact-toolbar-gap);
 				position: relative;
 				width: 100%;
 				min-height: var(--pamphlet-viewer-compact-toolbar-height);

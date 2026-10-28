@@ -99,6 +99,8 @@
 	@layer pamphlet-viewer.layout {
 		.settings-toolbar {
 			@container pamphlet-reader (min-width: 701px) and (max-width: 837px) {
+				box-sizing: border-box;
+				flex: 1 1 100%;
 				width: 100%;
 				min-width: 0;
 			}

@@ -32,5 +32,11 @@
 		flex: 1 1 auto;
 		min-width: 0;
 	}
+
+	@container reader-toolbar (max-width: 700px) {
+		.menu-bar-spacer {
+			display: none;
+		}
+	}
 	}
 </style>
