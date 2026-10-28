@@ -258,6 +258,9 @@
 </section>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.page-area {
 		box-sizing: border-box;
 		flex: 1 1 auto;
@@ -307,5 +310,6 @@
 		.page-area.zoomed .viewer-pages {
 			padding-inline: 50cqi;
 		}
+	}
 	}
 </style>

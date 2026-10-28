@@ -134,6 +134,9 @@
 </aside>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.thumbnail-panel {
 		box-sizing: border-box;
 		display: grid;
@@ -270,6 +273,7 @@
 						}
 			}
 		}
+	}
 	}
 	}
 	}

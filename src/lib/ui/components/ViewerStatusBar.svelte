@@ -26,6 +26,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.status-bar {
 		box-sizing: border-box;
 		display: flex;
@@ -38,5 +41,6 @@
 		background: var(--pamphlet-viewer-toolbar, #fbfcfe);
 		color: #aeb4ba;
 		font-size: 12px;
+	}
 	}
 </style>
