@@ -44,6 +44,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.page-visual {
 		display: block;
 		width: 100%;
@@ -58,5 +61,6 @@
 			background: #fff;
 			object-fit: contain;
 		}
+	}
 	}
 </style>

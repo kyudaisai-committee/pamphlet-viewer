@@ -1,50 +1,38 @@
 <!-- SPDX-License-Identifier: MIT -->
 
 <script lang="ts">
-	import type { PamphletChapter } from "@/lib/public-api";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
+	import type { ReaderPanelTab } from "./ReaderPanel.svelte";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";
 
 	interface Props {
 		page: number;
 		pageCount: number;
-		chapters: readonly PamphletChapter[];
-		currentChapterPage?: number;
-		bookmarkPages: readonly number[];
-		bookmarked: boolean;
+		chapterCount: number;
+		panel: ReaderPanelTab | null;
 		bookmarkEnabled: boolean;
 		enabled: boolean;
 		canPrevious: boolean;
 		canNext: boolean;
-		thumbnailsOpen: boolean;
 		onPageChange(value: string): void;
-		onChapterChange(value: string): void;
-		onToggleBookmark(): void;
-		onSelectBookmark(value: string): void;
+		onTogglePanel(panel: ReaderPanelTab): void;
 		onPrevious(): void;
 		onNext(): void;
-		onToggleThumbnails(): void;
 	}
 
 	let {
 		page,
 		pageCount,
-		chapters,
-		currentChapterPage,
-		bookmarkPages,
-		bookmarked,
+		chapterCount,
+		panel,
 		bookmarkEnabled,
 		enabled,
 		canPrevious,
 		canNext,
-		thumbnailsOpen,
 		onPageChange,
-		onChapterChange,
-		onToggleBookmark,
-		onSelectBookmark,
+		onTogglePanel,
 		onPrevious,
 		onNext,
-		onToggleThumbnails,
 	}: Props = $props();
 	const messages = useViewerMessages();
 
@@ -71,27 +59,24 @@
 		<ViewerNavigationControls
 			{page}
 			{pageCount}
-			{chapters}
-			{currentChapterPage}
-			{bookmarkPages}
-			{bookmarked}
+			{chapterCount}
+			{panel}
 			{bookmarkEnabled}
 			{enabled}
 			{canPrevious}
 			{canNext}
-			{thumbnailsOpen}
 			{onPageChange}
-			{onChapterChange}
-			{onToggleBookmark}
-			{onSelectBookmark}
+			{onTogglePanel}
 			{onPrevious}
 			{onNext}
-			{onToggleThumbnails}
 		/>
 	</div>
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.toolbar-container {
 		box-sizing: border-box;
 		display: flex;
@@ -126,6 +111,9 @@
 				box-sizing: border-box;
 				display: flex;
 				align-items: center;
+				justify-content: space-between;
+				flex-wrap: wrap;
+				gap: var(--pamphlet-viewer-compact-toolbar-gap);
 				position: relative;
 				width: 100%;
 				min-height: var(--pamphlet-viewer-compact-toolbar-height);
@@ -136,5 +124,6 @@
 				background: var(--pamphlet-viewer-toolbar, #24282e);
 			}
 		}
+	}
 	}
 </style>

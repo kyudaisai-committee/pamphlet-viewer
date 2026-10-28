@@ -354,18 +354,18 @@ test("every navigation path resets zoom, including the page property and attribu
 	const previous = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="前のページ"]');
 	const next = shadowRoot.querySelector<HTMLButtonElement>('button[aria-label="次のページ"]');
 	const pageInput = shadowRoot.querySelector<HTMLInputElement>('[aria-label="ページ番号"]');
-	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar select[aria-label="章へ移動"]',
+	const tableOfContentsToggle = shadowRoot.querySelector<HTMLButtonElement>(
+		'[data-panel-toggle="chapters"]',
 	);
 	const bookmarkToggle = shadowRoot.querySelector<HTMLButtonElement>(
-		".page-controls > .bookmark-toggle",
+		'[data-panel-toggle="bookmarks"]',
 	);
 	if (
 		zoomIn === null ||
 		previous === null ||
 		next === null ||
 		pageInput === null ||
-		chapterSelect === null ||
+		tableOfContentsToggle === null ||
 		bookmarkToggle === null
 	) {
 		throw new Error("The page navigation controls were not rendered.");
@@ -384,31 +384,28 @@ test("every navigation path resets zoom, including the page property and attribu
 	);
 	await zoomThenNavigate(
 		zoomIn,
-		() => {
-			chapterSelect.value = "4";
-			chapterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+		async () => {
+			tableOfContentsToggle.click();
+			await expect
+				.poll(() => shadowRoot.querySelector<HTMLButtonElement>('[data-chapter-page="4"]'))
+				.not.toBeNull();
+			shadowRoot.querySelector<HTMLButtonElement>('[data-chapter-page="4"]')?.click();
 		},
 		element,
 		4,
 	);
 
 	bookmarkToggle.click();
-	await expect.poll(() => bookmarkToggle.getAttribute("aria-pressed")).toBe("true");
+	await expect.poll(() => shadowRoot.querySelector(".bookmark-current")).not.toBeNull();
+	const bookmarkAction = shadowRoot.querySelector<HTMLButtonElement>(".bookmark-current");
+	if (bookmarkAction === null) throw new Error("The bookmark panel was not rendered.");
+	await browserPage.elementLocator(bookmarkAction).click();
+	await expect.poll(() => bookmarkAction.getAttribute("aria-pressed")).toBe("true");
 	element.page = 6;
 	await expect.poll(() => element.page).toBe(6);
-	const bookmarkSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar select[aria-label="ブックマーク一覧"]',
-	);
-	if (bookmarkSelect === null) throw new Error("The bookmark list was not rendered.");
-	await zoomThenNavigate(
-		zoomIn,
-		() => {
-			bookmarkSelect.value = "4";
-			bookmarkSelect.dispatchEvent(new Event("change", { bubbles: true }));
-		},
-		element,
-		4,
-	);
+	const savedPageFour = shadowRoot.querySelector<HTMLButtonElement>('[data-bookmark-page="4"]');
+	if (savedPageFour === null) throw new Error("The bookmark list was not rendered.");
+	await zoomThenNavigate(zoomIn, () => savedPageFour.click(), element, 4);
 
 	const thumbnailToggle = shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle");
 	if (thumbnailToggle === null) throw new Error("The thumbnail control was not rendered.");
@@ -641,7 +638,7 @@ async function zoomThenNavigate(
 ): Promise<void> {
 	zoomIn.click();
 	await expect.poll(() => readZoom(getShadowRoot(element))).toBe("120%");
-	navigate();
+	await navigate();
 	await expect.poll(() => element.page).toBe(expectedPage);
 	await expect.poll(() => readZoom(getShadowRoot(element))).toBe("100%");
 }

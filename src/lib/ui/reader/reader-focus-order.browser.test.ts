@@ -74,14 +74,12 @@ test("places body controls between mobile settings and navigation in keyboard or
 	if (thumbnailToggle === null) throw new Error("The thumbnail toggle is missing.");
 	thumbnailToggle.click();
 	await expect
-		.poll(() =>
-			shadowRoot.querySelector('.thumbnail-panel button[aria-label="ページ一覧を閉じる"]'),
-		)
+		.poll(() => shadowRoot.querySelector('.reader-panel button[aria-label="パネルを閉じる"]'))
 		.not.toBeNull();
-	const closeThumbnails = shadowRoot.querySelector<HTMLButtonElement>(
-		'.thumbnail-panel button[aria-label="ページ一覧を閉じる"]',
+	const closePanel = shadowRoot.querySelector<HTMLButtonElement>(
+		'.reader-panel button[aria-label="パネルを閉じる"]',
 	);
-	if (closeThumbnails === null) throw new Error("The body controls did not open.");
+	if (closePanel === null) throw new Error("The body controls did not open.");
 
 	const zoomOut = shadowRoot.querySelector<HTMLButtonElement>(
 		'.zoom-controls button[aria-label="縮小"]',
@@ -89,56 +87,71 @@ test("places body controls between mobile settings and navigation in keyboard or
 	if (zoomOut === null) throw new Error("The settings controls are missing.");
 	zoomOut.focus();
 	for (let step = 0; step < 5; step += 1) await userEvent.tab();
-	expect(shadowRoot.activeElement).toBe(closeThumbnails);
-	expect(getReaderRegion(closeThumbnails)).toBe("body");
+	expect(shadowRoot.activeElement).toBe(closePanel);
+	expect(getReaderRegion(closePanel)).toBe("body");
 	await userEvent.tab();
 	expect(getReaderRegion(getActiveElement(shadowRoot))).toBe("body");
 });
 
-test("keeps chapter and bookmark menu keyboard order within mobile navigation", async () => {
+test("keeps shared panel controls keyboard-operable on mobile", async () => {
 	localStorage.setItem(
 		BOOKMARKS_STORAGE_KEY,
 		JSON.stringify({ [new URL("./reader-test.pdf", document.baseURI).href]: [2] }),
 	);
 	const element = await createLoadedViewer(390);
 	const shadowRoot = getShadowRoot(element);
-	const menu = shadowRoot.querySelector<HTMLDetailsElement>(".compact-navigation");
-	const summary = menu?.querySelector<HTMLElement>("summary");
-	const chapterSelect = menu?.querySelector<HTMLSelectElement>('[aria-label="章へ移動"]');
-	const bookmarkToggle = menu?.querySelector<HTMLButtonElement>(".bookmark-toggle");
-	const bookmarkSelect = menu?.querySelector<HTMLSelectElement>(
-		'[aria-label="ブックマーク一覧"]',
+	const chapterToggle = shadowRoot.querySelector<HTMLButtonElement>(
+		'[data-panel-toggle="chapters"]',
 	);
+	if (chapterToggle === null) throw new Error("The table of contents toggle is missing.");
+	chapterToggle.focus();
+	await userEvent.keyboard("{Enter}");
+	await expect.poll(() => shadowRoot.querySelector(".reader-panel")).not.toBeNull();
+	const closePanel = shadowRoot.querySelector<HTMLButtonElement>(".reader-panel .panel-close");
+	const pageTab = shadowRoot.querySelector<HTMLButtonElement>(
+		'.reader-panel [aria-label="ページ一覧"]',
+	);
+	const chapterTab = shadowRoot.querySelector<HTMLButtonElement>(
+		'.reader-panel [aria-label="目次"]',
+	);
+	const bookmarksTab = shadowRoot.querySelector<HTMLButtonElement>(
+		'.reader-panel [aria-label="ブックマーク一覧"]',
+	);
+	bookmarksTab?.click();
+	await expect.poll(() => shadowRoot.querySelector(".bookmark-current")).not.toBeNull();
+	const bookmarkAction = shadowRoot.querySelector<HTMLButtonElement>(".bookmark-current");
+	const savedBookmark = shadowRoot.querySelector<HTMLButtonElement>(".bookmark-entry");
 	if (
-		menu === null ||
-		menu === undefined ||
-		summary === null ||
-		summary === undefined ||
-		chapterSelect === null ||
-		chapterSelect === undefined ||
-		bookmarkToggle === null ||
-		bookmarkToggle === undefined ||
-		bookmarkSelect === null ||
-		bookmarkSelect === undefined
+		closePanel === null ||
+		pageTab === null ||
+		chapterTab === null ||
+		bookmarksTab === null ||
+		bookmarkAction === null ||
+		savedBookmark === null
 	) {
-		throw new Error("The mobile chapter and bookmark menu is missing.");
+		throw new Error("The shared panel controls are missing.");
 	}
 
-	summary.focus();
-	await userEvent.keyboard("{Space}");
-	expect(menu.open).toBe(true);
+	closePanel.focus();
 	await userEvent.tab();
-	expect(getActiveElement(shadowRoot)).toBe(chapterSelect);
+	expect(getActiveElement(shadowRoot)).toBe(pageTab);
 	await userEvent.tab();
-	expect(getActiveElement(shadowRoot)).toBe(bookmarkToggle);
+	expect(getActiveElement(shadowRoot)).toBe(chapterTab);
 	await userEvent.tab();
-	expect(getActiveElement(shadowRoot)).toBe(bookmarkSelect);
+	expect(getActiveElement(shadowRoot)).toBe(bookmarksTab);
+	await userEvent.tab();
+	expect(getActiveElement(shadowRoot)).toBe(bookmarkAction);
+	await userEvent.tab();
+	expect(getActiveElement(shadowRoot)).toBe(savedBookmark);
 	await userEvent.tab({ shift: true });
-	expect(getActiveElement(shadowRoot)).toBe(bookmarkToggle);
+	expect(getActiveElement(shadowRoot)).toBe(bookmarkAction);
 	await userEvent.tab({ shift: true });
-	expect(getActiveElement(shadowRoot)).toBe(chapterSelect);
-	await userEvent.tab({ shift: true });
-	expect(getActiveElement(shadowRoot)).toBe(summary);
+	expect(getActiveElement(shadowRoot)).toBe(bookmarksTab);
+	closePanel.click();
+	await expect.poll(() => shadowRoot.querySelector(".reader-panel")).toBeNull();
+	expect(shadowRoot.activeElement).toBe(
+		shadowRoot.querySelector('[data-panel-toggle="bookmarks"]'),
+	);
 });
 
 test("preserves focus and fullscreen button identity when resizing across the breakpoint", async () => {

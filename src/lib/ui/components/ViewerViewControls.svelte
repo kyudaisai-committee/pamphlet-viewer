@@ -87,6 +87,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.view-controls {
 		display: flex;
 		align-items: center;
@@ -179,5 +182,6 @@
 		.view-controls {
 			margin-inline-start: auto;
 		}
+	}
 	}
 </style>

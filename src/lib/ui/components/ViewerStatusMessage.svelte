@@ -30,6 +30,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.status {
 		box-sizing: border-box;
 		display: grid;
@@ -59,5 +62,6 @@
 				outline-offset: 2px;
 			}
 		}
+	}
 	}
 </style>

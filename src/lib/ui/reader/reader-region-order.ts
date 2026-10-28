@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-type ReaderRegion = "settings" | "body" | "status" | "navigation";
-
-const MOBILE_READER_REGION_ORDER = ["settings", "body", "status", "navigation"] as const;
-const DESKTOP_READER_REGION_ORDER = ["navigation", "settings", "body", "status"] as const;
+import { getReaderRegionOrder, type ReaderRegion } from "./reader-toolbar-layout";
 
 export function observeResponsiveReaderOrder(shell: HTMLElement): () => void {
 	let compact: boolean | null = null;
@@ -11,7 +8,7 @@ export function observeResponsiveReaderOrder(shell: HTMLElement): () => void {
 	function updateOrder(): void {
 		const nextCompact = shell.clientWidth <= 700;
 		if (compact === nextCompact) return;
-		const order = nextCompact ? MOBILE_READER_REGION_ORDER : DESKTOP_READER_REGION_ORDER;
+		const order = getReaderRegionOrder(shell.clientWidth);
 		const regions: Record<ReaderRegion, HTMLElement | undefined> = {
 			settings: undefined,
 			body: undefined,

@@ -37,11 +37,17 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	import { createViewerMessages } from "@/lib/i18n/viewer-messages";
 	import { provideViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import { subscribeViewerElementConfig } from "./viewer-element-config";
+	import BookmarkPanel from "@/lib/ui/components/BookmarkPanel.svelte";
+	import ChapterListPanel from "@/lib/ui/components/ChapterListPanel.svelte";
+	import ReaderPanel from "@/lib/ui/components/ReaderPanel.svelte";
+	import type { ReaderPanelTab } from "@/lib/ui/components/ReaderPanel.svelte";
 	import ThumbnailPanel from "@/lib/ui/components/ThumbnailPanel.svelte";
 	import ViewerStage from "@/lib/ui/components/ViewerStage.svelte";
 	import ViewerSettingsToolbar from "@/lib/ui/components/ViewerSettingsToolbar.svelte";
 	import ViewerStatusBar from "@/lib/ui/components/ViewerStatusBar.svelte";
 	import ViewerToolbar from "@/lib/ui/components/ViewerToolbar.svelte";
+	import ReaderToolbarRegions from "./ReaderToolbarRegions.svelte";
+	import { READER_TOOLBAR_LAYOUT } from "./reader-toolbar-layout";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 	import { observeResponsiveReaderOrder } from "./reader-region-order";
 	import { captureZoomAnchor, restoreZoomAnchor } from "@/lib/ui/zoom/reader-zoom-anchor";
@@ -78,7 +84,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let localeInitialized = $state(false);
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
 	let zoom = $state(1);
-	let thumbnailsOpen = $state(false);
+	let activePanel = $state<ReaderPanelTab | null>(null);
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
@@ -140,7 +146,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
 				clearZoomAnchor();
-				thumbnailsOpen = false;
+				activePanel = null;
 				thumbnailPageIndexes = [];
 				controller.closeThumbnails();
 			});
@@ -272,10 +278,15 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	});
 
 	$effect(() => {
-		const isOpen = thumbnailsOpen;
+		const panel = activePanel;
 		const pageIndexes = thumbnailPageIndexes;
-		if (isOpen) untrack(() => controller.setThumbnailPages(pageIndexes));
+		if (panel === "pages") untrack(() => controller.setThumbnailPages(pageIndexes));
 		else untrack(() => controller.closeThumbnails());
+	});
+
+	$effect(() => {
+		if (activePanel !== "chapters" || chapters.length > 0) return;
+		untrack(() => (activePanel = null));
 	});
 
 	onMount(() => {
@@ -317,7 +328,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 
 	function dispatchControllerEvent(event: ViewerEvent): void {
 		if (event.type === "error" && controller.sourceUnavailable) {
-			thumbnailsOpen = false;
+			activePanel = null;
 			thumbnailPageIndexes = [];
 			controller.closeThumbnails();
 		}
@@ -343,13 +354,6 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		page = Number(value);
 	}
 
-	function onChapterChange(value: string): void {
-		const chapterPage = chapters.find((chapter) => String(chapter.page) === value)?.page;
-		if (chapterPage === undefined) return;
-		clearZoomAnchor();
-		page = chapterPage;
-	}
-
 	function toggleCurrentBookmark(): void {
 		bookmarkController.toggleCurrentPage(
 			resolvedSource,
@@ -359,11 +363,56 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		);
 	}
 
-	function selectBookmark(value: string): void {
-		const bookmarkedPage = bookmarkController.findPage(value, bookmarksEnabled);
-		if (bookmarkedPage === undefined) return;
+	function selectBookmark(bookmarkedPage: number): void {
+		if (!bookmarksEnabled || !bookmarkController.pages.includes(bookmarkedPage)) return;
+		selectPanelPage(bookmarkedPage);
+	}
+
+	function selectChapter(chapterPage: number): void {
+		if (!chapters.some((chapter) => chapter.page === chapterPage)) return;
+		selectPanelPage(chapterPage);
+	}
+
+	function selectPanelPage(selectedPage: number): void {
+		if (
+			!Number.isSafeInteger(selectedPage) ||
+			selectedPage < 1 ||
+			selectedPage > controller.pageCount
+		) {
+			return;
+		}
 		clearZoomAnchor();
-		page = bookmarkedPage;
+		page = selectedPage;
+		const stageSlot = shellElement?.querySelector<HTMLElement>(".stage-slot");
+		if (stageSlot === null || stageSlot === undefined || getComputedStyle(stageSlot).display !== "none") {
+			return;
+		}
+		activePanel = null;
+		void tick().then(() => pageArea?.focus({ preventScroll: true }));
+	}
+
+	function togglePanel(panel: ReaderPanelTab): void {
+		if (panel === "chapters" && chapters.length === 0) return;
+		if (panel === "bookmarks" && !bookmarksEnabled) return;
+		activePanel = activePanel === panel ? null : panel;
+	}
+
+	function selectPanel(panel: ReaderPanelTab): void {
+		if (panel === "chapters" && chapters.length === 0) return;
+		if (panel === "bookmarks" && !bookmarksEnabled) return;
+		activePanel = panel;
+	}
+
+	function closePanel(): void {
+		const closingPanel = activePanel;
+		if (closingPanel === null) return;
+		activePanel = null;
+		void tick().then(() => {
+			const toggle = shellElement?.querySelector<HTMLButtonElement>(
+				`[data-panel-toggle="${closingPanel}"]`,
+			);
+			toggle?.focus({ preventScroll: true });
+		});
 	}
 
 	function onLayoutChange(value: string): void {
@@ -497,16 +546,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	}
 
 	function selectThumbnail(selectedPage: number): void {
-		clearZoomAnchor();
-		page = selectedPage;
-		const stageSlot = shellElement?.querySelector<HTMLElement>(".stage-slot");
-		if (
-			stageSlot !== null &&
-			stageSlot !== undefined &&
-			getComputedStyle(stageSlot).display === "none"
-		) {
-			thumbnailsOpen = false;
-		}
+		selectPanelPage(selectedPage);
 	}
 
 	function onViewportChange(nextViewport: ViewportSize): void {
@@ -536,7 +576,49 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 </script>
 
 <div class="viewer-shell" lang={locale} bind:this={shellElement}>
-	<div class="settings-region" data-reader-region="settings">
+	{#snippet pagesPanel()}
+		<ThumbnailPanel
+			pageCount={controller.pageCount}
+			currentPages={currentPages}
+			visuals={controller.thumbnailVisuals}
+			onVisiblePagesChange={updateThumbnailPages}
+			onSelectPage={selectThumbnail}
+		/>
+	{/snippet}
+	{#snippet chapterPanel()}
+		<ChapterListPanel
+			{chapters}
+			currentChapterPage={currentChapter?.page}
+			onSelectChapter={selectChapter}
+		/>
+	{/snippet}
+	{#snippet bookmarkPanel()}
+		<BookmarkPanel
+			{page}
+			bookmarkPages={bookmarkController.pages}
+			bookmarked={currentPageBookmarked}
+			bookmarkEnabled={bookmarksEnabled}
+			onToggleBookmark={toggleCurrentBookmark}
+			onSelectBookmark={selectBookmark}
+		/>
+	{/snippet}
+	{#snippet leftToolbar()}
+		<ViewerToolbar
+			page={page}
+			pageCount={controller.pageCount}
+			chapterCount={chapters.length}
+			panel={activePanel}
+			bookmarkEnabled={bookmarksEnabled}
+			enabled={controller.pageCount > 0}
+			canPrevious={page > 1}
+			canNext={canMoveNext}
+			onPageChange={onPageChange}
+			onTogglePanel={togglePanel}
+			onPrevious={previousPage}
+			onNext={nextPage}
+		/>
+	{/snippet}
+	{#snippet rightToolbar()}
 		<ViewerSettingsToolbar
 		layout={parseLayout(layout) ?? "auto"}
 		fit={parseFit(fit) ?? "page"}
@@ -549,18 +631,24 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		onResetZoom={onResetZoom}
 		onToggleFullscreen={() => void fullscreenController.toggle()}
 	/>
-	</div>
+	{/snippet}
+	<ReaderToolbarRegions
+		layout={READER_TOOLBAR_LAYOUT}
+		left={leftToolbar}
+		right={rightToolbar}
+	/>
 	<div class="content-region" data-reader-region="body">
-		<div class="reader-body" class:thumbnails-open={thumbnailsOpen}>
-			{#if thumbnailsOpen}
-				<div class="thumbnail-slot">
-					<ThumbnailPanel
-						pageCount={controller.pageCount}
-						currentPages={currentPages}
-						visuals={controller.thumbnailVisuals}
-						onVisiblePagesChange={updateThumbnailPages}
-						onSelectPage={selectThumbnail}
-						onClose={() => (thumbnailsOpen = false)}
+		<div class="reader-body" class:panel-open={activePanel !== null}>
+			{#if activePanel !== null}
+				<div class="reader-panel-slot">
+					<ReaderPanel
+						panel={activePanel}
+						hasChapters={chapters.length > 0}
+						pages={pagesPanel}
+						chapters={chapterPanel}
+						bookmarks={bookmarkPanel}
+						onPanelChange={selectPanel}
+						onClose={closePanel}
 					/>
 				</div>
 			{/if}
@@ -584,36 +672,13 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	<div class="status-region" data-reader-region="status">
 		<ViewerStatusBar phase={controller.phase} pageCount={controller.pageCount} />
 	</div>
-	<div class="navigation-region" data-reader-region="navigation">
-		<ViewerToolbar
-			page={page}
-			pageCount={controller.pageCount}
-			{chapters}
-			currentChapterPage={currentChapter?.page}
-			bookmarkPages={bookmarkController.pages}
-			bookmarked={currentPageBookmarked}
-			bookmarkEnabled={bookmarksEnabled}
-			enabled={controller.pageCount > 0}
-			canPrevious={page > 1}
-			canNext={canMoveNext}
-			thumbnailsOpen={thumbnailsOpen}
-			onPageChange={onPageChange}
-			onChapterChange={onChapterChange}
-			onToggleBookmark={toggleCurrentBookmark}
-			onSelectBookmark={selectBookmark}
-			onPrevious={previousPage}
-			onNext={nextPage}
-			onToggleThumbnails={() => (thumbnailsOpen = !thumbnailsOpen)}
-		/>
-	</div>
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.base {
 	:host {
-		display: block;
-		width: 100%;
-		min-width: 0;
-		min-height: 22rem;
 		color: var(--pamphlet-viewer-text);
 		font: 14px/1.5 system-ui, sans-serif;
 		color-scheme: dark;
@@ -652,6 +717,15 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		--pamphlet-viewer-thumbnail-hover: #2c3137;
 		--pamphlet-viewer-focus-ring: 2px solid var(--pamphlet-viewer-accent);
 		--pamphlet-viewer-focus-ring-offset: 1px;
+	}
+	}
+
+	@layer pamphlet-viewer.layout {
+	:host {
+		display: block;
+		width: 100%;
+		min-width: 0;
+		min-height: 22rem;
 
 		&:fullscreen {
 			width: 100vw !important;
@@ -692,21 +766,6 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			user-select: text;
 		}
 
-		.settings-region,
-		.navigation-region {
-			min-width: 0;
-		}
-
-		.navigation-region {
-			grid-column: 1;
-			grid-row: 1;
-		}
-
-		.settings-region {
-			grid-column: 2;
-			grid-row: 1;
-		}
-
 		.content-region {
 			grid-column: 1 / -1;
 			grid-row: 3;
@@ -740,11 +799,11 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			min-width: 0;
 			min-height: 0;
 
-			&.thumbnails-open {
+			&.panel-open {
 				grid-template-columns: 208px minmax(0, 1fr);
 			}
 
-			.thumbnail-slot {
+			.reader-panel-slot {
 				display: flex;
 				flex-direction: column;
 				min-width: 0;
@@ -760,19 +819,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		}
 	}
 
-	@container pamphlet-reader (min-width: 701px) and (max-width: 837px) {
-		.viewer-shell .settings-region {
-			grid-column: 1 / -1;
-			grid-row: 2;
-		}
-	}
-
 	@container pamphlet-reader (max-width: 700px) {
-		.viewer-shell .settings-region {
-			grid-column: 1 / -1;
-			grid-row: 1;
-		}
-
 		.viewer-shell .content-region {
 			grid-row: 3;
 		}
@@ -781,21 +828,17 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			grid-row: 4;
 		}
 
-		.viewer-shell .navigation-region {
-			grid-column: 1 / -1;
-			grid-row: 5;
-		}
-
 		.viewer-shell .reader-body {
 			flex: 1 1 0;
 		}
 
-		.viewer-shell .reader-body.thumbnails-open {
+		.viewer-shell .reader-body.panel-open {
 			grid-template-columns: minmax(0, 1fr);
 
 			.stage-slot {
 				display: none;
 			}
+	}
 	}
 	}
 </style>
