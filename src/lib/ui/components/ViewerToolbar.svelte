@@ -92,6 +92,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.toolbar-container {
 		box-sizing: border-box;
 		display: flex;
@@ -136,5 +139,6 @@
 				background: var(--pamphlet-viewer-toolbar, #24282e);
 			}
 		}
+	}
 	}
 </style>

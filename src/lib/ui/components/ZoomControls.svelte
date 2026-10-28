@@ -68,6 +68,9 @@
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.zoom-controls {
 		display: flex;
 		align-items: center;
@@ -157,4 +160,5 @@
 		}
 	}
 
+	}
 </style>

@@ -99,6 +99,9 @@
 </details>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.compact-navigation {
 		display: none;
 
@@ -188,5 +191,6 @@
 				inset-block-end: calc(100% + var(--pamphlet-viewer-popup-offset));
 			}
 		}
+	}
 	}
 </style>

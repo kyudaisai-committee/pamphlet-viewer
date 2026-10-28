@@ -12,6 +12,7 @@
 	import type { PamphletChapter } from "@/lib/public-api";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
 	import CompactNavigation from "./CompactNavigation.svelte";
+	import MenuBar from "./MenuBar.svelte";
 
 	interface Props {
 		page: number;
@@ -57,7 +58,8 @@
 	const messages = useViewerMessages();
 </script>
 
-<div class="page-controls" role="group" aria-label={messages.pageNavigationLabel}>
+{#snippet pageNavigation()}
+	<div class="page-controls" role="group" aria-label={messages.pageNavigationLabel}>
 	<button
 		class="icon-button thumbnail-toggle"
 		type="button"
@@ -102,34 +104,41 @@
 	>
 		<ChevronRightIcon size={18} aria-hidden="true" />
 	</button>
-	<button
-		class="icon-button bookmark-toggle"
-		type="button"
-		aria-label={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
-		aria-pressed={bookmarked}
-		title={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
-		disabled={!bookmarkEnabled}
-		onclick={onToggleBookmark}
-	>
-		{#if bookmarked}
-			<BookmarkCheckIcon size={18} aria-hidden="true" />
-		{:else}
-			<BookmarkIcon size={18} aria-hidden="true" />
-		{/if}
-	</button>
-	<CompactNavigation
-		{chapters}
-		{currentChapterPage}
-		{bookmarkPages}
-		{bookmarked}
-		{bookmarkEnabled}
-		{enabled}
-		{onChapterChange}
-		{onToggleBookmark}
-		{onSelectBookmark}
-	/>
 </div>
+{/snippet}
 
+{#snippet bookmarkControls()}
+	<div class="bookmark-controls">
+		<button
+			class="icon-button bookmark-toggle"
+			type="button"
+			aria-label={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
+			aria-pressed={bookmarked}
+			title={bookmarked ? messages.removeBookmark : messages.bookmarkPage}
+			disabled={!bookmarkEnabled}
+			onclick={onToggleBookmark}
+		>
+			{#if bookmarked}
+				<BookmarkCheckIcon size={18} aria-hidden="true" />
+			{:else}
+				<BookmarkIcon size={18} aria-hidden="true" />
+			{/if}
+		</button>
+		<CompactNavigation
+			{chapters}
+			{currentChapterPage}
+			{bookmarkPages}
+			{bookmarked}
+			{bookmarkEnabled}
+			{enabled}
+			{onChapterChange}
+			{onToggleBookmark}
+			{onSelectBookmark}
+		/>
+	</div>
+{/snippet}
+
+{#snippet chapterNavigation()}
 {#if chapters.length > 0}
 	<label class="chapter-control">
 		<span>{messages.chapter}</span>
@@ -146,6 +155,9 @@
 		</select>
 	</label>
 {/if}
+{/snippet}
+
+{#snippet savedPageNavigation()}
 {#if bookmarkPages.length > 0}
 	<label class="bookmark-list-control">
 		<span>{messages.savedPages}</span>
@@ -165,9 +177,24 @@
 		</select>
 	</label>
 {/if}
+{/snippet}
+
+<MenuBar
+	items={[
+		{ kind: "snippet", id: "page-navigation", content: pageNavigation },
+		{ kind: "snippet", id: "bookmark-controls", content: bookmarkControls },
+		{ kind: "snippet", id: "chapter-navigation", content: chapterNavigation },
+		{ kind: "snippet", id: "saved-page-navigation", content: savedPageNavigation },
+		{ kind: "spacer", id: "navigation-spacer" },
+	]}
+/>
 
 <style>
-	.page-controls {
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
+	.page-controls,
+	.bookmark-controls {
 		display: flex;
 		align-items: center;
 		gap: var(--pamphlet-viewer-control-gap);
@@ -228,6 +255,10 @@
 		}
 	}
 
+	.bookmark-controls {
+		margin-inline-start: var(--pamphlet-viewer-control-gap);
+	}
+
 	.chapter-control,
 	.bookmark-list-control {
 		display: inline-flex;
@@ -259,7 +290,8 @@
 	}
 
 	@container reader-toolbar (max-width: 700px) {
-		.page-controls {
+		.page-controls,
+		.bookmark-controls {
 			gap: var(--pamphlet-viewer-compact-control-gap);
 
 			button,
@@ -281,9 +313,14 @@
 			}
 		}
 
+		.bookmark-controls {
+			margin-inline-start: var(--pamphlet-viewer-compact-control-gap);
+		}
+
 		.chapter-control,
 		.bookmark-list-control {
 			display: none;
 		}
+	}
 	}
 </style>

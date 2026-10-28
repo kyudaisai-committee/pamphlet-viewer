@@ -3,6 +3,7 @@
 <script lang="ts">
 	import type { FitMode, LayoutMode } from "@/lib/domain/navigation/layout";
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
+	import MenuBar from "./MenuBar.svelte";
 	import ViewerViewControls from "./ViewerViewControls.svelte";
 	import ZoomControls from "./ZoomControls.svelte";
 
@@ -34,8 +35,11 @@
 	const messages = useViewerMessages();
 </script>
 
-<div class="settings-toolbar" role="group" aria-label={messages.settingsLabel}>
+{#snippet zoomControls()}
 	<ZoomControls {zoom} {enabled} {onZoomChange} {onResetZoom} />
+{/snippet}
+
+{#snippet viewControls()}
 	<ViewerViewControls
 		{fit}
 		{layout}
@@ -45,9 +49,22 @@
 		{onLayoutChange}
 		{onToggleFullscreen}
 	/>
+{/snippet}
+
+<div class="settings-toolbar" role="group" aria-label={messages.settingsLabel}>
+	<MenuBar
+		items={[
+			{ kind: "snippet", id: "zoom-controls", content: zoomControls },
+			{ kind: "spacer", id: "settings-spacer" },
+			{ kind: "snippet", id: "view-controls", content: viewControls },
+		]}
+	/>
 </div>
 
 <style>
+	@layer pamphlet-viewer.base, pamphlet-viewer.components, pamphlet-viewer.layout;
+
+	@layer pamphlet-viewer.components {
 	.settings-toolbar {
 		box-sizing: border-box;
 		display: flex;
@@ -75,6 +92,16 @@
 
 		@container reader-toolbar (max-width: 340px) {
 			row-gap: var(--pamphlet-viewer-compact-control-gap);
+		}
+	}
+	}
+
+	@layer pamphlet-viewer.layout {
+		.settings-toolbar {
+			@container pamphlet-reader (min-width: 701px) and (max-width: 837px) {
+				width: 100%;
+				min-width: 0;
+			}
 		}
 	}
 </style>

@@ -92,7 +92,7 @@ test("navigates to validated configured chapters", async () => {
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
 	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar > .chapter-control select[aria-label="章へ移動"]',
+		'.toolbar > .menu-bar-items > .chapter-control select[aria-label="章へ移動"]',
 	);
 	if (chapterSelect === null) {
 		throw new Error("The configured chapter list was not rendered.");
@@ -172,7 +172,7 @@ test("applies shared design tokens to desktop controls", async () => {
 	);
 	const pageInput = shadowRoot.querySelector<HTMLInputElement>('[aria-label="ページ番号"]');
 	const chapterSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar > .chapter-control select[aria-label="章へ移動"]',
+		'.toolbar > .menu-bar-items > .chapter-control select[aria-label="章へ移動"]',
 	);
 	const viewSelect = shadowRoot.querySelector<HTMLSelectElement>('[aria-label="表示方法"]');
 	const previousButton = shadowRoot.querySelector<HTMLButtonElement>(
@@ -292,7 +292,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	const shadowRoot = element.shadowRoot;
 	if (shadowRoot === null) throw new Error("The pamphlet viewer did not attach its shadow root.");
 	const bookmarkButton = shadowRoot.querySelector<HTMLButtonElement>(
-		".page-controls > .bookmark-toggle",
+		".bookmark-controls > .bookmark-toggle",
 	);
 	if (bookmarkButton === null) {
 		throw new Error("The bookmark controls were not rendered.");
@@ -303,7 +303,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
 	expect(
 		shadowRoot.querySelector<HTMLSelectElement>(
-			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+			'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 		)?.options[1]?.value,
 	).toBe("1");
 
@@ -313,7 +313,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	await expect.poll(() => bookmarkButton.getAttribute("aria-pressed")).toBe("true");
 
 	const bookmarkSelect = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+		'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 	);
 	if (bookmarkSelect === null) throw new Error("The saved page list was not rendered.");
 	const desktopBookmarkSelect = browserPage.elementLocator(bookmarkSelect);
@@ -326,7 +326,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	await secondDocumentPage;
 	expect(
 		shadowRoot.querySelector(
-			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+			'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 		),
 	).toBeNull();
 
@@ -334,7 +334,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	element.src = "./reader-test.pdf";
 	await restoredPage;
 	const restoredOptions = shadowRoot.querySelector<HTMLSelectElement>(
-		'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+		'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 	)?.options;
 	expect(Array.from(restoredOptions ?? [], (option) => option.value)).toEqual(["", "1", "3"]);
 
@@ -345,7 +345,7 @@ test("persists bookmarks per document and restores the saved page list", async (
 	expect(
 		Array.from(
 			shadowRoot.querySelector<HTMLSelectElement>(
-				'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+				'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 			)?.options ?? [],
 			(option) => option.value,
 		),
@@ -366,10 +366,10 @@ test("synchronizes bookmarks between viewer instances and storage events", async
 	await Promise.all([firstPage, secondPage]);
 
 	const firstButtonElement = first.shadowRoot?.querySelector<HTMLButtonElement>(
-		".page-controls > .bookmark-toggle",
+		".bookmark-controls > .bookmark-toggle",
 	);
 	const secondButtonElement = second.shadowRoot?.querySelector<HTMLButtonElement>(
-		".page-controls > .bookmark-toggle",
+		".bookmark-controls > .bookmark-toggle",
 	);
 	if (
 		firstButtonElement === null ||
@@ -394,7 +394,7 @@ test("synchronizes bookmarks between viewer instances and storage events", async
 		.poll(() =>
 			Array.from(
 				second.shadowRoot?.querySelector<HTMLSelectElement>(
-					'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+					'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
 				)?.options ?? [],
 				(option) => option.value,
 			),
@@ -608,125 +608,136 @@ test("uses the host width for mobile thumbnail mode and closes after selection",
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-panel")).toBeNull();
 });
 
-test.each([701, 840])("keeps toolbar controls inside a %i pixel host", async (width) => {
-	const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
-	localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3] }));
-	await import("@/lib/entry");
-	const element = createViewer({ width, height: 620 }, createBackend(12));
-	element.setConfig({
-		chapters: [
-			{ title: "前半", page: 1 },
-			{ title: "長い章タイトル", page: 7 },
-		],
-	});
-	const firstPage = waitForPageChange(element);
-	document.body.append(element);
-	await firstPage;
-	const shadowRoot = element.shadowRoot;
-	if (shadowRoot === null) throw new Error("The reader shadow root was not rendered.");
-	const shell = shadowRoot.querySelector<HTMLElement>(".viewer-shell");
-	const navigationRegion = shadowRoot.querySelector<HTMLElement>(".navigation-region");
-	const settingsRegion = shadowRoot.querySelector<HTMLElement>(".settings-region");
-	const toolbar = shadowRoot.querySelector<HTMLElement>(".toolbar");
-	const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
-	if (
-		shell === null ||
-		navigationRegion === null ||
-		settingsRegion === null ||
-		toolbar === null ||
-		settingsToolbar === null
-	) {
-		throw new Error("The desktop reader toolbars were not rendered.");
-	}
-	const shellRect = shell.getBoundingClientRect();
-	const toolbarRect = toolbar.getBoundingClientRect();
-	const settingsRect = settingsToolbar.getBoundingClientRect();
-	const compact = width <= 701;
-	const selectors = compact
-		? [
-				".page-controls",
-				".zoom-controls",
-				'.view-mode-control select[aria-label="表示方法"]',
-				'.fullscreen-toggle[aria-label="全画面表示"]',
-			]
-		: [
-				".page-controls",
-				'.toolbar > .chapter-control select[aria-label="章へ移動"]',
-				'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
-				".zoom-controls",
-				'.view-mode-control select[aria-label="表示方法"]',
-				'.fullscreen-toggle[aria-label="全画面表示"]',
-			];
-	const controls = selectors.map((selector) => {
-		const control = shadowRoot.querySelector<HTMLElement>(selector);
-		if (control === null) throw new Error(`The desktop control ${selector} was not rendered.`);
-		return { selector, rect: control.getBoundingClientRect().toJSON() };
-	});
-	for (const { selector } of controls) {
-		const control = shadowRoot.querySelector<HTMLElement>(selector);
-		if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
-		await expect.element(browserPage.elementLocator(control)).toBeVisible();
-	}
-	for (const { selector } of controls) {
-		const control = shadowRoot.querySelector<HTMLElement>(selector);
-		if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
-		const rect = control.getBoundingClientRect();
-		const parentRect =
-			selector === ".zoom-controls" ||
-			selector.includes("view-") ||
-			selector.includes("fullscreen")
-				? settingsRect
-				: toolbarRect;
-		expect(rect.left, `${selector} left edge`).toBeGreaterThanOrEqual(parentRect.left);
-		expect(rect.right, `${selector} right edge`).toBeLessThanOrEqual(parentRect.right);
-		expect(rect.left, `${selector} host left edge`).toBeGreaterThanOrEqual(shellRect.left);
-		expect(rect.right, `${selector} host right edge`).toBeLessThanOrEqual(shellRect.right);
-	}
-	if (compact) {
-		const readerBody = shadowRoot?.querySelector<HTMLElement>(".reader-body");
-		const summary = shadowRoot?.querySelector<HTMLElement>(".compact-navigation summary");
+test.each([701, 703, 802, 839, 840])(
+	"keeps toolbar controls inside a %i pixel host",
+	async (width) => {
+		const documentKey = new URL("./reader-test.pdf", document.baseURI).href;
+		localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify({ [documentKey]: [3] }));
+		await import("@/lib/entry");
+		const element = createViewer({ width, height: 620 }, createBackend(12));
+		element.setConfig({
+			chapters: [
+				{ title: "前半", page: 1 },
+				{ title: "長い章タイトル", page: 7 },
+			],
+		});
+		const firstPage = waitForPageChange(element);
+		document.body.append(element);
+		await firstPage;
+		const shadowRoot = element.shadowRoot;
+		if (shadowRoot === null) throw new Error("The reader shadow root was not rendered.");
+		const shell = shadowRoot.querySelector<HTMLElement>(".viewer-shell");
+		const navigationRegion = shadowRoot.querySelector<HTMLElement>(".navigation-region");
+		const settingsRegion = shadowRoot.querySelector<HTMLElement>(".settings-region");
+		const toolbar = shadowRoot.querySelector<HTMLElement>(".toolbar");
+		const settingsToolbar = shadowRoot.querySelector<HTMLElement>(".settings-toolbar");
 		if (
-			readerBody === null ||
-			readerBody === undefined ||
-			summary === null ||
-			summary === undefined
+			shell === null ||
+			navigationRegion === null ||
+			settingsRegion === null ||
+			toolbar === null ||
+			settingsToolbar === null
 		) {
-			throw new Error("The compact navigation controls were not rendered.");
+			throw new Error("The desktop reader toolbars were not rendered.");
 		}
-		expect(settingsRect.bottom).toBeLessThanOrEqual(readerBody.getBoundingClientRect().top);
-		expect(readerBody.getBoundingClientRect().bottom).toBeLessThanOrEqual(toolbarRect.top);
-		await browserPage.elementLocator(summary).click();
-		const panel = shadowRoot?.querySelector<HTMLElement>(".compact-navigation-panel");
-		if (panel === null || panel === undefined)
-			throw new Error("The compact navigation panel is missing.");
-		await expect.element(browserPage.elementLocator(panel)).toBeVisible();
-		const panelRect = panel.getBoundingClientRect();
-		expect(panelRect.left).toBeGreaterThanOrEqual(toolbarRect.left);
-		expect(panelRect.right).toBeLessThanOrEqual(toolbarRect.right);
-	} else {
-		for (const selector of [
-			'.toolbar > .chapter-control select[aria-label="章へ移動"]',
-			'.toolbar > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
-		]) {
-			const control = shadowRoot?.querySelector<HTMLElement>(selector);
-			if (control === null || control === undefined) {
+		const shellRect = shell.getBoundingClientRect();
+		const toolbarRect = toolbar.getBoundingClientRect();
+		const settingsRect = settingsToolbar.getBoundingClientRect();
+		const compact = shell.clientWidth <= 700;
+		const selectors = compact
+			? [
+					".page-controls",
+					".zoom-controls",
+					'.view-mode-control select[aria-label="表示方法"]',
+					'.fullscreen-toggle[aria-label="全画面表示"]',
+				]
+			: [
+					".page-controls",
+					'.toolbar > .menu-bar-items > .chapter-control select[aria-label="章へ移動"]',
+					'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+					".zoom-controls",
+					'.view-mode-control select[aria-label="表示方法"]',
+					'.fullscreen-toggle[aria-label="全画面表示"]',
+				];
+		const controls = selectors.map((selector) => {
+			const control = shadowRoot.querySelector<HTMLElement>(selector);
+			if (control === null)
 				throw new Error(`The desktop control ${selector} was not rendered.`);
-			}
+			return { selector, rect: control.getBoundingClientRect().toJSON() };
+		});
+		for (const { selector } of controls) {
+			const control = shadowRoot.querySelector<HTMLElement>(selector);
+			if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
 			await expect.element(browserPage.elementLocator(control)).toBeVisible();
-			const rect = control.getBoundingClientRect();
-			expect(rect.left).toBeGreaterThanOrEqual(toolbarRect.left);
-			expect(rect.right).toBeLessThanOrEqual(toolbarRect.right);
 		}
-		const navigationRect = navigationRegion.getBoundingClientRect();
-		const settingsRegionRect = settingsRegion.getBoundingClientRect();
-		const toolbarRegionsDoNotOverlap =
-			navigationRect.right <= settingsRegionRect.left ||
-			settingsRegionRect.right <= navigationRect.left ||
-			navigationRect.bottom <= settingsRegionRect.top ||
-			settingsRegionRect.bottom <= navigationRect.top;
-		expect(toolbarRegionsDoNotOverlap).toBe(true);
-	}
-});
+		for (const { selector } of controls) {
+			const control = shadowRoot.querySelector<HTMLElement>(selector);
+			if (control === null) throw new Error(`The desktop control ${selector} disappeared.`);
+			const rect = control.getBoundingClientRect();
+			const parentRect =
+				selector === ".zoom-controls" ||
+				selector.includes("view-") ||
+				selector.includes("fullscreen")
+					? settingsRect
+					: toolbarRect;
+			expect(rect.left, `${selector} left edge`).toBeGreaterThanOrEqual(parentRect.left);
+			expect(rect.right, `${selector} right edge`).toBeLessThanOrEqual(parentRect.right);
+			expect(rect.left, `${selector} host left edge`).toBeGreaterThanOrEqual(shellRect.left);
+			expect(rect.right, `${selector} host right edge`).toBeLessThanOrEqual(shellRect.right);
+		}
+		if (compact) {
+			const readerBody = shadowRoot?.querySelector<HTMLElement>(".reader-body");
+			const summary = shadowRoot?.querySelector<HTMLElement>(".compact-navigation summary");
+			if (
+				readerBody === null ||
+				readerBody === undefined ||
+				summary === null ||
+				summary === undefined
+			) {
+				throw new Error("The compact navigation controls were not rendered.");
+			}
+			expect(settingsRect.bottom).toBeLessThanOrEqual(readerBody.getBoundingClientRect().top);
+			expect(readerBody.getBoundingClientRect().bottom).toBeLessThanOrEqual(toolbarRect.top);
+			await browserPage.elementLocator(summary).click();
+			const panel = shadowRoot?.querySelector<HTMLElement>(".compact-navigation-panel");
+			if (panel === null || panel === undefined)
+				throw new Error("The compact navigation panel is missing.");
+			await expect.element(browserPage.elementLocator(panel)).toBeVisible();
+			const panelRect = panel.getBoundingClientRect();
+			expect(panelRect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+			expect(panelRect.right).toBeLessThanOrEqual(toolbarRect.right);
+		} else {
+			for (const selector of [
+				'.toolbar > .menu-bar-items > .chapter-control select[aria-label="章へ移動"]',
+				'.toolbar > .menu-bar-items > .bookmark-list-control select[aria-label="ブックマーク一覧"]',
+			]) {
+				const control = shadowRoot?.querySelector<HTMLElement>(selector);
+				if (control === null || control === undefined) {
+					throw new Error(`The desktop control ${selector} was not rendered.`);
+				}
+				await expect.element(browserPage.elementLocator(control)).toBeVisible();
+				const rect = control.getBoundingClientRect();
+				expect(rect.left).toBeGreaterThanOrEqual(toolbarRect.left);
+				expect(rect.right).toBeLessThanOrEqual(toolbarRect.right);
+			}
+			const navigationRect = navigationRegion.getBoundingClientRect();
+			const settingsRegionRect = settingsRegion.getBoundingClientRect();
+			if (shell.clientWidth <= 837) {
+				const shellBorderWidth = Number.parseFloat(getComputedStyle(shell).borderLeftWidth);
+				expect(settingsRegionRect.left).toBeCloseTo(shellRect.left + shellBorderWidth, 0);
+				expect(settingsRegionRect.right).toBeCloseTo(shellRect.right - shellBorderWidth, 0);
+				expect(getComputedStyle(settingsToolbar).backgroundColor).toBe("rgb(36, 40, 46)");
+				expect(settingsRect.width).toBeCloseTo(settingsRegionRect.width, 0);
+			}
+			const toolbarRegionsDoNotOverlap =
+				navigationRect.right <= settingsRegionRect.left ||
+				settingsRegionRect.right <= navigationRect.left ||
+				navigationRect.bottom <= settingsRegionRect.top ||
+				settingsRegionRect.bottom <= navigationRect.top;
+			expect(toolbarRegionsDoNotOverlap).toBe(true);
+		}
+	},
+);
 
 test("falls back to a top-layer fullscreen reader and restores the embed size on Escape", async () => {
 	await import("@/lib/entry");
