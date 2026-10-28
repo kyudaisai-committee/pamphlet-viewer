@@ -800,7 +800,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 			min-height: 0;
 
 			&.panel-open {
-				grid-template-columns: 208px minmax(0, 1fr);
+				grid-template-columns: 256px minmax(0, 1fr);
 			}
 
 			.reader-panel-slot {
