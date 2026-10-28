@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.3
+
+### Patch Changes
+
+- f89f4e1: ページ遷移中も描画済みページを保持し、新しいページ一式が揃ってから切り替えるようにしました。描画が100msを超える場合は進行状況を表示します。
+
 ## 0.1.2
 
 ### Patch Changes
