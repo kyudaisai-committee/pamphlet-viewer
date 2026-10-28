@@ -7,10 +7,12 @@ import {
 	COLORS,
 	createBackend,
 	createDeferred,
+	createVisual,
 	createViewer,
 	expectRenderedPages,
 	visualFor,
 	waitForPageChange,
+	waitForRenderingFeedback,
 	waitForAnimationFrames,
 } from "./reader-page-render-fixtures";
 
@@ -78,11 +80,20 @@ test.each([
 		await import("@/lib/entry");
 		const pageTwoStarted = createDeferred<void>();
 		const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
+		const zoomPixel: [number, number, number] = [42, 116, 178];
+		let initialPageScale = 0;
+		let captureInitialScale = true;
 		const viewer = createViewer(
-			createBackend(3, (pageIndex) => {
+			createBackend(3, (pageIndex, scale) => {
 				if (pageIndex === 1) {
 					pageTwoStarted.resolve();
 					return pageTwoRender.promise;
+				}
+				if (pageIndex === 0 && captureInitialScale) {
+					initialPageScale = Math.max(initialPageScale, scale);
+				}
+				if (pageIndex === 0 && !captureInitialScale && scale > initialPageScale) {
+					return Promise.resolve(createVisual(zoomPixel));
 				}
 				return Promise.resolve(visualFor(pageIndex));
 			}),
@@ -93,7 +104,6 @@ test.each([
 		document.body.append(viewer);
 		await firstPage;
 		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
 		const shadowRoot = viewer.shadowRoot;
 		if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
@@ -104,30 +114,20 @@ test.each([
 			throw new Error("The page area, zoom control, or stage viewport is missing.");
 		}
 
+		captureInitialScale = false;
+		zoomSlider.value = "4";
+		zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
+		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: zoomPixel }]);
+
+		expect(pageArea.scrollHeight).toBeGreaterThan(pageArea.clientHeight * 2);
+		expect(pageArea.scrollWidth).toBeGreaterThan(pageArea.clientWidth);
+
 		const secondPage = waitForPageChange(viewer, 2);
 		viewer.page = 2;
 		await pageTwoStarted.promise;
-		await tick();
-		await vi.advanceTimersByTimeAsync(200);
-		await tick();
-		let feedback = shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
-		if (feedback === null) throw new Error("The page-navigation feedback did not appear.");
+		const feedback = await waitForRenderingFeedback(viewer);
+		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: zoomPixel }]);
 
-		zoomSlider.value = "4";
-		zoomSlider.dispatchEvent(new Event("input", { bubbles: true }));
-		await tick();
-		await vi.advanceTimersByTimeAsync(ZOOM_RENDER_DELAY_MS);
-		await tick();
-		await vi.advanceTimersByTimeAsync(200);
-		await tick();
-		feedback = shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
-		if (feedback === null)
-			throw new Error("The page-navigation feedback did not remain visible.");
-		await expectRenderedPages(viewer, [{ pageIndex: 0, pixel: COLORS[0] ?? null }]);
-
-		expect(Number(zoomSlider.value)).toBe(4);
-		expect(pageArea.scrollHeight).toBeGreaterThan(pageArea.clientHeight * 2);
-		expect(pageArea.scrollWidth).toBeGreaterThan(pageArea.clientWidth);
 		const scrollDimensions = {
 			height: pageArea.scrollHeight,
 			width: pageArea.scrollWidth,
@@ -161,9 +161,8 @@ test.each([
 
 		pageTwoRender.resolve(visualFor(1));
 		await secondPage;
-		await tick();
 		await expectRenderedPages(viewer, [{ pageIndex: 1, pixel: COLORS[1] ?? null }]);
-		expect(shadowRoot.querySelector(".rendering-feedback")).toBeNull();
+		await expect.poll(() => shadowRoot.querySelector(".rendering-feedback")).toBeNull();
 	},
 );
 
