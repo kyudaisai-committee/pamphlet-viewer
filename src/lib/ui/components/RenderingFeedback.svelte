@@ -9,7 +9,7 @@
 
 	let { requestId }: Props = $props();
 	const messages = useViewerMessages();
-	const RENDERING_FEEDBACK_DELAY_MS = 100;
+	const RENDERING_FEEDBACK_DELAY_MS = 200;
 	let visible = $state(false);
 
 	$effect(() => {
@@ -44,11 +44,12 @@
 			max-width: calc(100% - 32px);
 			margin-inline: auto;
 			padding: 8px 12px;
-			border: var(--pamphlet-viewer-border-width) solid #aeb4ba;
+			border: var(--pamphlet-viewer-border-width) solid
+				var(--pamphlet-viewer-border, #3b4148);
 			border-radius: var(--pamphlet-viewer-control-radius, 4px);
-			background: #111416;
-			color: #fff;
-			box-shadow: 0 2px 12px rgb(0 0 0 / 55%);
+			background: var(--pamphlet-viewer-toolbar, #24282e);
+			color: var(--pamphlet-viewer-text, #e4e7e9);
+			box-shadow: none;
 			font-size: 14px;
 			font-weight: 500;
 			text-align: center;

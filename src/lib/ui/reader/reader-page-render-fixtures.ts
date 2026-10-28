@@ -121,6 +121,28 @@ export async function expectRenderedPages(
 	await expect.poll(() => readRenderedPages(element)).toEqual(expected);
 }
 
+export async function waitForRenderingFeedback(
+	element: PamphletViewerElement,
+): Promise<HTMLElement> {
+	function findFeedback(): HTMLElement | null {
+		const shadowRoot = element.shadowRoot;
+		if (shadowRoot === null) throw new Error("The viewer did not attach its shadow root.");
+		return shadowRoot.querySelector<HTMLElement>(".rendering-feedback");
+	}
+	await expect.poll(findFeedback).toBeInstanceOf(HTMLElement);
+	const feedback = findFeedback();
+	if (feedback === null) {
+		throw new Error("The page-rendering feedback did not appear.");
+	}
+	return feedback;
+}
+
+export async function waitForAnimationFrames(count: number): Promise<void> {
+	for (let frame = 0; frame < count; frame += 1) {
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+	}
+}
+
 export function observePageFrames(element: PamphletViewerElement): {
 	counts: number[];
 	sampleTwoFrames(): Promise<void>;
@@ -162,8 +184,4 @@ export function createDeferred<Value>(): {
 		reject = fail;
 	});
 	return { promise, resolve, reject };
-}
-
-export function delay(milliseconds: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

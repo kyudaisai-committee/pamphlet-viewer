@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "vitest";
+import { tick } from "svelte";
+import { afterEach, expect, test, vi } from "vitest";
 
 import type { DocumentBackend, PageSource, PageVisual } from "@/lib/document/page-source";
 import type { PamphletViewerElement } from "@/lib/public-api";
@@ -7,10 +8,12 @@ const RENDERING_STATUS_MESSAGE = "ページを描画しています。";
 
 afterEach(() => {
 	document.body.replaceChildren();
+	vi.useRealTimers();
 });
 
-test("delays the rendering status by 100 ms when no page is visible", async () => {
+test("delays the rendering status by 200 ms when no page is visible", async () => {
 	await import("@/lib/entry");
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 	const render = createDeferred<PageVisual>();
 	const renderStarted = createDeferred<void>();
 	const element = createViewer({
@@ -23,17 +26,21 @@ test("delays the rendering status by 100 ms when no page is visible", async () =
 	document.body.append(element);
 	await renderStarted.promise;
 
-	await delay(50);
+	await tick();
+	await vi.advanceTimersByTimeAsync(199);
 	expect(element.shadowRoot?.querySelector(".status")?.textContent).not.toContain(
 		RENDERING_STATUS_MESSAGE,
 	);
-	await expect
-		.poll(() => element.shadowRoot?.querySelector(".status")?.textContent)
-		.toContain(RENDERING_STATUS_MESSAGE);
+	await vi.advanceTimersByTimeAsync(1);
+	await tick();
+	expect(element.shadowRoot?.querySelector(".status")?.textContent).toContain(
+		RENDERING_STATUS_MESSAGE,
+	);
 
 	render.resolve(createVisual(220, 40, 40));
 	await firstPage;
-	await expect.poll(() => element.shadowRoot?.querySelector(".status")).toBeNull();
+	await tick();
+	expect(element.shadowRoot?.querySelector(".status")).toBeNull();
 });
 
 function createViewer(renderer: { renderPage(): Promise<PageVisual> }): PamphletViewerElement {
@@ -96,8 +103,4 @@ function createDeferred<Value>(): {
 		resolve = complete;
 	});
 	return { promise, resolve };
-}
-
-function delay(milliseconds: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
