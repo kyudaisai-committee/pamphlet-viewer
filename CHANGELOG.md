@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.1.1
+
+### Patch Changes
+
+- 122685d: 目次とブックマークを共通サイドパネルにまとめ、狭い画面でのツールバー配置を改善しました。
+
 ## 0.1.0
 
 ### Minor Changes
