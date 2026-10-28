@@ -153,8 +153,10 @@
 				font: inherit;
 				cursor: pointer;
 
-				&:hover {
-					background: var(--pamphlet-viewer-control-hover);
+				@media (hover: hover) {
+					&:hover {
+						background: var(--pamphlet-viewer-control-hover);
+					}
 				}
 
 				&:focus-visible {
