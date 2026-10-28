@@ -9,7 +9,7 @@ export interface RenderedPage {
 }
 
 export type PageColor = [number, number, number];
-export type PageRenderer = (pageIndex: number) => Promise<PageVisual>;
+export type PageRenderer = (pageIndex: number, scale: number) => Promise<PageVisual>;
 
 export const COLORS: Record<number, PageColor> = {
 	0: [220, 30, 30],
