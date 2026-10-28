@@ -58,9 +58,12 @@ test.each([
 		throw new Error("The pending render feedback or page area is missing.");
 	}
 	expect(feedback.textContent).toContain("ページを描画しています。");
-	expect(getComputedStyle(feedback).backgroundColor).toBe("rgb(17, 20, 22)");
-	expect(getComputedStyle(feedback).color).toBe("rgb(255, 255, 255)");
-	expect(getComputedStyle(feedback).fontSize).toBe("14px");
+	const feedbackStyle = getComputedStyle(feedback);
+	expect(feedbackStyle.backgroundColor).toBe("rgb(36, 40, 46)");
+	expect(feedbackStyle.color).toBe("rgb(228, 231, 233)");
+	expect(feedbackStyle.borderTopColor).toBe("rgb(59, 65, 72)");
+	expect(feedbackStyle.boxShadow).toBe("none");
+	expect(feedbackStyle.fontSize).toBe("14px");
 	const pageAreaBounds = pageArea.getBoundingClientRect();
 	let feedbackBounds = feedback.getBoundingClientRect();
 	expect(feedbackBounds.top).toBeGreaterThanOrEqual(pageAreaBounds.top);
