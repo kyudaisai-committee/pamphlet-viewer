@@ -5,12 +5,12 @@
 	import type { Snippet } from "svelte";
 
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
-
-	export type ReaderPanelTab = "pages" | "chapters" | "bookmarks";
+	import type { ReaderPanelTab } from "./reader-panel-state";
 
 	interface Props {
 		panel: ReaderPanelTab;
 		hasChapters: boolean;
+		hasBookmarks: boolean;
 		pages: Snippet;
 		chapters: Snippet;
 		bookmarks: Snippet;
@@ -18,7 +18,16 @@
 		onClose(): void;
 	}
 
-	let { panel, hasChapters, pages, chapters, bookmarks, onPanelChange, onClose }: Props = $props();
+	let {
+		panel,
+		hasChapters,
+		hasBookmarks,
+		pages,
+		chapters,
+		bookmarks,
+		onPanelChange,
+		onClose,
+	}: Props = $props();
 	const messages = useViewerMessages();
 
 	function getPanelLabel(panel: ReaderPanelTab): string {
@@ -34,7 +43,11 @@
 </script>
 
 <aside class="reader-panel" aria-labelledby="reader-panel-heading">
-	<header class="panel-heading" class:few-panels={!hasChapters}>
+	<header
+		class="panel-heading"
+		class:few-panels={!hasChapters || !hasBookmarks}
+		class:single-panel={!hasChapters && !hasBookmarks}
+	>
 		<h2 id="reader-panel-heading">{getPanelLabel(panel)}</h2>
 		<button class="panel-close" type="button" aria-label={messages.closePanel} onclick={onClose}>
 			<XIcon size={18} aria-hidden="true" />
@@ -62,16 +75,18 @@
 					<TableOfContentsIcon size={18} aria-hidden="true" />
 				</button>
 			{/if}
-			<button
-				class:active={panel === "bookmarks"}
-				type="button"
-				aria-label={messages.bookmarkList}
-				aria-pressed={panel === "bookmarks"}
-				title={messages.bookmarkList}
-				onclick={() => onPanelChange("bookmarks")}
-			>
-				<BookmarkIcon size={18} aria-hidden="true" />
-			</button>
+			{#if hasBookmarks}
+				<button
+					class:active={panel === "bookmarks"}
+					type="button"
+					aria-label={messages.bookmarkList}
+					aria-pressed={panel === "bookmarks"}
+					title={messages.bookmarkList}
+					onclick={() => onPanelChange("bookmarks")}
+				>
+					<BookmarkIcon size={18} aria-hidden="true" />
+				</button>
+			{/if}
 		</div>
 	</header>
 	<div class="panel-content" aria-labelledby="reader-panel-heading">
@@ -135,6 +150,10 @@
 
 				&.few-panels .panel-tabs {
 					grid-template-columns: repeat(2, minmax(0, 1fr));
+				}
+
+				&.single-panel .panel-tabs {
+					grid-template-columns: minmax(0, 1fr);
 				}
 			}
 

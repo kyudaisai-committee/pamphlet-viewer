@@ -407,11 +407,13 @@ test("every navigation path resets zoom, including the page property and attribu
 	if (savedPageFour === null) throw new Error("The bookmark list was not rendered.");
 	await zoomThenNavigate(zoomIn, () => savedPageFour.click(), element, 4);
 
-	const thumbnailToggle = shadowRoot.querySelector<HTMLButtonElement>(".thumbnail-toggle");
-	if (thumbnailToggle === null) throw new Error("The thumbnail control was not rendered.");
 	await zoomIn.click();
 	await expect.poll(() => readZoom(shadowRoot)).toBe("120%");
-	thumbnailToggle.click();
+	const pageListTab = shadowRoot.querySelector<HTMLButtonElement>(
+		'.reader-panel [aria-label="ページ一覧"]',
+	);
+	if (pageListTab === null) throw new Error("The page list tab was not rendered.");
+	pageListTab.click();
 	await expect.poll(() => shadowRoot.querySelector(".thumbnail-scroll")).not.toBeNull();
 	const thumbnailScroll = shadowRoot.querySelector<HTMLElement>(".thumbnail-scroll");
 	if (thumbnailScroll === null) throw new Error("The thumbnail list was not rendered.");

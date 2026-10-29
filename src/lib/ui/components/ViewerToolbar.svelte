@@ -2,7 +2,7 @@
 
 <script lang="ts">
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
-	import type { ReaderPanelTab } from "./ReaderPanel.svelte";
+	import type { ReaderPanelTab } from "./reader-panel-state";
 	import ViewerNavigationControls from "./ViewerNavigationControls.svelte";
 
 	interface Props {

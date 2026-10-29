@@ -149,9 +149,7 @@ test("keeps shared panel controls keyboard-operable on mobile", async () => {
 	expect(getActiveElement(shadowRoot)).toBe(bookmarksTab);
 	closePanel.click();
 	await expect.poll(() => shadowRoot.querySelector(".reader-panel")).toBeNull();
-	expect(shadowRoot.activeElement).toBe(
-		shadowRoot.querySelector('[data-panel-toggle="bookmarks"]'),
-	);
+	expect(shadowRoot.activeElement).toBe(shadowRoot.querySelector(".thumbnail-toggle"));
 });
 
 test("preserves focus and fullscreen button identity when resizing across the breakpoint", async () => {

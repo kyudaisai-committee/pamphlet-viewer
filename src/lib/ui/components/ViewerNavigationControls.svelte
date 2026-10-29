@@ -10,7 +10,7 @@
 	} from "@lucide/svelte";
 
 	import { useViewerMessages } from "@/lib/i18n/viewer-messages-context.svelte";
-	import type { ReaderPanelTab } from "./ReaderPanel.svelte";
+	import type { ReaderPanelTab } from "./reader-panel-state";
 	import MenuBar from "./MenuBar.svelte";
 
 	interface Props {
@@ -51,9 +51,9 @@
 			class="icon-button thumbnail-toggle"
 			data-panel-toggle="pages"
 			type="button"
-			aria-label={panel === "pages" ? messages.hidePages : messages.showPages}
-			aria-expanded={panel === "pages"}
-			title={panel === "pages" ? messages.hidePages : messages.showPages}
+			aria-label={panel === null ? messages.openSidebar : messages.closeSidebar}
+			aria-expanded={panel !== null}
+			title={panel === null ? messages.openSidebar : messages.closeSidebar}
 			onclick={() => onTogglePanel("pages")}
 		>
 			<PanelLeftIcon size={18} aria-hidden="true" />

@@ -40,12 +40,20 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	import BookmarkPanel from "@/lib/ui/components/BookmarkPanel.svelte";
 	import ChapterListPanel from "@/lib/ui/components/ChapterListPanel.svelte";
 	import ReaderPanel from "@/lib/ui/components/ReaderPanel.svelte";
-	import type { ReaderPanelTab } from "@/lib/ui/components/ReaderPanel.svelte";
 	import ThumbnailPanel from "@/lib/ui/components/ThumbnailPanel.svelte";
 	import ViewerStage from "@/lib/ui/components/ViewerStage.svelte";
 	import ViewerSettingsToolbar from "@/lib/ui/components/ViewerSettingsToolbar.svelte";
 	import ViewerStatusBar from "@/lib/ui/components/ViewerStatusBar.svelte";
 	import ViewerToolbar from "@/lib/ui/components/ViewerToolbar.svelte";
+	import {
+		closeReaderPanel,
+		createReaderPanelState,
+		getActiveReaderPanel,
+		normalizeReaderPanelState,
+		selectReaderPanel,
+		toggleReaderPanel,
+	} from "@/lib/ui/components/reader-panel-state";
+	import type { ReaderPanelState, ReaderPanelTab } from "@/lib/ui/components/reader-panel-state";
 	import ReaderToolbarRegions from "./ReaderToolbarRegions.svelte";
 	import { READER_TOOLBAR_LAYOUT } from "./reader-toolbar-layout";
 	import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
@@ -84,7 +92,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let localeInitialized = $state(false);
 	let viewport = $state<ViewportSize>({ width: 0, height: 0 });
 	let zoom = $state(1);
-	let activePanel = $state<ReaderPanelTab | null>(null);
+	let panelState = $state<ReaderPanelState>(createReaderPanelState());
 	let thumbnailPageIndexes = $state<readonly number[]>([]);
 	const bookmarkController = new ViewerBookmarks();
 	let previousSource = "";
@@ -120,6 +128,11 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	let bookmarksEnabled = $derived(
 		controller.phase === "ready" && controller.pageCount > 0 && resolvedSource !== null,
 	);
+	let panelAvailability = $derived({
+		chapters: chapters.length > 0,
+		bookmarks: bookmarksEnabled,
+	});
+	let activePanel = $derived(getActiveReaderPanel(panelState, panelAvailability));
 	let currentPageBookmarked = $derived(bookmarkController.pages.includes(page));
 	let displayedPages = $derived.by((): DisplayedPage[] =>
 		Object.keys(controller.pageRenderPlans).flatMap((pageIndexText) => {
@@ -157,7 +170,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 				zoomRenderScheduler.cancel();
 				lastRenderInput = null;
 				clearZoomAnchor();
-				activePanel = null;
+				panelState = createReaderPanelState();
 				thumbnailPageIndexes = [];
 				controller.closeThumbnails();
 			});
@@ -300,8 +313,10 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	});
 
 	$effect(() => {
-		if (activePanel !== "chapters" || chapters.length > 0) return;
-		untrack(() => (activePanel = null));
+		const state = panelState;
+		const availability = panelAvailability;
+		const normalizedState = normalizeReaderPanelState(state, availability);
+		if (normalizedState !== state) untrack(() => (panelState = normalizedState));
 	});
 
 	onMount(() => {
@@ -343,7 +358,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 
 	function dispatchControllerEvent(event: ViewerEvent): void {
 		if (event.type === "error" && controller.sourceUnavailable) {
-			activePanel = null;
+			panelState = createReaderPanelState();
 			thumbnailPageIndexes = [];
 			controller.closeThumbnails();
 		}
@@ -402,30 +417,24 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		if (stageSlot === null || stageSlot === undefined || getComputedStyle(stageSlot).display !== "none") {
 			return;
 		}
-		activePanel = null;
+		panelState = closeReaderPanel(panelState);
 		void tick().then(() => pageArea?.focus({ preventScroll: true }));
 	}
 
 	function togglePanel(panel: ReaderPanelTab): void {
-		if (panel === "chapters" && chapters.length === 0) return;
-		if (panel === "bookmarks" && !bookmarksEnabled) return;
-		activePanel = activePanel === panel ? null : panel;
+		panelState = toggleReaderPanel(panelState, panel, panelAvailability);
 	}
 
 	function selectPanel(panel: ReaderPanelTab): void {
-		if (panel === "chapters" && chapters.length === 0) return;
-		if (panel === "bookmarks" && !bookmarksEnabled) return;
-		activePanel = panel;
+		panelState = selectReaderPanel(panelState, panel, panelAvailability);
 	}
 
 	function closePanel(): void {
 		const closingPanel = activePanel;
 		if (closingPanel === null) return;
-		activePanel = null;
+		panelState = closeReaderPanel(panelState);
 		void tick().then(() => {
-			const toggle = shellElement?.querySelector<HTMLButtonElement>(
-				`[data-panel-toggle="${closingPanel}"]`,
-			);
+			const toggle = shellElement?.querySelector<HTMLButtonElement>(".thumbnail-toggle");
 			toggle?.focus({ preventScroll: true });
 		});
 	}
@@ -659,6 +668,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 					<ReaderPanel
 						panel={activePanel}
 						hasChapters={chapters.length > 0}
+						hasBookmarks={bookmarksEnabled}
 						pages={pagesPanel}
 						chapters={chapterPanel}
 						bookmarks={bookmarkPanel}

@@ -7,8 +7,8 @@ export function createViewerMessages(locale: ViewerLocale) {
 	return {
 		toolbarLabel: m.toolbar_label({}, { locale }),
 		pageNavigationLabel: m.page_navigation_label({}, { locale }),
-		showPages: m.show_pages({}, { locale }),
-		hidePages: m.hide_pages({}, { locale }),
+		openSidebar: m.open_sidebar({}, { locale }),
+		closeSidebar: m.close_sidebar({}, { locale }),
 		previousPage: m.previous_page({}, { locale }),
 		pageNumber: m.page_number({}, { locale }),
 		nextPage: m.next_page({}, { locale }),
