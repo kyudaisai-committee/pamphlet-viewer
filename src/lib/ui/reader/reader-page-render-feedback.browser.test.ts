@@ -25,7 +25,6 @@ test.each([
 	{ viewport: "desktop", width: 840 },
 	{ viewport: "mobile", width: 390 },
 ])("does not show feedback during a delayed zoom redraw on $viewport", async ({ width }) => {
-	await import("@/lib/entry");
 	const zoomRenderStarted = createDeferred<void>();
 	const zoomRender = createDeferred<ReturnType<typeof visualFor>>();
 	let deferRendering = false;
@@ -77,7 +76,6 @@ test.each([
 ])(
 	"keeps page-navigation feedback visible at maximum zoom scroll on $viewport",
 	async ({ width }) => {
-		await import("@/lib/entry");
 		const pageTwoStarted = createDeferred<void>();
 		const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 		const zoomPixel: [number, number, number] = [42, 116, 178];
@@ -169,7 +167,6 @@ test.each([
 test.each(["viewport resize", "same-page layout change"] as const)(
 	"does not show feedback during a delayed $change redraw",
 	async (change) => {
-		await import("@/lib/entry");
 		const redrawStarted = createDeferred<void>();
 		const redraw = createDeferred<ReturnType<typeof visualFor>>();
 		let deferredPageIndex: number | null = null;

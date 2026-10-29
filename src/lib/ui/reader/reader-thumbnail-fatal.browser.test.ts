@@ -23,7 +23,6 @@ afterEach(() => {
 
 test("recovers from a thumbnail worker failure in the narrow reader", async () => {
 	vi.stubGlobal("Worker", ControlledWorker);
-	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = "390px";
 	element.style.height = "620px";

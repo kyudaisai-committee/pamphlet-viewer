@@ -12,7 +12,6 @@ afterEach(() => {
 
 test("keeps explicit English and Japanese locales independent across instances", async () => {
 	document.documentElement.lang = "fr";
-	await import("@/lib/entry");
 	const englishViewer = createViewer("en-US");
 	const japaneseViewer = createViewer("ja-JP");
 	document.body.append(englishViewer, japaneseViewer);
@@ -40,7 +39,6 @@ test("keeps explicit English and Japanese locales independent across instances",
 
 test("uses document language for missing or blank element lang and Japanese for unsupported values", async () => {
 	document.documentElement.lang = "en-GB";
-	await import("@/lib/entry");
 	const missingLanguageViewer = createViewer();
 	const blankLanguageViewer = createViewer("");
 	const unsupportedLanguageViewer = createViewer("fr-FR");

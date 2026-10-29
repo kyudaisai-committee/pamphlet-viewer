@@ -8,7 +8,6 @@ afterEach(() => {
 });
 
 test("touch horizontal swipes turn pages while vertical page scrolling is available", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(3);
 	element.fit = "width";
 	const firstPage = waitForPageChange(element);
@@ -27,7 +26,6 @@ test("touch horizontal swipes turn pages while vertical page scrolling is availa
 });
 
 test("vertical, short, mouse, pinch, canceled, lost-capture, interactive, and zoomed gestures do not turn pages", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(3);
 	element.fit = "width";
 	const firstPage = waitForPageChange(element);

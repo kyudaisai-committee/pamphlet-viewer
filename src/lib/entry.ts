@@ -15,5 +15,3 @@ export function registerPamphletViewer(registry: CustomElementRegistry = customE
 	}
 	registry.define("pamphlet-viewer", elementConstructor);
 }
-
-if (typeof customElements !== "undefined") registerPamphletViewer();

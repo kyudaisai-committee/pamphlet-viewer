@@ -86,7 +86,6 @@ test("falls back to the page list when the selected chapter tab is removed", asy
 });
 
 test("hides the bookmark tab while bookmarks are unavailable", async () => {
-	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = "840px";
 	element.style.height = "620px";
@@ -103,7 +102,6 @@ test("hides the bookmark tab while bookmarks are unavailable", async () => {
 });
 
 async function createLoadedViewer(width: number): Promise<PamphletViewerElement> {
-	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = `${width}px`;
 	element.style.height = "620px";

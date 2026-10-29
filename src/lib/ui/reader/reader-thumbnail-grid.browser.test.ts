@@ -28,7 +28,6 @@ afterEach(async () => {
 });
 
 test.each(PDF_FIXTURES)("uses PDF page ratios in the $name thumbnail grid", async (fixture) => {
-	await import("@/lib/entry");
 	const element = createViewer(840, fixture.path);
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -84,7 +83,6 @@ test.each(PDF_FIXTURES)("uses PDF page ratios in the $name thumbnail grid", asyn
 });
 
 test("recalculates grid columns and virtual scroll rows after resizing", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(840, "/__thumbnail-mixed-range-fixture.pdf");
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);

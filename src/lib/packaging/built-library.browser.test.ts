@@ -9,6 +9,7 @@ interface LibraryTestMessage {
 
 interface RegistrationMessage {
 	type: "registration";
+	importHadSideEffects: boolean;
 	registered: boolean;
 }
 
@@ -23,11 +24,12 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 	document.body.append(frame);
 
 	try {
-		const [outcome, hasRegistrationExport] = await Promise.all([message, registration]);
+		const [outcome, registrationResult] = await Promise.all([message, registration]);
 		if (outcome.type === "error") {
 			throw new Error(`The built viewer failed: ${JSON.stringify(outcome.detail)}`);
 		}
-		expect(hasRegistrationExport).toBe(true);
+		expect(registrationResult.importHadSideEffects).toBe(false);
+		expect(registrationResult.registered).toBe(true);
 
 		const frameDocument = frame.contentDocument;
 		const frameWindow = frame.contentWindow;
@@ -186,7 +188,7 @@ function waitForLibraryMessage(frame: HTMLIFrameElement): Promise<LibraryTestMes
 	});
 }
 
-function waitForRegistration(frame: HTMLIFrameElement): Promise<boolean> {
+function waitForRegistration(frame: HTMLIFrameElement): Promise<RegistrationMessage> {
 	return new Promise((resolve, reject) => {
 		const timeoutId = window.setTimeout(() => {
 			window.removeEventListener("message", receiveMessage);
@@ -198,7 +200,7 @@ function waitForRegistration(frame: HTMLIFrameElement): Promise<boolean> {
 			if (event.source !== frame.contentWindow || !isRegistrationMessage(event.data)) return;
 			window.clearTimeout(timeoutId);
 			window.removeEventListener("message", receiveMessage);
-			resolve(event.data.registered);
+			resolve(event.data);
 		}
 	});
 }
@@ -242,6 +244,8 @@ function isRegistrationMessage(value: unknown): value is RegistrationMessage {
 		"type" in value &&
 		value.type === "registration" &&
 		"registered" in value &&
-		typeof value.registered === "boolean"
+		typeof value.registered === "boolean" &&
+		"importHadSideEffects" in value &&
+		typeof value.importHadSideEffects === "boolean"
 	);
 }
