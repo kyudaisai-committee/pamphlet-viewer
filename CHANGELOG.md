@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.2.0
+
+### Minor Changes
+
+- eb2b850: import時にカスタム要素が自動登録されてしまう不具合を修正しました。
+
 ## 0.1.6
 
 ### Patch Changes
