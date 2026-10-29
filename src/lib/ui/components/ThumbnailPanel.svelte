@@ -218,8 +218,10 @@
 							border-inline-start-width: 3px;
 						}
 
-						&:hover:not(.current) {
-							background: var(--pamphlet-viewer-thumbnail-hover);
+						@media (hover: hover) {
+							&:hover:not(.current) {
+								background: var(--pamphlet-viewer-thumbnail-hover);
+							}
 						}
 
 						&:focus-visible {

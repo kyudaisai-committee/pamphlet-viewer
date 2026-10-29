@@ -101,8 +101,10 @@
 				font: inherit;
 				cursor: pointer;
 
-				&:hover:not(:disabled) {
-					background: var(--pamphlet-viewer-control-hover);
+				@media (hover: hover) {
+					&:hover:not(:disabled) {
+						background: var(--pamphlet-viewer-control-hover);
+					}
 				}
 
 				&:focus-visible {
@@ -157,8 +159,10 @@
 					color: #f3f5f4;
 				}
 
-				&:hover:not(.current) {
-					background: var(--pamphlet-viewer-thumbnail-hover);
+				@media (hover: hover) {
+					&:hover:not(.current) {
+						background: var(--pamphlet-viewer-thumbnail-hover);
+					}
 				}
 
 				&:focus-visible {

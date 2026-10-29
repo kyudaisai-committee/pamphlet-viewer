@@ -107,8 +107,10 @@
 			font: inherit;
 			cursor: pointer;
 
-			&:hover:not(:disabled) {
-				background: var(--pamphlet-viewer-control-hover);
+			@media (hover: hover) {
+				&:hover:not(:disabled) {
+					background: var(--pamphlet-viewer-control-hover);
+				}
 			}
 
 			&:focus-visible {

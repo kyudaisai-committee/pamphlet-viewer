@@ -144,8 +144,10 @@
 						font: inherit;
 						cursor: pointer;
 
-						&:hover {
-							background: #3a4245;
+						@media (hover: hover) {
+							&:hover {
+								background: #3a4245;
+							}
 						}
 
 						&:focus-visible {
