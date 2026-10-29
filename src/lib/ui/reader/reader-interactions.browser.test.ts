@@ -3,6 +3,7 @@ import { page as browserPage, userEvent } from "vitest/browser";
 
 import type { DocumentBackend, PageSource, PageVisual } from "@/lib/document/page-source";
 import type { PamphletViewerElement } from "@/lib/public-api";
+import { THUMBNAIL_ROW_HEIGHT, THUMBNAIL_ROW_OVERSCAN } from "@/lib/ui/components/thumbnail-grid";
 
 import { ReaderFullscreenController } from "./reader-fullscreen.svelte";
 
@@ -57,13 +58,20 @@ test("keeps the thumbnail list virtual and selects a distant page", async () => 
 		.poll(() => shadowRoot.querySelectorAll(".thumbnail-entry").length)
 		.toBeGreaterThan(0);
 	await expect.poll(() => renderedPages.length).toBeGreaterThan(1);
-	expect(shadowRoot.querySelectorAll(".thumbnail-entry").length).toBeLessThan(10);
-	expect(renderedPages.length).toBeLessThan(12);
-
 	const scrollContainer = shadowRoot.querySelector<HTMLElement>(".thumbnail-scroll");
 	if (scrollContainer === null) throw new Error("The thumbnail list did not render.");
-	scrollContainer.scrollTop = 40 * 160;
+	const thumbnailRow = shadowRoot.querySelector<HTMLElement>(".thumbnail-row");
+	if (thumbnailRow === null) throw new Error("The thumbnail grid row did not render.");
+	const columnCount = getComputedStyle(thumbnailRow).gridTemplateColumns.split(" ").length;
+	scrollContainer.scrollTop = Math.floor(40 / columnCount) * THUMBNAIL_ROW_HEIGHT;
 	scrollContainer.dispatchEvent(new Event("scroll"));
+	const virtualizedRowLimit =
+		Math.ceil(scrollContainer.clientHeight / THUMBNAIL_ROW_HEIGHT) + THUMBNAIL_ROW_OVERSCAN * 2;
+	const maximumRenderedThumbnailCount = virtualizedRowLimit * columnCount;
+	expect(shadowRoot.querySelectorAll(".thumbnail-entry").length).toBeLessThanOrEqual(
+		maximumRenderedThumbnailCount,
+	);
+	expect(renderedPages.length).toBeLessThan(maximumRenderedThumbnailCount + 4);
 	await expect
 		.poll(() => shadowRoot.querySelector('[data-page-index="40"] .thumbnail-entry'))
 		.not.toBeNull();
