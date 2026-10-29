@@ -8,7 +8,6 @@ afterEach(() => {
 });
 
 test("ignores page navigation while loading and allows it after the document opens", async () => {
-	await import("@/lib/entry");
 	const opening = createDeferred<PageSource>();
 	const element = createViewer(createBackend(opening.promise));
 	const documentLoaded = new Promise<void>((resolve) => {
@@ -36,7 +35,6 @@ test("ignores page navigation while loading and allows it after the document ope
 });
 
 test("ignores page navigation when no document is open", async () => {
-	await import("@/lib/entry");
 	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 	element.style.width = "900px";
 	element.style.height = "620px";

@@ -12,7 +12,6 @@ afterEach(() => {
 });
 
 test("delays the rendering status by 100 ms when no page is visible", async () => {
-	await import("@/lib/entry");
 	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 	const render = createDeferred<PageVisual>();
 	const renderStarted = createDeferred<void>();

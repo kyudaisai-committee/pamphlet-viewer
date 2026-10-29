@@ -20,12 +20,17 @@ export function createLibraryTestHtml(requestUrl = "/"): string {
 				parent.postMessage({ type: "error", detail: event.detail }, location.origin);
 			});
 		</script>
-		<script type="module" src="/dist/library/pamphlet-viewer.js?load=first"></script>
 		<script type="module">
-			import { registerPamphletViewer } from "/dist/library/pamphlet-viewer.js?load=duplicate";
-			registerPamphletViewer();
+			const module = await import("/dist/library/pamphlet-viewer.js?load=first");
+			const importHadSideEffects = customElements.get("pamphlet-viewer") !== undefined;
+			module.registerPamphletViewer();
+			module.registerPamphletViewer();
 			parent.postMessage(
-				{ type: "registration", registered: typeof registerPamphletViewer === "function" },
+				{
+					type: "registration",
+					importHadSideEffects,
+					registered: customElements.get("pamphlet-viewer") !== undefined,
+				},
 				location.origin,
 			);
 		</script>

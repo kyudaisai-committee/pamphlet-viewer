@@ -30,7 +30,6 @@ test("reopens an updated PDF after a fatal range request and renders its new doc
 	});
 	vi.stubGlobal("Worker", ControlledWorker);
 	try {
-		await import("@/lib/entry");
 		const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
 		element.style.width = "520px";
 		element.style.height = "620px";

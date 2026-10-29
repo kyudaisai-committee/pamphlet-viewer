@@ -1,7 +1,9 @@
 <!-- SPDX-License-Identifier: MIT -->
 
 <script lang="ts">
-	import "./lib/entry";
+	import { registerPamphletViewer } from "./lib/entry";
+
+	registerPamphletViewer();
 
 	function readSourceFromQuery(): string {
 		return new URLSearchParams(window.location.search).get("src") ?? "";

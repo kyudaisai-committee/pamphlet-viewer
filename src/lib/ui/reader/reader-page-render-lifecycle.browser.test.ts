@@ -21,7 +21,6 @@ afterEach(() => {
 });
 
 test("does not restore an outdated page after a newer page finishes", async () => {
-	await import("@/lib/entry");
 	const pageTwoStarted = createDeferred<void>();
 	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 	const viewer = createViewer(
@@ -54,7 +53,6 @@ test("does not restore an outdated page after a newer page finishes", async () =
 });
 
 test("clears navigation feedback when returning to the still-visible page", async () => {
-	await import("@/lib/entry");
 	const pageTwoStarted = createDeferred<void>();
 	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 	const viewer = createViewer(
@@ -84,7 +82,6 @@ test("clears navigation feedback when returning to the still-visible page", asyn
 });
 
 test("clears old pages on source change and ignores a late render from the old source", async () => {
-	await import("@/lib/entry");
 	const oldPageTwoStarted = createDeferred<void>();
 	const oldPageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 	const newSource = createDeferred<PageSource>();
@@ -138,7 +135,6 @@ test("clears old pages on source change and ignores a late render from the old s
 });
 
 test("hides the previous page when a replacement render fails", async () => {
-	await import("@/lib/entry");
 	const pageTwoStarted = createDeferred<void>();
 	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
 	const viewer = createViewer(

@@ -35,7 +35,6 @@ afterEach(async () => {
 });
 
 test("toolbar zoom, slider, and reset keep the page-area center in place", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(createBackend());
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -74,7 +73,6 @@ test("toolbar zoom, slider, and reset keep the page-area center in place", async
 });
 
 test("keeps a page assigned synchronously by a pagechange listener", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(createBackend(undefined, 3));
 	const firstPage = waitForPageChange(element);
 	document.body.append(element);
@@ -102,7 +100,6 @@ test("keeps a page assigned synchronously by a pagechange listener", async () =>
 test.each([390, 520, 700])(
 	"Ctrl-wheel and pinch zoom preserve the pointer or gesture center in a %i pixel host",
 	async (width) => {
-		await import("@/lib/entry");
 		const element = createViewer(createBackend(), width);
 		const firstPage = waitForPageChange(element);
 		document.body.append(element);
@@ -162,7 +159,6 @@ test.each([390, 520, 700])(
 );
 
 test("zoom previews immediately and coalesces deferred raster work at the latest zoom", async () => {
-	await import("@/lib/entry");
 	const tracker: RenderTracker = {
 		renderCalls: 0,
 		completedRenders: 0,
@@ -226,7 +222,6 @@ test("zoom previews immediately and coalesces deferred raster work at the latest
 test.each(["drag", "wheel"] as const)(
 	"a %s scroll during deferred zoom rendering keeps the user's latest viewport position",
 	async (interaction) => {
-		await import("@/lib/entry");
 		const tracker: RenderTracker = {
 			renderCalls: 0,
 			completedRenders: 0,
@@ -282,7 +277,6 @@ test.each(["drag", "wheel"] as const)(
 );
 
 test("page changes cancel a pending zoom render and unmount cancels its timer", async () => {
-	await import("@/lib/entry");
 	const tracker: RenderTracker = {
 		renderCalls: 0,
 		completedRenders: 0,
@@ -335,7 +329,6 @@ test("page changes cancel a pending zoom render and unmount cancels its timer", 
 });
 
 test("every navigation path resets zoom, including the page property and attribute", async () => {
-	await import("@/lib/entry");
 	const element = createViewer(createBackend(undefined, 8), 840);
 	element.setConfig({
 		chapters: [
@@ -439,7 +432,6 @@ test("every navigation path resets zoom, including the page property and attribu
 });
 
 test("a deferred older raster preserves the latest zoom preview and anchor", async () => {
-	await import("@/lib/entry");
 	const tracker: RenderTracker = {
 		renderCalls: 0,
 		completedRenders: 0,

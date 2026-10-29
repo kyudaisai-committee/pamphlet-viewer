@@ -21,7 +21,6 @@ afterEach(() => {
 });
 
 test("keeps the current canvas until the new page is ready", async () => {
-	await import("@/lib/entry");
 	const color: [number, number, number] = [18, 20, 22];
 	const pageTwoStarted = createDeferred<void>();
 	const pageTwoRender = createDeferred<ReturnType<typeof visualFor>>();
@@ -56,7 +55,6 @@ test("keeps the current canvas until the new page is ready", async () => {
 });
 
 test("keeps a nonempty canvas across a normal quick page transition", async () => {
-	await import("@/lib/entry");
 	const viewer = createViewer(createBackend(4, async (pageIndex) => visualFor(pageIndex)));
 	const firstPage = waitForPageChange(viewer, 1);
 	document.body.append(viewer);
@@ -75,7 +73,6 @@ test("keeps a nonempty canvas across a normal quick page transition", async () =
 });
 
 test("keeps a canvas present when an adjacent prerender is already cached", async () => {
-	await import("@/lib/entry");
 	const prerenderStarted = createDeferred<void>();
 	const prerenderFinished = createDeferred<void>();
 	const renderCalls: number[] = [];
@@ -130,7 +127,6 @@ test("keeps a canvas present when an adjacent prerender is already cached", asyn
 });
 
 test("keeps both old spread pages until both new pages finish rendering", async () => {
-	await import("@/lib/entry");
 	const pageFourStarted = createDeferred<void>();
 	const pageFiveStarted = createDeferred<void>();
 	const pageFourRender = createDeferred<ReturnType<typeof visualFor>>();
