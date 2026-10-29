@@ -3,4 +3,4 @@ allowBuilds:
   lefthook: true
 update:
   changeset: true
-  githubActions: true
+  githubActions: false
