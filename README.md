@@ -6,7 +6,7 @@
 
 ```html
 <script type="module">
-    import { registerPamphletViewer } from "/assets/pamphlet-viewer.js";
+    import { registerPamphletViewer } from "@kyudaisai/pamphlet-viewer";
 
     registerPamphletViewer();
 </script>
@@ -56,8 +56,8 @@ Range取得中のチャンクと取得済みチャンクは、同じ文書セッ
 登録済みの要素へ型付き設定オブジェクトを`setConfig`で渡すと、目次ボタンから章一覧を開き、開始ページへ移動できます。`chapters`のページ番号は1始まりです。章の設定順にかかわらずページ順に並び、文書のページ数を外れる項目や不正な項目は表示しません。
 
 ```ts
-import { registerPamphletViewer } from "/assets/pamphlet-viewer.js";
-import type { PamphletViewerConfig, PamphletViewerElement } from "/assets/pamphlet-viewer.js";
+import { registerPamphletViewer } from "@kyudaisai/pamphlet-viewer";
+import type { PamphletViewerConfig, PamphletViewerElement } from "@kyudaisai/pamphlet-viewer";
 
 registerPamphletViewer();
 await customElements.whenDefined("pamphlet-viewer");
