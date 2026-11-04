@@ -17,6 +17,7 @@ test("public declarations resolve for a consumer without the source alias", asyn
 		[
 			'import { PageSourceUnavailableError } from "pamphlet-viewer";',
 			'import type { PamphletViewerElement } from "pamphlet-viewer";',
+			'import "pamphlet-viewer/register";',
 			'const unavailable = new PageSourceUnavailableError("The source is unavailable.");',
 			"const error: Error = unavailable;",
 			'if (error.name !== "PageSourceUnavailableError") throw error;',
@@ -31,6 +32,7 @@ test("public declarations resolve for a consumer without the source alias", asyn
 		moduleResolution: ts.ModuleResolutionKind.Bundler,
 		target: ts.ScriptTarget.ES2023,
 		strict: true,
+		noUncheckedSideEffectImports: true,
 		skipLibCheck: false,
 		noEmit: true,
 		types: [],

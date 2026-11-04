@@ -1,3 +1,4 @@
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
@@ -7,7 +8,16 @@ import { renderPriorityFixturePlugin } from "./tests/render-priority-fixture-plu
 import { sourceAlias } from "./vite.source-alias.js";
 
 export default defineConfig({
-	plugins: [svelte(), rangeFixturePlugin(), renderPriorityFixturePlugin()],
+	plugins: [
+		paraglideVitePlugin({
+			project: "./project.inlang",
+			outdir: "./src/paraglide",
+			emitTsDeclarations: true,
+		}),
+		svelte(),
+		rangeFixturePlugin(),
+		renderPriorityFixturePlugin(),
+	],
 	resolve: { alias: sourceAlias },
 	optimizeDeps: {
 		include: ["@embedpdf/pdfium", "@lucide/svelte"],

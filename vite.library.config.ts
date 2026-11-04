@@ -28,7 +28,10 @@ export default defineConfig({
 		emptyOutDir: true,
 		assetsInlineLimit: 0,
 		rolldownOptions: {
-			input: { "pamphlet-viewer": "src/lib/entry.ts" },
+			input: {
+				"pamphlet-viewer": "src/lib/entry.ts",
+				register: "src/lib/register.ts",
+			},
 			preserveEntrySignatures: "strict",
 			output: {
 				banner: LICENSE_BANNER,

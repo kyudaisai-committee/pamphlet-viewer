@@ -1,8 +1,11 @@
 const FIXTURE_PATH = "/__pdfium-range-fixture.pdf";
 
 export function createLibraryTestHtml(requestUrl = "/"): string {
-	if (new URL(requestUrl, "http://localhost").searchParams.get("mode") === "public-error") {
-		return createPublicErrorContractHtml();
+	switch (new URL(requestUrl, "http://localhost").searchParams.get("mode")) {
+		case "public-error":
+			return createPublicErrorContractHtml();
+		case "register":
+			return createRegisterEntryHtml();
 	}
 	return `<!doctype html>
 <html lang="ja">
@@ -30,6 +33,31 @@ export function createLibraryTestHtml(requestUrl = "/"): string {
 					type: "registration",
 					importHadSideEffects,
 					registered: customElements.get("pamphlet-viewer") !== undefined,
+				},
+				location.origin,
+			);
+		</script>
+	</body>
+</html>`;
+}
+
+function createRegisterEntryHtml(): string {
+	return `<!doctype html>
+<html lang="ja">
+	<head>
+		<meta charset="utf-8">
+		<title>Custom Element registration entry test</title>
+	</head>
+	<body>
+		<pamphlet-viewer id="viewer" style="display:block;width:840px;height:560px"></pamphlet-viewer>
+		<script type="module">
+			await import("/dist/library/register.js");
+			const importHadSideEffects = customElements.get("pamphlet-viewer") !== undefined;
+			parent.postMessage(
+				{
+					type: "registration",
+					importHadSideEffects,
+					registered: importHadSideEffects,
 				},
 				location.origin,
 			);

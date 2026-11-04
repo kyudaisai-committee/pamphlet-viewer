@@ -16,6 +16,8 @@ test("release archive preserves built library paths and includes every license n
 	const libraryPath = resolve("dist/library");
 	const libraryFiles = await listFiles(libraryPath);
 	expect(libraryFiles).toContain("pamphlet-viewer.js");
+	expect(libraryFiles).toContain("register.js");
+	expect(libraryFiles).toContain("register.d.ts");
 	expect(
 		libraryFiles.some(
 			(filePath) => filePath.startsWith("assets/pdfium.worker-") && filePath.endsWith(".js"),
