@@ -51,33 +51,33 @@
 		"@changesets/cli": "^3.0.3",
 		"@embedpdf/pdfium": "^2.15.1",
 		"@eslint/js": "^10.0.1",
-		"@inlang/paraglide-js": "^2.29.1",
-		"@inlang/plugin-m-function-matcher": "^2.3.4",
-		"@inlang/plugin-message-format": "^4.5.5",
-		"@lucide/svelte": "^1.61.0",
+		"@inlang/paraglide-js": "^3.0.0",
+		"@inlang/plugin-m-function-matcher": "^2.4.1",
+		"@inlang/plugin-message-format": "^4.5.7",
+		"@lucide/svelte": "^1.67.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@tsconfig/svelte": "^5.0.8",
-		"@types/node": "^26.6.5",
-		"@vitest/browser-playwright": "^5.0.5",
+		"@types/node": "^26.6.6",
+		"@vitest/browser-playwright": "^5.1.0",
 		"cspell": "^10.4.0",
-		"eslint": "^10.13.0",
+		"eslint": "^10.14.0",
 		"eslint-plugin-svelte": "^3.23.1",
-		"globals": "^17.13.0",
+		"globals": "^17.14.0",
 		"jiti": "^2.7.0",
 		"lefthook": "^2.2.2",
-		"oxfmt": "^0.74.0",
-		"rolldown-plugin-dts": "^0.28.8",
-		"svelte": "^5.57.2",
-		"svelte-check": "^4.7.7",
+		"oxfmt": "^0.76.0",
+		"rolldown-plugin-dts": "^0.29.0",
+		"svelte": "^5.57.3",
+		"svelte-check": "^4.7.8",
 		"typescript": "~6.0.3",
-		"typescript-eslint": "^8.72.0",
+		"typescript-eslint": "^8.72.1",
 		"vite": "^8.3.5",
-		"vitest": "^5.0.5"
+		"vitest": "^5.1.0"
 	},
 	"devEngines": {
 		"packageManager": {
 			"name": "pnpm",
-			"version": "12.15.0",
+			"version": "12.16.1",
 			"onFail": "download"
 		},
 		"runtime": {
@@ -86,5 +86,5 @@
 			"onFail": "download"
 		}
 	},
-	"packageManager": "pnpm@12.15.0"
+	"packageManager": "pnpm@12.16.1"
 }
