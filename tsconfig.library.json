@@ -8,5 +8,5 @@
 		"rootDir": "./src/lib",
 		"outDir": "./dist/library/types"
 	},
-	"include": ["src/lib/entry.ts"]
+	"include": ["src/lib/entry.ts", "src/lib/register.ts"]
 }

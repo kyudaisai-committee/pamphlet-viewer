@@ -20,6 +20,10 @@
 		".": {
 			"types": "./dist/library/pamphlet-viewer.d.ts",
 			"import": "./dist/library/pamphlet-viewer.js"
+		},
+		"./register": {
+			"types": "./dist/library/register.d.ts",
+			"import": "./dist/library/register.js"
 		}
 	},
 	"publishConfig": {

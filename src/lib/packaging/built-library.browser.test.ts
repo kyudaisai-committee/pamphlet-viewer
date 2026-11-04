@@ -97,6 +97,24 @@ test("loads the ESM custom element from plain HTML with its sibling PDF assets",
 	}
 });
 
+test("registers the custom element when the dedicated entry is imported", async () => {
+	const frame = document.createElement("iframe");
+	frame.src = "/__built-library-test.html?mode=register";
+	const registration = waitForRegistration(frame);
+	document.body.append(frame);
+
+	try {
+		const result = await registration;
+		expect(result.importHadSideEffects).toBe(true);
+		expect(result.registered).toBe(true);
+		const frameWindow = frame.contentWindow;
+		if (frameWindow === null) throw new Error("Could not access the registration test frame.");
+		expect(frameWindow.customElements.get("pamphlet-viewer")).toBeDefined();
+	} finally {
+		frame.remove();
+	}
+});
+
 test("loads the built custom element and worker from a separate asset origin", async () => {
 	const resetResponse = await fetch("/__pdfium-range-reset");
 	if (!resetResponse.ok) throw new Error("The PDF Range metrics endpoint did not reset.");

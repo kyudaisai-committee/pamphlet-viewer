@@ -22,6 +22,14 @@
 
 `registerPamphletViewer()`を呼び出すとカスタム要素が登録されます。登録済みの要素は再登録しません。ホスト要素に表示領域の高さを指定してください。
 
+import時に自動登録したい場合は、`@kyudaisai/pamphlet-viewer/register`を読み込みます。この副作用付きエントリーポイントを使うと、`registerPamphletViewer()`を呼び出す必要はありません。通常の`@kyudaisai/pamphlet-viewer`のimportは自動登録しません。
+
+```html
+<script type="module">
+    import "@kyudaisai/pamphlet-viewer/register";
+</script>
+```
+
 ## 表示言語
 
 ツールバーなどの表示言語は、要素の初期化時に`<pamphlet-viewer lang="en">`の`lang`属性、HTML文書の`<html lang="en">`属性の順に選びます。どちらも指定されていない場合は日本語です。要素の`lang`が空文字または空白だけの場合はHTML文書の言語を使います。`ja-JP`や`en-US`など地域付きの値も認識し、大文字小文字を区別しません。未対応の言語値は日本語になります。言語は各ビューアごとに決まり、HTML文書の`lang`属性は変更しません。初期化後に要素の`lang`を変更しても表示言語は切り替わりません。
@@ -136,7 +144,7 @@ pnpm build:library
 pnpm verify
 ```
 
-`pnpm build:library`は`dist/library/`に配布用ES module、型定義、PDFium WorkerとWASMを出力します。WorkerとWASMは別ファイルなので、`dist/library/`の構成を保って同じ配信先へ配置してください。ビルド時に外部CDNからWorkerやWASMを取得しません。package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`を指します。`pnpm build`はデモとライブラリの両方をビルドします。
+`pnpm build:library`は`dist/library/`に配布用ES module、型定義、PDFium WorkerとWASMを出力します。WorkerとWASMは別ファイルなので、`dist/library/`の構成を保って同じ配信先へ配置してください。ビルド時に外部CDNからWorkerやWASMを取得しません。package exportsは`dist/library/pamphlet-viewer.js`と`dist/library/pamphlet-viewer.d.ts`に加えて、自動登録用の`dist/library/register.js`と`dist/library/register.d.ts`を公開します。`pnpm build`はデモとライブラリの両方をビルドします。
 
 ## ライセンス
 
