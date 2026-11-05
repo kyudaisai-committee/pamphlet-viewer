@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.2.1
+
+### Patch Changes
+
+- ead4343: 自動登録用の`@kyudaisai/pamphlet-viewer/register`エントリーポイントを追加しました。
+
 ## 0.2.0
 
 ### Minor Changes
