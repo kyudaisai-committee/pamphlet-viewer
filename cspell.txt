@@ -29,6 +29,7 @@ linejoin
 evenodd
 mdsvex
 vite
+vtsls
 kyudaisai
 Paraglide
 Inlang

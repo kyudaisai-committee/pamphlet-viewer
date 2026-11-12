@@ -1,0 +1,83 @@
+{
+	"languages": {
+		"Svelte": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["eslint", "oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"JavaScript": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": [
+				"vtsls",
+				"eslint",
+				"oxfmt",
+				"!typescript-language-server",
+				"!oxlint",
+				"!biome",
+				"..."
+			],
+			"prettier": { "allowed": false }
+		},
+		"TypeScript": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": [
+				"vtsls",
+				"eslint",
+				"oxfmt",
+				"!typescript-language-server",
+				"!oxlint",
+				"!biome",
+				"..."
+			],
+			"prettier": { "allowed": false }
+		},
+		"TSX": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": [
+				"vtsls",
+				"eslint",
+				"oxfmt",
+				"!typescript-language-server",
+				"!oxlint",
+				"!biome",
+				"..."
+			],
+			"prettier": { "allowed": false }
+		},
+		"HTML": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"MDX": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"Markdown": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"JSON": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"JSONC": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"CSS": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		},
+		"YAML": {
+			"formatter": { "language_server": { "name": "oxfmt" } },
+			"language_servers": ["oxfmt", "!oxlint", "!biome", "..."],
+			"prettier": { "allowed": false }
+		}
+	}
+}
