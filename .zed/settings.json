@@ -10,11 +10,6 @@
 			"language_servers": ["eslint", "oxfmt", "!oxlint", "!biome", "..."],
 			"prettier": { "allowed": false }
 		},
-		"JSX": {
-			"formatter": { "language_server": { "name": "oxfmt" } },
-			"language_servers": ["eslint", "oxfmt", "!oxlint", "!biome", "..."],
-			"prettier": { "allowed": false }
-		},
 		"TypeScript": {
 			"formatter": { "language_server": { "name": "oxfmt" } },
 			"language_servers": ["eslint", "oxfmt", "!oxlint", "!biome", "..."],
