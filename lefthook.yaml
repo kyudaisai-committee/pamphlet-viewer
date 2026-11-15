@@ -5,8 +5,13 @@ pre-commit:
   commands:
     format-and-lint:
       run: |
-        pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files} &&
-        pnpm exec eslint --fix --no-error-on-unmatched-pattern --no-warn-ignored {staged_files}
+        pnpm exec eslint --fix --no-error-on-unmatched-pattern --no-warn-ignored {staged_files} &&
+        pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    format-cspell:
+      glob:
+        - cspell.txt
+      run: pnpm exec node scripts/sort-txt.ts {staged_files}
       stage_fixed: true
 
 pre-push:
