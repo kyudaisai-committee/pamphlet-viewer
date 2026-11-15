@@ -2,7 +2,14 @@
 	"languages": {
 		"Svelte": {
 			"formatter": { "language_server": { "name": "oxfmt" } },
-			"language_servers": ["eslint", "oxfmt", "!oxlint", "!biome", "..."],
+			"language_servers": [
+				"svelte-language-server",
+				"eslint",
+				"oxfmt",
+				"!oxlint",
+				"!biome",
+				"..."
+			],
 			"prettier": { "allowed": false }
 		},
 		"JavaScript": {
