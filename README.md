@@ -36,12 +36,13 @@ import時に自動登録したい場合は、`@kyudaisai/pamphlet-viewer/registe
 
 ## 属性とプロパティ
 
-| 名前     | 初期値 | 説明                                           |
-| -------- | ------ | ---------------------------------------------- |
-| `src`    | 空     | PDFのURL。空でない値を指定すると読み込みます。 |
-| `page`   | `1`    | 現在ページ。UIとプロパティは1始まりです。      |
-| `layout` | `auto` | `single`、`spread`、`auto`のいずれかです。     |
-| `fit`    | `page` | `page`または`width`で表示サイズを合わせます。  |
+| 名前                    | 初期値 | 説明                                                      |
+| ----------------------- | ------ | --------------------------------------------------------- |
+| `src`                   | 空     | PDFのURL。空でない値を指定すると読み込みます。            |
+| `page`                  | `1`    | 現在ページ。UIとプロパティは1始まりです。                 |
+| `layout`                | `auto` | `single`、`spread`、`auto`のいずれかです。                |
+| `fit`                   | `page` | `page`または`width`で表示サイズを合わせます。             |
+| `disable-range-request` | なし   | 指定するとPDF全体をGETで取得し、Range要求を無効にします。 |
 
 章一覧などの設定は属性ではなく、要素の登録後に`setConfig`メソッドから渡します。
 
@@ -120,9 +121,13 @@ viewer?.addEventListener("pagechange", (event) => {
 
 ## PDFとアセットの配信条件
 
-PDFサーバーはRange要求に対して正しい`Content-Range`を伴う`206 Partial Content`を返してください。`Accept-Ranges: bytes`だけでは不十分です。Rangeを無視した`200 OK`、`416 Range Not Satisfiable`、不正な`Content-Range`、通信timeoutはエラーになり、PDF全体を取得するfallbackは行いません。初回Range要求がリダイレクトされた場合、検証に成功した応答の最終URLを後続Range要求で再利用します。Rangeを理解し、PDFのbyte位置とvalidatorを一貫させるようCDNや圧縮設定を確認してください。
+PDFサーバーはRange要求に対して正しい`Content-Range`を伴う`206 Partial Content`を返してください。`Accept-Ranges: bytes`だけでは不十分です。Rangeを無視した`200 OK`、`416 Range Not Satisfiable`、不正な`Content-Range`、通信timeoutはエラーになり、PDF全体を取得するfallbackは行いません。Range取得に対応しない配信先では、`disable-range-request`属性を指定できます。この場合は通常のGETでPDF全体を取得してから表示し、取得したデータは同じ文書セッションのWorker間で共有します。初回Range要求がリダイレクトされた場合、検証に成功した応答の最終URLを後続Range要求で再利用します。Rangeを理解し、PDFのbyte位置とvalidatorを一貫させるようCDNや圧縮設定を確認してください。
 
-別originのPDFを使う場合は、CORSで`Range`と`If-Range`要求ヘッダーを許可し、`Content-Range`、`ETag`、`Last-Modified`応答ヘッダーを公開してください。`ETag`または`Last-Modified`を使うと、範囲の要求に`If-Range`を付けて同一PDF表現か確認します。
+```html
+<pamphlet-viewer src="./catalog.pdf" disable-range-request></pamphlet-viewer>
+```
+
+別originのPDFを使う場合、通常のRange取得ではCORSで`Range`と`If-Range`要求ヘッダーを許可し、`Content-Range`、`ETag`、`Last-Modified`応答ヘッダーを公開してください。`ETag`または`Last-Modified`を使うと、範囲の要求に`If-Range`を付けて同一PDF表現か確認します。`disable-range-request`を指定する場合、`Range`と`If-Range`の許可は不要です。
 
 HTMLページ、ES module、Worker、WASMを別originから配信する場合、モジュールとWorker/WASMの応答に正しいMIME typeとCORSヘッダーを設定してください。異なるoriginのWorkerはBlob bootstrapからWorker moduleを読み込みます。その構成ではCSPの`worker-src`に`blob:`を許可してください。同一originのWorkerではBlob bootstrapを使いません。
 

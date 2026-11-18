@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+import { FullResponseBroker } from "@/lib/pdfium/range/full-response-broker";
 import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
+import type { PdfRangeTransport } from "@/lib/pdfium/range/range-transport";
 import { PdfiumWorkerPool } from "@/lib/pdfium/worker/pdfium-worker-pool";
 import {
 	PdfiumWorkerClient,
@@ -15,10 +17,18 @@ import {
 	type PageVisual,
 } from "./page-source";
 
+export interface PdfiumBackendOptions {
+	disableRangeRequest?: boolean;
+}
+
 export class PdfiumBackend implements DocumentBackend {
+	constructor(private readonly options: PdfiumBackendOptions = {}) {}
+
 	async open(source: string, signal: AbortSignal): Promise<PageSource> {
 		if (signal.aborted) throw new DOMException("PDF loading was cancelled.", "AbortError");
-		const rangeBroker = new PdfRangeBroker(source);
+		const rangeBroker: PdfRangeTransport = this.options.disableRangeRequest
+			? new FullResponseBroker(source)
+			: new PdfRangeBroker(source);
 		const client = new PdfiumWorkerClient(rangeBroker);
 		let pageSource: PdfiumPageSource | null = null;
 		const abort = function abortDocumentOpen(): void {
@@ -58,7 +68,7 @@ class PdfiumPageSource implements PageSource {
 		readonly pageCount: number,
 		source: string,
 		client: PdfiumWorkerClient,
-		private readonly rangeBroker: PdfRangeBroker,
+		private readonly rangeBroker: PdfRangeTransport,
 		private readonly signal: AbortSignal,
 		private readonly abortListener: () => void,
 	) {

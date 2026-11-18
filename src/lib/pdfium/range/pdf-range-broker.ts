@@ -16,7 +16,7 @@ import {
 	requestPdfRange,
 	type PdfRangeResponse,
 } from "./range-request";
-import type { RangeTransportRequest } from "./range-transport";
+import type { PdfRangeTransport, RangeTransportRequest } from "./range-transport";
 
 export const RANGE_BROKER_CACHE_LIMIT = 128 * 1024 * 1024;
 
@@ -44,7 +44,7 @@ interface FetchBatch {
 	scheduled: Promise<void> | null;
 }
 
-export class PdfRangeBroker {
+export class PdfRangeBroker implements PdfRangeTransport {
 	#cache: RangeChunkCache;
 	#pending = new Map<number, PendingChunk>();
 	#queue = new Set<number>();

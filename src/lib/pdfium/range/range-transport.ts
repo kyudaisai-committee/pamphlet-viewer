@@ -46,3 +46,9 @@ export interface RangeWorkerResponse {
 export interface RangeWorkerRequester {
 	(request: RangeTransportRequest, signal: AbortSignal): Promise<PdfRangeResponse>;
 }
+
+export interface PdfRangeTransport {
+	request(request: RangeTransportRequest, signal: AbortSignal): Promise<PdfRangeResponse>;
+	promoteRequest?(request: RangeTransportRequest, priority: PageTaskPriority): boolean;
+	dispose(): void;
+}
