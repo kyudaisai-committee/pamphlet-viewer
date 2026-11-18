@@ -30,6 +30,7 @@ export interface PamphletViewerElement extends HTMLElement {
 	layout: LayoutMode;
 	fit: FitMode;
 	backend?: DocumentBackend;
+	disableRangeRequest: boolean;
 	setConfig(config: PamphletViewerConfig): void;
 	addEventListener<K extends keyof PamphletViewerEventMap>(
 		type: K,

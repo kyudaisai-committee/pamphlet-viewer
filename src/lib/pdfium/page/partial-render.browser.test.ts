@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { calculateFitScale, visiblePageIndexes } from "@/lib/domain/navigation/layout";
 import { PdfiumWorkerClient } from "@/lib/pdfium/worker/worker-client";
+import type { PamphletViewerElement } from "@/lib/public-api";
 
 interface FixtureMetrics {
 	requestedBytes: number;
@@ -32,6 +33,7 @@ test("renders first and distant pages before downloading the full PDF", async ()
 
 		const firstMetrics = await readMetrics();
 		expect(firstMetrics.fullRequests).toBe(0);
+		expect(firstMetrics.ranges.length).toBeGreaterThan(0);
 		expect(firstMetrics.requestedBytes).toBeLessThan(firstMetrics.fileLength);
 
 		const finalPage = await worker.renderPage(info.pageCount - 1, 1);
@@ -53,6 +55,38 @@ test("renders first and distant pages before downloading the full PDF", async ()
 		expect(finalMetrics.requestedBytes).toBeLessThan(finalMetrics.fileLength);
 	} finally {
 		worker.terminate();
+	}
+}, 120_000);
+
+test("renders a PDF through one full request when range requests are disabled", async () => {
+	const resetResponse = await fetch("/__pdfium-range-reset");
+	expect(resetResponse.ok).toBe(true);
+
+	const element = document.createElement("pamphlet-viewer") as PamphletViewerElement;
+	element.style.width = "840px";
+	element.style.height = "620px";
+	element.layout = "single";
+	element.setAttribute("disable-range-request", "");
+	element.src = new URL("/__pdfium-range-fixture.pdf", window.location.href).href;
+	const pageRendered = new Promise<void>((resolve) =>
+		element.addEventListener("pagechange", () => resolve(), { once: true }),
+	);
+	document.body.append(element);
+
+	try {
+		await pageRendered;
+		const canvas = element.shadowRoot?.querySelector<HTMLCanvasElement>(".page-frame canvas");
+		if (canvas === null || canvas === undefined)
+			throw new Error("The PDF page was not rendered.");
+		expect(canvas.width).toBeGreaterThan(0);
+		expect(canvas.height).toBeGreaterThan(0);
+
+		const metrics = await readMetrics();
+		expect(metrics.fullRequests).toBe(1);
+		expect(metrics.ranges).toEqual([]);
+		expect(metrics.requestedBytes).toBe(0);
+	} finally {
+		element.remove();
 	}
 }, 120_000);
 

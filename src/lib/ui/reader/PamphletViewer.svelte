@@ -8,6 +8,7 @@
 			layout: { type: "String", reflect: true },
 			fit: { type: "String", reflect: true },
 			backend: { attribute: "data-backend", type: "Object" },
+			disableRangeRequest: { attribute: "disable-range-request", type: "Boolean" },
 		},
 		extend: extendViewerElement,
 	}}
@@ -67,6 +68,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		layout?: LayoutMode;
 		fit?: FitMode;
 		backend?: DocumentBackend;
+		disableRangeRequest?: boolean;
 	}
 
 	type DisplayedPage = { pageIndex: number; visual: PageVisual; plan: PageRenderPlan };
@@ -77,12 +79,14 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 		layout = $bindable<LayoutMode>("auto"),
 		fit = $bindable<FitMode>("page"),
 		backend,
+		disableRangeRequest = false,
 	}: Props = $props();
 
 	const messages = $state(createViewerMessages("ja"));
 	let locale = $state<ViewerLocale>("ja");
 	provideViewerMessages(messages);
 	const defaultBackend = new PdfiumBackend();
+	const fullResponseBackend = new PdfiumBackend({ disableRangeRequest: true });
 	const controller = new ViewerController(dispatchControllerEvent, undefined, messages);
 	const fullscreenController = new ReaderFullscreenController();
 	const zoomRenderScheduler = new ZoomRenderScheduler();
@@ -160,7 +164,7 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 	$effect(() => {
 		if (!localeInitialized) return;
 		const source = src;
-		const activeBackend = backend ?? defaultBackend;
+		const activeBackend = backend ?? (disableRangeRequest ? fullResponseBackend : defaultBackend);
 		if (source !== previousSource) {
 			const hadPreviousSource = previousSource.length > 0;
 			previousSource = source;
@@ -591,7 +595,12 @@ import { findCurrentChapter, resolveChapters } from "@/lib/domain/configuration/
 				src,
 				pageArea?.ownerDocument.baseURI ?? document.baseURI,
 			);
-			if (resolvedSource !== null) void controller.load(resolvedSource, backend ?? defaultBackend);
+			if (resolvedSource !== null) {
+				void controller.load(
+					resolvedSource,
+					backend ?? (disableRangeRequest ? fullResponseBackend : defaultBackend),
+				);
+			}
 			return;
 		}
 		const input = createRenderInput();

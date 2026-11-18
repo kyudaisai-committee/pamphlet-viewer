@@ -6,7 +6,7 @@ import {
 	type PageTaskLease,
 	type PageTaskPriority,
 } from "@/lib/domain/scheduling/page-task-scheduler";
-import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
+import type { PdfRangeTransport } from "@/lib/pdfium/range/range-transport";
 
 import { PdfiumWorkerClient, PdfiumWorkerUnavailableError } from "./worker-client";
 
@@ -42,7 +42,7 @@ export class PdfiumWorkerPool {
 	constructor(
 		private readonly source: string,
 		private readonly pageCount: number,
-		private readonly rangeBroker: PdfRangeBroker,
+		private readonly rangeBroker: PdfRangeTransport,
 		firstClient: PdfiumWorkerClient | null = null,
 		slotCount = PDFIUM_WORKER_LIMIT,
 	) {

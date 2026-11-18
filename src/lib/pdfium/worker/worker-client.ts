@@ -4,9 +4,9 @@ import pdfiumWasmAssetUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 
 import type { PageSize, PageVisual } from "@/lib/document/page-source";
 import type { PageTaskPriority } from "@/lib/domain/scheduling/page-task-scheduler";
-import { PdfRangeBroker } from "@/lib/pdfium/range/pdf-range-broker";
 import { PdfRepresentationChangedError } from "@/lib/pdfium/range/range-request";
 import type {
+	PdfRangeTransport,
 	RangeWorkerCancelRequest,
 	RangeWorkerPromoteRequest,
 	RangeWorkerRequest,
@@ -165,7 +165,7 @@ export class PdfiumWorkerClient {
 	#pendingRanges = new Map<number, PendingRangeRequest>();
 	#opened = false;
 
-	constructor(private readonly rangeBroker?: PdfRangeBroker) {
+	constructor(private readonly rangeBroker?: PdfRangeTransport) {
 		const workerUrl = new URL(pdfiumWorkerAssetUrl, import.meta.url);
 		const workerHandle =
 			workerUrl.origin === globalThis.location.origin
@@ -412,7 +412,7 @@ export class PdfiumWorkerClient {
 			const pending = this.#pendingRanges.get(response.id);
 			if (pending !== undefined) {
 				try {
-					this.rangeBroker?.promoteRequest(pending.request, response.priority);
+					this.rangeBroker?.promoteRequest?.(pending.request, response.priority);
 				} catch (error) {
 					this.#markUnavailable(
 						new PdfiumWorkerUnavailableError(
