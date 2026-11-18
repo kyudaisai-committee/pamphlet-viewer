@@ -1,5 +1,11 @@
 # @kyudaisai/pamphlet-viewer
 
+## 0.2.2
+
+### Patch Changes
+
+- dba6a4c: `disable-range-request` を指定して、Range リクエストに対応していないサーバーの PDF も表示できるようにしました。
+
 ## 0.2.1
 
 ### Patch Changes
